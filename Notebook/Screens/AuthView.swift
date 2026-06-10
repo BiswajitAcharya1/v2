@@ -97,11 +97,11 @@ struct AuthView: View {
     }
 
     private var draggableAuthBook: some View {
-        ZStack {
-            AuthPaperInterior(openProgress: openProgress)
-                .overlay {
-                    if openProgress > 0.54 {
-                        VStack(spacing: 12) {
+            ZStack {
+                AuthPaperInterior(openProgress: openProgress)
+                    .overlay {
+                        if openProgress > 0.54 {
+                            VStack(spacing: 12) {
                             ForEach(Array(AuthProvider.allCases.enumerated()), id: \.element.id) { index, provider in
                                 AuthProviderPageButton(provider: provider) {
                                     if provider == .email {
@@ -125,14 +125,17 @@ struct AuthView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
                 }
-                .frame(width: 224 + openProgress * 136, height: 282 + openProgress * 92)
-                .offset(x: openProgress * 68, y: openProgress * 10)
+                .frame(width: 214 + openProgress * 166, height: 270 + openProgress * 100)
+                .rotation3DEffect(.degrees(-6 + openProgress * 13), axis: (x: 1, y: 0.18, z: 0), perspective: 0.72)
+                .offset(x: openProgress * 74, y: openProgress * 16)
                 .shadow(color: .black.opacity(0.12), radius: 14, y: 9)
 
             NotebookLogo(isOpen: false)
                 .frame(width: 190, height: 248)
-                .rotation3DEffect(.degrees(-118 * openProgress + (leatherDrift ? 3 : -3)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
-                .offset(x: -82 * openProgress, y: 2 * openProgress)
+                .rotation3DEffect(.degrees(-132 * openProgress + (leatherDrift ? 3 : -3)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
+                .offset(x: -104 * openProgress, y: 4 + 12 * openProgress)
+                .opacity(Double(1 - max(0, (openProgress - 0.74) / 0.26)))
+                .scaleEffect(1 - openProgress * 0.08)
                 .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
                 .gesture(
                     DragGesture(minimumDistance: 8)
@@ -533,42 +536,106 @@ private struct AuthPaperInterior: View {
     var openProgress: CGFloat
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
-            .fill(NotebookTheme.paper)
-            .overlay {
-                PaperGrain(density: 300)
-                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    .opacity(0.42)
-            }
-            .overlay(alignment: .leading) {
-                LinearGradient(
-                    colors: [.black.opacity(0.16), .clear, .white.opacity(0.16)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: 42)
-                .opacity(Double(openProgress))
-            }
-            .overlay(alignment: .leading) {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let gap = max(12, width * 0.045)
+            let pageWidth = max(0, (width - gap) / 2)
+
+            ZStack {
+                ForEach(0..<3, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(Color(red: 0.72, green: 0.74, blue: 0.78).opacity(0.2 - Double(index) * 0.04))
+                        .offset(x: CGFloat(index) * 3, y: CGFloat(index + 1) * 4)
+                }
+
+                HStack(spacing: gap) {
+                    authPage(isLeft: true)
+                        .frame(width: pageWidth)
+                    authPage(isLeft: false)
+                        .frame(width: pageWidth)
+                }
+
                 Capsule()
-                    .fill(.black.opacity(0.14))
-                    .frame(width: 2)
-                    .padding(.vertical, 24)
-                    .offset(x: 44)
-                    .blur(radius: 0.4)
+                    .fill(
+                        LinearGradient(
+                            colors: [.black.opacity(0.16), .white.opacity(0.42), .black.opacity(0.1)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 16)
+                    .blur(radius: 1.8)
                     .opacity(Double(openProgress))
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [.white.opacity(0.78), .black.opacity(0.08)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.9
-                    )
+        }
+    }
+
+    private func authPage(isLeft: Bool) -> some View {
+        UnevenRoundedRectangle(
+            cornerRadii: .init(
+                topLeading: isLeft ? 28 : 9,
+                bottomLeading: isLeft ? 28 : 9,
+                bottomTrailing: isLeft ? 9 : 28,
+                topTrailing: isLeft ? 9 : 28
+            ),
+            style: .continuous
+        )
+        .fill(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.965, green: 0.968, blue: 0.982),
+                    Color(red: 0.938, green: 0.948, blue: 0.968),
+                    Color(red: 0.91, green: 0.92, blue: 0.945)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .overlay(AuthPageRules(isLeft: isLeft))
+        .overlay(PaperGrain(density: 260).opacity(0.15))
+        .overlay(alignment: isLeft ? .trailing : .leading) {
+            LinearGradient(
+                colors: [.black.opacity(0.1), .clear],
+                startPoint: isLeft ? .trailing : .leading,
+                endPoint: isLeft ? .leading : .trailing
+            )
+            .frame(width: 34)
+        }
+        .overlay {
+            UnevenRoundedRectangle(
+                cornerRadii: .init(
+                    topLeading: isLeft ? 28 : 9,
+                    bottomLeading: isLeft ? 28 : 9,
+                    bottomTrailing: isLeft ? 9 : 28,
+                    topTrailing: isLeft ? 9 : 28
+                ),
+                style: .continuous
+            )
+            .stroke(.white.opacity(0.68), lineWidth: 0.85)
+        }
+    }
+}
+
+private struct AuthPageRules: View {
+    var isLeft: Bool
+
+    var body: some View {
+        Canvas { context, size in
+            let margin = size.width * (isLeft ? 0.2 : 0.13)
+            var red = Path()
+            red.move(to: CGPoint(x: margin, y: 0))
+            red.addLine(to: CGPoint(x: margin, y: size.height))
+            context.stroke(red, with: .color(NotebookTheme.redRule.opacity(0.26)), lineWidth: 0.7)
+
+            var y: CGFloat = 48
+            while y < size.height - 18 {
+                var rule = Path()
+                rule.move(to: CGPoint(x: 0, y: y))
+                rule.addLine(to: CGPoint(x: size.width, y: y))
+                context.stroke(rule, with: .color(NotebookTheme.blueLine.opacity(0.36)), lineWidth: 0.58)
+                y += 17
             }
+        }
     }
 }
 

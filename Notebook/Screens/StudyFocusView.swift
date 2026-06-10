@@ -7,6 +7,7 @@ struct StudyFocusView: View {
     @State private var playback: VoicePlayback?
     @State private var isReading = false
     @State private var speechSynthesizer = AVSpeechSynthesizer()
+    @State private var speechDelegate = SpeechCompletionDelegate()
 
     let page: NotebookPage
 
@@ -31,6 +32,16 @@ struct StudyFocusView: View {
         .sheet(item: $selectedTerm) { term in
             ExplanationSheet(term: term.text)
                 .presentationDetents([.medium])
+        }
+        .onAppear {
+            speechSynthesizer.delegate = speechDelegate
+            speechDelegate.onFinish = {
+                isReading = false
+            }
+        }
+        .onDisappear {
+            speechSynthesizer.stopSpeaking(at: .immediate)
+            isReading = false
         }
     }
 
@@ -129,19 +140,23 @@ struct StudyFocusView: View {
                     ForEach(PlaybackStyle.allCases) { style in
                         Button {
                             Haptics.open()
-                            isReading = true
-                            Task { @MainActor in
-                                playback = await store.readAloud(page, style: style)
-                                speak(page.content.cleanedText, style: style)
+                            if isReading {
+                                speechSynthesizer.stopSpeaking(at: .immediate)
                                 isReading = false
+                            } else {
+                                isReading = true
+                                Task { @MainActor in
+                                    playback = await store.readAloud(page, style: style)
+                                    speak(page.content.cleanedText, style: style)
+                                }
                             }
                         } label: {
-                            VoiceStyleButton(style: style)
+                            VoiceStyleButton(style: style, active: isReading)
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                Text(playback?.summary ?? (isReading ? "preparing voice" : "choose a playback style"))
+                Text(playback?.summary ?? (isReading ? "reading now" : "choose a playback style"))
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(NotebookTheme.muted)
             }
@@ -151,6 +166,8 @@ struct StudyFocusView: View {
 
     private func speak(_ text: String, style: PlaybackStyle) {
         speechSynthesizer.stopSpeaking(at: AVSpeechBoundary.immediate)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+        try? AVAudioSession.sharedInstance().setActive(true)
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
         switch style {
@@ -167,6 +184,18 @@ struct StudyFocusView: View {
         speechSynthesizer.speak(utterance)
     }
 
+}
+
+private final class SpeechCompletionDelegate: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
+    var onFinish: (() -> Void)?
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async { self.onFinish?() }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async { self.onFinish?() }
+    }
 }
 
 private struct ExplanationSheet: View {
@@ -233,17 +262,19 @@ private struct FlashcardPaper: View {
 
 private struct VoiceStyleButton: View {
     let style: PlaybackStyle
+    var active: Bool
 
     var body: some View {
         VStack(spacing: 7) {
             Image(systemName: symbol)
                 .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(NotebookTheme.ink)
+                .foregroundStyle(active ? .white : NotebookTheme.ink)
                 .frame(width: 52, height: 52)
-                .background(.white.opacity(0.66), in: Circle())
+                .background(active ? NotebookTheme.ink : .white.opacity(0.66), in: Circle())
                 .overlay {
                     Circle().stroke(.white.opacity(0.72), lineWidth: 0.8)
                 }
+                .scaleEffect(active ? 1.08 : 1)
             Text(shortLabel)
                 .font(.system(.caption2, design: .rounded, weight: .semibold))
                 .foregroundStyle(NotebookTheme.muted)

@@ -44,7 +44,7 @@ struct HomeView: View {
         .toolbarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingCourseComposer) {
             addCourseSheet
-                .presentationDetents([.height(360)])
+                .presentationDetents([.height(430)])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingAccountCenter) {

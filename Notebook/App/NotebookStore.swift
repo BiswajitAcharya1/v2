@@ -264,7 +264,10 @@ final class NotebookStore {
             try session.setActive(true)
             let recorder = try AVAudioRecorder(url: url, settings: settings)
             recorder.isMeteringEnabled = true
-            recorder.record()
+            recorder.prepareToRecord()
+            guard recorder.record() else {
+                throw VoiceRecordingError.failedToStart
+            }
             audioRecorder = recorder
             recordingURL = url
             recordingPrompt = prompt
@@ -273,6 +276,7 @@ final class NotebookStore {
             isVoicePaused = false
             voiceRecordingElapsed = 0
             voiceRecordingLevel = 0
+            latestVoiceTranscript = nil
             beginVoiceMetering()
         } catch {
             audioRecorder?.stop()
@@ -305,6 +309,11 @@ final class NotebookStore {
         voiceRecordingLevel = 0
         recordingURL = nil
         recordingPrompt = nil
+        guard duration >= 0.5 else {
+            authMessage = "record a little longer so voice can be saved."
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
         let sampleID = UUID()
         voiceProfile.samples.append(VoiceSample(id: sampleID, prompt: prompt, isRecorded: true, audioURL: url, duration: duration))
         voiceProfile.isPersonalized = voiceProfile.samples.count == 3
@@ -352,6 +361,10 @@ final class NotebookStore {
                 }
             }
         }
+    }
+
+    private enum VoiceRecordingError: Error {
+        case failedToStart
     }
 
     func notebook(with id: SubjectNotebook.ID) -> SubjectNotebook? {

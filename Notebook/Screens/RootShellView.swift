@@ -42,11 +42,12 @@ private struct SetupFlowView: View {
         "help me remember only what matters."
     ]
     private let allowedSubjects = [
-        "math", "algebra", "geometry", "calculus", "statistics",
-        "science", "biology", "chemistry", "physics", "earth science",
-        "history", "world history", "us history", "government",
-        "english", "literature", "writing", "spanish", "french",
-        "computer science", "economics", "psychology", "art", "music"
+        "math", "pre algebra", "algebra", "geometry", "trigonometry", "precalculus", "calculus", "statistics",
+        "science", "biology", "chemistry", "physics", "environmental science", "earth science", "anatomy",
+        "history", "world history", "us history", "european history", "government", "civics",
+        "english", "literature", "writing", "creative writing", "spanish", "french", "latin",
+        "computer science", "coding", "data science", "robotics", "economics", "psychology", "sociology",
+        "art", "music", "theater", "health", "business", "engineering"
     ]
 
     var body: some View {
@@ -111,13 +112,18 @@ private struct SetupFlowView: View {
                 Text("voice")
                     .font(.system(.title2, design: .serif, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
+                Text("record each sentence in your natural voice.")
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
+                    .foregroundStyle(NotebookTheme.muted)
+                    .multilineTextAlignment(.center)
+
                 VoicePromptText(
                     prompt: prompts[min(store.voiceProfile.samples.count, prompts.count - 1)],
                     elapsed: store.voiceRecordingElapsed,
                     recording: store.isRecordingVoice
                 )
 
-                Text(store.isRecordingVoice ? "keep reading as the words glow." : "tap once and read the sentence.")
+                Text(store.isRecordingVoice ? "tap the wave when you finish." : "tap the mic and start reading.")
                     .font(.system(.footnote, design: .rounded, weight: .medium))
                     .foregroundStyle(NotebookTheme.muted)
                     .multilineTextAlignment(.center)
@@ -156,18 +162,20 @@ private struct SetupFlowView: View {
                         Task {
                             let prompt = prompts[min(store.voiceProfile.samples.count, prompts.count - 1)]
                             await store.recordVoicePrompt(prompt)
-                            let seconds = min(6.0, max(3.2, Double(prompt.split(separator: " ").count) * 0.48))
-                            try? await Task.sleep(for: .milliseconds(Int(seconds * 1000)))
-                            if store.isRecordingVoice {
-                                await store.recordVoicePrompt(prompt)
-                            }
                         }
                     } label: {
-                        Image(systemName: store.isRecordingVoice ? "waveform" : "mic.fill")
-                            .font(.system(size: 22, weight: .bold))
-                            .frame(width: 72, height: 72)
+                        ZStack {
+                            Circle()
+                                .stroke(.white.opacity(0.26), lineWidth: 8)
+                                .scaleEffect(store.isRecordingVoice ? 1.18 + store.voiceRecordingLevel * 0.12 : 1)
+                                .opacity(store.isRecordingVoice ? 1 : 0)
+                            Image(systemName: store.isRecordingVoice ? "waveform" : "mic.fill")
+                                .font(.system(size: 22, weight: .bold))
+                                .frame(width: 72, height: 72)
+                        }
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
+                    .accessibilityLabel(store.isRecordingVoice ? "finish recording" : "start recording")
                 }
             }
         }
@@ -238,6 +246,7 @@ private struct SetupFlowView: View {
                 }
 
                 Button {
+                    Haptics.success()
                     store.setSubjects(subjects)
                 } label: {
                     Image(systemName: "checkmark")
@@ -266,8 +275,12 @@ private struct SetupFlowView: View {
 
     private var subjectSuggestions: [String] {
         let draft = subjectDraft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !draft.isEmpty else { return [] }
-        let matches = allowedSubjects.filter { $0.hasPrefix(draft) || $0.localizedCaseInsensitiveContains(draft) }
+        let availableSubjects = allowedSubjects.filter { !subjects.contains($0) }
+        guard !draft.isEmpty else {
+            let featured = ["biology", "math", "computer science", "chemistry", "history", "english"]
+            return Array((featured.filter { availableSubjects.contains($0) } + availableSubjects.filter { !featured.contains($0) }).prefix(6))
+        }
+        let matches = availableSubjects.filter { $0.hasPrefix(draft) || $0.localizedCaseInsensitiveContains(draft) }
         return Array(matches[0..<min(matches.count, 4)])
     }
 

@@ -107,48 +107,26 @@ struct CompositionNotebookCard: View {
     private var notebookSpine: some View {
         HStack {
             UnevenRoundedRectangle(cornerRadii: .init(topLeading: 22, bottomLeading: 22), style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            .black.opacity(0.94),
-                            .black.opacity(0.72),
-                            .black.opacity(0.9)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(width: 36)
-                .overlay(alignment: .trailing) {
-                    LinearGradient(
-                        colors: [.white.opacity(0.24), .clear],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: 5)
-                }
+                .fill(Color(red: 0.035, green: 0.034, blue: 0.032))
+                .frame(width: 40)
                 .overlay {
-                    Canvas { context, size in
-                        for index in 0..<42 {
-                            let y = size.height * CGFloat(index) / 41
-                            var line = Path()
-                            line.move(to: CGPoint(x: 7, y: y))
-                            line.addLine(to: CGPoint(x: size.width - 7, y: y + CGFloat((index % 3) - 1)))
-                            context.stroke(line, with: .color(.white.opacity(index.isMultiple(of: 4) ? 0.08 : 0.035)), lineWidth: 0.45)
-                        }
-                    }
+                    LinearGradient(
+                        colors: [.white.opacity(0.08), .clear, .black.opacity(0.24)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
                 }
                 .overlay(alignment: .leading) {
                     Capsule()
-                        .fill(.white.opacity(0.07))
-                        .frame(width: 3)
-                        .padding(.vertical, 18)
+                        .fill(.white.opacity(0.05))
+                        .frame(width: 2)
+                        .padding(.vertical, 16)
                 }
                 .overlay(alignment: .trailing) {
                     Capsule()
-                        .fill(.black.opacity(0.46))
+                        .fill(.black.opacity(0.58))
                         .frame(width: 2)
-                        .padding(.vertical, 14)
+                        .padding(.vertical, 12)
                         .offset(x: -2)
                 }
             Spacer()
@@ -327,25 +305,53 @@ struct MinimalAppLogo: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-            Circle()
-                .fill(.white.opacity(0.74))
-                .overlay {
-                    Circle().stroke(.white.opacity(0.82), lineWidth: 1)
-                }
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(NotebookTheme.graphite)
-                .frame(width: 28, height: 38)
-                .overlay {
-                    SpeckledCompositionTexture()
-                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                }
-                .overlay(alignment: .leading) {
-                    UnevenRoundedRectangle(cornerRadii: .init(topLeading: 7, bottomLeading: 7), style: .continuous)
-                        .fill(.black.opacity(0.8))
-                        .frame(width: 5)
-                }
-                .rotationEffect(.degrees(-7))
-                .shadow(color: .black.opacity(0.16), radius: 4, y: 3)
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.9),
+                                Color(red: 0.89, green: 0.9, blue: 0.92)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay {
+                        Circle().stroke(.white.opacity(0.86), lineWidth: 1)
+                    }
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(NotebookTheme.ink)
+                    .frame(width: 38, height: 44)
+                    .rotationEffect(.degrees(-8))
+                    .overlay(alignment: .topTrailing) {
+                        UnevenRoundedRectangle(cornerRadii: .init(bottomLeading: 10, topTrailing: 14), style: .continuous)
+                            .fill(Color(red: 0.92, green: 0.93, blue: 0.95))
+                            .frame(width: 16, height: 16)
+                            .overlay {
+                                PaperGrain(density: 24).opacity(0.18)
+                            }
+                    }
+                    .overlay {
+                        Canvas { context, size in
+                            for index in 0..<9 {
+                                let y = size.height * (0.24 + CGFloat(index) * 0.06)
+                                var line = Path()
+                                line.move(to: CGPoint(x: size.width * 0.25, y: y))
+                                line.addLine(to: CGPoint(x: size.width * 0.66, y: y + CGFloat(index % 2) * 0.8))
+                                context.stroke(line, with: .color(.white.opacity(0.28)), style: StrokeStyle(lineWidth: 1, lineCap: .round))
+                            }
+                            var mark = Path()
+                            mark.move(to: CGPoint(x: size.width * 0.29, y: size.height * 0.72))
+                            mark.addCurve(
+                                to: CGPoint(x: size.width * 0.7, y: size.height * 0.66),
+                                control1: CGPoint(x: size.width * 0.4, y: size.height * 0.58),
+                                control2: CGPoint(x: size.width * 0.58, y: size.height * 0.82)
+                            )
+                            context.stroke(mark, with: .color(.white.opacity(0.72)), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        }
+                        .padding(5)
+                    }
+                    .shadow(color: .black.opacity(0.18), radius: 5, y: 4)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
@@ -493,22 +499,45 @@ struct SpeckledCompositionTexture: View {
         Canvas { context, size in
             context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.black.opacity(0.96)))
 
-            for index in 0..<640 {
+            for index in 0..<920 {
                 let x = size.width * CGFloat((index * 37) % 101) / 100
                 let y = size.height * CGFloat((index * 61) % 103) / 102
-                let length = CGFloat(2 + (index % 8))
+                let length = CGFloat(3 + (index % 13))
                 let angle = CGFloat((index * 17) % 180) * .pi / 180
                 var mark = Path()
-                mark.move(to: CGPoint(x: x, y: y))
-                mark.addLine(to: CGPoint(x: x + cos(angle) * length, y: y + sin(angle) * length))
-                context.stroke(mark, with: .color(.white.opacity(index.isMultiple(of: 4) ? 0.95 : 0.68)), style: StrokeStyle(lineWidth: CGFloat(0.8 + Double(index % 3) * 0.32), lineCap: .round))
+                mark.move(to: CGPoint(x: x - cos(angle) * length * 0.45, y: y - sin(angle) * length * 0.45))
+                mark.addCurve(
+                    to: CGPoint(x: x + cos(angle) * length, y: y + sin(angle) * length),
+                    control1: CGPoint(x: x + sin(angle) * 2, y: y - cos(angle) * 2),
+                    control2: CGPoint(x: x + cos(angle) * length * 0.4 - sin(angle) * 1.4, y: y + sin(angle) * length * 0.4 + cos(angle) * 1.4)
+                )
+                context.stroke(
+                    mark,
+                    with: .color(.white.opacity(index.isMultiple(of: 5) ? 0.96 : 0.72)),
+                    style: StrokeStyle(lineWidth: CGFloat(0.75 + Double(index % 4) * 0.34), lineCap: .round, lineJoin: .round)
+                )
             }
 
-            for index in 0..<180 {
+            for index in 0..<280 {
                 let x = size.width * CGFloat((index * 19) % 97) / 96
                 let y = size.height * CGFloat((index * 43) % 99) / 98
-                let rect = CGRect(x: x, y: y, width: CGFloat(4 + index % 8), height: CGFloat(1 + index % 3))
-                context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(0.22)))
+                let width = CGFloat(3 + index % 9)
+                let height = CGFloat(2 + index % 5)
+                let rect = CGRect(x: x, y: y, width: width, height: height)
+                context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(index.isMultiple(of: 3) ? 0.34 : 0.18)))
+            }
+
+            for index in 0..<190 {
+                let x = size.width * CGFloat((index * 71) % 103) / 102
+                let y = size.height * CGFloat((index * 29) % 107) / 106
+                let side = CGFloat(2 + index % 6)
+                var chip = Path()
+                chip.move(to: CGPoint(x: x, y: y))
+                chip.addLine(to: CGPoint(x: x + side, y: y + side * 0.2))
+                chip.addLine(to: CGPoint(x: x + side * 0.68, y: y + side))
+                chip.addLine(to: CGPoint(x: x - side * 0.24, y: y + side * 0.7))
+                chip.closeSubpath()
+                context.fill(chip, with: .color(.white.opacity(0.68)))
             }
         }
     }

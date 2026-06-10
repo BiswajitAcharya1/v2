@@ -123,7 +123,8 @@ struct LocalScanProcessingService: ScanProcessingServing {
             .components(separatedBy: .newlines)
             .filter { $0.contains("=") || $0.contains("lim") || $0.contains("->") }
         let tables = NoteLayoutAnalyzer.tables(from: lines)
-        let models = NoteLayoutAnalyzer.models(from: lines, keywords: keywords)
+        let visualSignal = ImageStructureAnalyzer.visualModelSignal(in: image)
+        let models = NoteLayoutAnalyzer.models(from: lines, keywords: keywords, visualSignal: visualSignal)
         let sections = NoteLayoutAnalyzer.sections(from: lines, fallback: usableText)
 
         return ExtractedContent(
@@ -198,19 +199,24 @@ private enum NoteLayoutAnalyzer {
         return [DetectedTable(title: "detected table", headers: headers, rows: rows)]
     }
 
-    static func models(from lines: [String], keywords: [String]) -> [DetectedModel] {
+    static func models(from lines: [String], keywords: [String], visualSignal: Double) -> [DetectedModel] {
         let joined = lines.joined(separator: " ").lowercased()
-        let modelTriggers = ["diagram", "model", "graph", "figure", "chart", "axis", "cycle", "flow", "structure"]
-        guard modelTriggers.contains(where: joined.contains) else { return [] }
+        let modelTriggers = ["diagram", "model", "graph", "figure", "chart", "axis", "cycle", "flow", "structure", "system", "map", "sketch"]
+        let textTriggered = modelTriggers.contains(where: joined.contains)
+        let visuallyTriggered = visualSignal > 0.18 && joined.count < 520
+        guard textTriggered || visuallyTriggered else { return [] }
 
         let title = modelTriggers.first(where: joined.contains) ?? "visual model"
+        let fallbackNodes = visuallyTriggered ? ["shape", "label", "connection", "pattern"] : ["idea", "link", "result"]
         let terms = Array(keywords.prefix(5))
         return [
             DetectedModel(
-                title: "\(title) found",
-                summary: "the scan contains visual structure that should stay connected to the surrounding notes.",
+                title: textTriggered ? "\(title) found" : "sketch found",
+                summary: visualSignal > 0
+                    ? "visual structure was detected in the scan and converted into an interactive study map."
+                    : "the scan contains visual structure that should stay connected to the surrounding notes.",
                 terms: terms,
-                nodes: terms.isEmpty ? ["idea", "link", "result"] : terms
+                nodes: terms.isEmpty ? fallbackNodes : terms
             )
         ]
     }
@@ -234,6 +240,47 @@ private enum NoteLayoutAnalyzer {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
         return tabPieces
+    }
+}
+
+private enum ImageStructureAnalyzer {
+    static func visualModelSignal(in image: UIImage) -> Double {
+        guard let cgImage = image.cgImage else { return 0 }
+        let width = 56
+        let height = 72
+        var pixels = [UInt8](repeating: 255, count: width * height)
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else { return 0 }
+
+        context.interpolationQuality = .low
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        var darkCount = 0
+        var edgeCount = 0
+        for y in 1..<(height - 1) {
+            for x in 1..<(width - 1) {
+                let index = y * width + x
+                let value = Int(pixels[index])
+                if value < 154 { darkCount += 1 }
+                let right = Int(pixels[index + 1])
+                let down = Int(pixels[index + width])
+                if abs(value - right) > 44 || abs(value - down) > 44 {
+                    edgeCount += 1
+                }
+            }
+        }
+
+        let sampleCount = Double((width - 2) * (height - 2))
+        let inkDensity = Double(darkCount) / sampleCount
+        let edgeDensity = Double(edgeCount) / sampleCount
+        return min(1, inkDensity * 0.55 + edgeDensity * 0.75)
     }
 }
 

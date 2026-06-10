@@ -17,6 +17,7 @@ struct NotebookDetailView: View {
     @State private var composerCloseRotation = 0.0
     @State private var showingCamera = false
     @State private var closeRotation = 0.0
+    @State private var didAutoOpenScanner = false
 
     let notebook: SubjectNotebook
 
@@ -108,6 +109,12 @@ struct NotebookDetailView: View {
         }
         .onAppear {
             editedText = currentPage?.content.cleanedText ?? ""
+            autoOpenScannerIfNeeded()
+        }
+        .onChange(of: pages.count) {
+            if pages.isEmpty {
+                autoOpenScannerIfNeeded()
+            }
         }
     }
 
@@ -355,6 +362,15 @@ struct NotebookDetailView: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
             dismiss()
+        }
+    }
+
+    private func autoOpenScannerIfNeeded() {
+        guard pages.isEmpty, !didAutoOpenScanner, !showingCamera else { return }
+        didAutoOpenScanner = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            Haptics.open()
+            showingCamera = true
         }
     }
 }
@@ -1042,6 +1058,7 @@ private struct DetectedTableView: View {
 private struct DetectedModelView: View {
     let model: DetectedModel
     @State private var selectedNode: String?
+    @State private var awake = false
 
     private var nodes: [String] {
         let modelNodes = model.nodes ?? []
@@ -1070,8 +1087,9 @@ private struct DetectedModelView: View {
             }
 
             if !nodes.isEmpty {
-                InteractiveModelMap(nodes: nodes, selectedNode: $selectedNode)
+                InteractiveModelMap(nodes: nodes, selectedNode: $selectedNode, awake: awake)
                     .frame(height: 138)
+                    .rotation3DEffect(.degrees(awake ? 0 : 18), axis: (x: 1, y: 0, z: 0), perspective: 0.8)
 
                 Text(selectedNode.map { "\($0) is linked to this visual structure. tap another point to study the connection." } ?? "tap a point in the model to inspect it.")
                     .font(.system(.caption, design: .rounded, weight: .medium))
@@ -1088,12 +1106,19 @@ private struct DetectedModelView: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(.white.opacity(0.5), lineWidth: 1)
         )
+        .onAppear {
+            withAnimation(.spring(response: 0.74, dampingFraction: 0.78).delay(0.08)) {
+                awake = true
+            }
+        }
     }
 }
 
 private struct InteractiveModelMap: View {
     let nodes: [String]
     @Binding var selectedNode: String?
+    var awake: Bool
+    @State private var orbit = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -1101,11 +1126,22 @@ private struct InteractiveModelMap: View {
             let radius = min(proxy.size.width, proxy.size.height) * 0.34
 
             ZStack {
+                ForEach(0..<3, id: \.self) { index in
+                    Ellipse()
+                        .stroke(NotebookTheme.ink.opacity(0.08 + Double(index) * 0.025), lineWidth: 1)
+                        .frame(
+                            width: radius * CGFloat(2.1 + Double(index) * 0.32),
+                            height: radius * CGFloat(0.82 + Double(index) * 0.14)
+                        )
+                        .rotationEffect(.degrees(Double(index) * 58 + (orbit ? 12 : -12)))
+                        .position(center)
+                }
+
                 ForEach(Array(nodes.prefix(6).enumerated()), id: \.offset) { index, node in
-                    let angle = (Double(index) / Double(max(1, min(nodes.count, 6)))) * .pi * 2 - .pi / 2
+                    let angle = (Double(index) / Double(max(1, min(nodes.count, 6)))) * .pi * 2 - .pi / 2 + (orbit ? 0.08 : -0.08)
                     let point = CGPoint(
                         x: center.x + cos(angle) * radius,
-                        y: center.y + sin(angle) * radius
+                        y: center.y + sin(angle) * radius * 0.54
                     )
                     Path { path in
                         path.move(to: center)
@@ -1115,10 +1151,18 @@ private struct InteractiveModelMap: View {
                         )
                     }
                     .stroke(NotebookTheme.ink.opacity(selectedNode == node ? 0.34 : 0.12), lineWidth: selectedNode == node ? 2 : 1)
+                    .opacity(awake ? 1 : 0)
                 }
 
                 Circle()
-                    .fill(.white.opacity(0.66))
+                    .fill(
+                        RadialGradient(
+                            colors: [.white.opacity(0.92), .white.opacity(0.42)],
+                            center: .topLeading,
+                            startRadius: 0,
+                            endRadius: 44
+                        )
+                    )
                     .frame(width: 48, height: 48)
                     .overlay {
                         Image(systemName: "cube.transparent")
@@ -1126,13 +1170,14 @@ private struct InteractiveModelMap: View {
                             .foregroundStyle(NotebookTheme.ink)
                     }
                     .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
+                    .scaleEffect(awake ? 1 : 0.82)
                     .position(center)
 
                 ForEach(Array(nodes.prefix(6).enumerated()), id: \.offset) { index, node in
-                    let angle = (Double(index) / Double(max(1, min(nodes.count, 6)))) * .pi * 2 - .pi / 2
+                    let angle = (Double(index) / Double(max(1, min(nodes.count, 6)))) * .pi * 2 - .pi / 2 + (orbit ? 0.08 : -0.08)
                     let point = CGPoint(
                         x: center.x + cos(angle) * radius,
-                        y: center.y + sin(angle) * radius
+                        y: center.y + sin(angle) * radius * 0.54
                     )
                     Button {
                         Haptics.selection()
@@ -1150,10 +1195,18 @@ private struct InteractiveModelMap: View {
                             .overlay {
                                 Capsule().stroke(.white.opacity(0.68), lineWidth: 0.8)
                             }
+                            .rotation3DEffect(.degrees(selectedNode == node ? -10 : 0), axis: (x: 1, y: 0, z: 0), perspective: 0.7)
+                            .shadow(color: .black.opacity(selectedNode == node ? 0.12 : 0.06), radius: selectedNode == node ? 9 : 4, y: selectedNode == node ? 7 : 3)
                     }
                     .buttonStyle(.plain)
-                    .position(point)
+                    .position(awake ? point : center)
+                    .opacity(awake ? 1 : 0)
                 }
+            }
+            .animation(.spring(response: 0.62, dampingFraction: 0.78), value: awake)
+            .animation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true), value: orbit)
+            .onAppear {
+                orbit = true
             }
         }
     }
