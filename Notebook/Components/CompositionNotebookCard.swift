@@ -20,18 +20,16 @@ struct CompositionNotebookCard: View {
 
                 CompositionCoverFace(
                     subject: notebook.subject,
-                    cornerRadius: 22,
-                    spineWidth: 42,
-                    labelWidth: 158,
-                    labelHeight: 126,
-                    labelOffsetY: 16,
-                    showCornerLift: true,
-                    isPressed: isPressed
+                    cornerRadius: 20,
+                    spineWidth: 46,
+                    labelWidth: 142,
+                    labelHeight: 108,
+                    labelOffsetY: 30
                 )
                     .shadow(color: .black.opacity(isPressed ? 0.12 : 0.28), radius: isPressed ? 5 : 16, y: isPressed ? 4 : 16)
 
                 movingSheen
-                DirectionAwareTouchHighlight(offset: dragOffset, isActive: isPressed, cornerRadius: 22)
+                DirectionAwareTouchHighlight(offset: dragOffset, isActive: isPressed, cornerRadius: 20)
                     .blendMode(.screen)
                 parallaxEdgeLight
             }
@@ -80,8 +78,22 @@ struct CompositionNotebookCard: View {
     private var pageBlockDepth: some View {
         ZStack(alignment: .trailing) {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color(red: 0.82, green: 0.79, blue: 0.71))
-                .offset(x: 6, y: 4)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.9, green: 0.88, blue: 0.81),
+                            Color(red: 0.68, green: 0.66, blue: 0.6)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .offset(x: 8, y: 5)
+                .overlay(alignment: .trailing) {
+                    PageEdgeStack(lineCount: 22)
+                        .frame(width: 16)
+                        .offset(x: 10, y: 5)
+                }
             VStack(spacing: 4) {
                 ForEach(0..<9, id: \.self) { index in
                     Capsule()
@@ -102,11 +114,11 @@ struct CompositionNotebookCard: View {
         .rotationEffect(.degrees(18))
         .offset(x: dragOffset.width * 0.7 + (float ? 34 : -34))
         .blendMode(.screen)
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private var parallaxEdgeLight: some View {
-        RoundedRectangle(cornerRadius: 22, style: .continuous)
+        RoundedRectangle(cornerRadius: 20, style: .continuous)
             .stroke(
                 LinearGradient(
                     colors: [.white.opacity(isPressed ? 0.36 : 0.18), .clear, .black.opacity(0.2)],
@@ -126,8 +138,7 @@ struct CompositionCoverFace: View {
     var labelWidth: CGFloat
     var labelHeight: CGFloat
     var labelOffsetY: CGFloat
-    var showCornerLift: Bool
-    var isPressed: Bool = false
+    var paperGrainDensity: Int = 90
 
     var body: some View {
         ZStack {
@@ -135,9 +146,9 @@ struct CompositionCoverFace: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.08, green: 0.08, blue: 0.075),
-                            NotebookTheme.graphite,
-                            Color(red: 0.12, green: 0.12, blue: 0.11)
+                            Color(red: 0.04, green: 0.04, blue: 0.038),
+                            Color(red: 0.115, green: 0.115, blue: 0.105),
+                            Color(red: 0.045, green: 0.045, blue: 0.04)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -146,11 +157,23 @@ struct CompositionCoverFace: View {
 
             SpeckledCompositionTexture()
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                .opacity(1)
+                .opacity(0.98)
 
-            PaperGrain(density: 90)
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                .opacity(0.08)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.18), .black.opacity(0.28)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.1
+                )
+
+            if paperGrainDensity > 0 {
+                PaperGrain(density: paperGrainDensity)
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    .opacity(0.08)
+            }
 
             VStack {
                 Spacer()
@@ -162,22 +185,28 @@ struct CompositionCoverFace: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
 
-            HStack {
+            HStack(spacing: 0) {
                 CompositionSpine(cornerRadius: cornerRadius, width: spineWidth)
                 Spacer()
             }
 
-            VStack {
-                CompositionCoverLabel(subject: subject, isLarge: labelWidth > 130)
-                    .frame(width: labelWidth, height: labelHeight)
-                    .padding(.top, labelOffsetY)
+            HStack {
                 Spacer()
-                if showCornerLift {
-                    OpenCornerCue(isPressed: isPressed)
-                        .padding(.trailing, 14)
-                        .padding(.bottom, 14)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
+                CoverPageEdge(cornerRadius: cornerRadius)
+                    .frame(width: 10)
+            }
+            .padding(.vertical, 12)
+            .allowsHitTesting(false)
+
+            VStack {
+                HStack {
+                    Spacer(minLength: spineWidth + 8)
+                    CompositionCoverLabel(subject: subject, isLarge: labelWidth > 124)
+                        .frame(width: labelWidth, height: labelHeight)
+                    Spacer()
                 }
+                .padding(.top, labelOffsetY)
+                Spacer()
             }
         }
     }
@@ -189,61 +218,51 @@ private struct CompositionSpine: View {
 
     var body: some View {
         UnevenRoundedRectangle(cornerRadii: .init(topLeading: cornerRadius, bottomLeading: cornerRadius), style: .continuous)
-            .fill(Color(red: 0.012, green: 0.011, blue: 0.01))
-            .frame(width: width)
-            .overlay(alignment: .leading) {
-                Capsule()
-                    .fill(.white.opacity(0.028))
-                    .frame(width: max(1, width * 0.05))
-                    .padding(.vertical, max(10, cornerRadius * 0.75))
-            }
-            .overlay(alignment: .trailing) {
-                HStack(spacing: 0) {
-                    Rectangle()
-                        .fill(.black.opacity(0.96))
-                        .frame(width: max(1.2, width * 0.07))
-                    Rectangle()
-                        .fill(.white.opacity(0.2))
-                        .frame(width: max(1, width * 0.04))
-                }
-            }
-    }
-}
-
-private struct OpenCornerCue: View {
-    var isPressed: Bool
-
-    var body: some View {
-        ZStack {
-            UnevenRoundedRectangle(
-                cornerRadii: .init(topLeading: 18, bottomTrailing: 20),
-                style: .continuous
-            )
             .fill(
                 LinearGradient(
                     colors: [
-                        .white.opacity(isPressed ? 0.82 : 0.58),
-                        .white.opacity(isPressed ? 0.42 : 0.24),
-                        .black.opacity(0.1)
+                        Color.black,
+                        Color(red: 0.035, green: 0.034, blue: 0.032),
+                        Color.black
                     ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+                    startPoint: .leading,
+                    endPoint: .trailing
                 )
             )
-            .frame(width: 48, height: 48)
-            .overlay(alignment: .topLeading) {
-                Path { path in
-                    path.move(to: CGPoint(x: 12, y: 31))
-                    path.addQuadCurve(to: CGPoint(x: 31, y: 12), control: CGPoint(x: 16, y: 15))
-                }
-                .stroke(.black.opacity(0.16), style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
-                .frame(width: 48, height: 48)
+            .frame(width: width)
+            .overlay(alignment: .leading) {
+                UnevenRoundedRectangle(cornerRadii: .init(topLeading: cornerRadius, bottomLeading: cornerRadius), style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.09), .clear, .black.opacity(0.32)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: max(14, width * 0.42))
             }
-            .shadow(color: .black.opacity(isPressed ? 0.16 : 0.1), radius: isPressed ? 4 : 2, x: -1, y: 2)
-            .rotationEffect(.degrees(isPressed ? -11 : -4))
-        }
-        .opacity(isPressed ? 0.9 : 0.64)
-        .animation(.spring(response: 0.28, dampingFraction: 0.72), value: isPressed)
+            .overlay {
+                Canvas { context, size in
+                    for index in 0..<24 {
+                        let y = size.height * CGFloat(index) / 23
+                        var thread = Path()
+                        thread.move(to: CGPoint(x: size.width * 0.18, y: y))
+                        thread.addCurve(
+                            to: CGPoint(x: size.width * 0.78, y: y + CGFloat(index.isMultiple(of: 2) ? 2 : -2)),
+                            control1: CGPoint(x: size.width * 0.32, y: y - 3),
+                            control2: CGPoint(x: size.width * 0.54, y: y + 3)
+                        )
+                        context.stroke(thread, with: .color(.white.opacity(0.028)), style: StrokeStyle(lineWidth: 0.7, lineCap: .round))
+                    }
+                }
+                .padding(.vertical, 10)
+            }
+            .overlay(alignment: .trailing) {
+                Capsule()
+                    .fill(.white.opacity(0.14))
+                    .frame(width: 1.4)
+                    .padding(.vertical, 14)
+            }
     }
 }
 
@@ -340,11 +359,10 @@ struct NotebookLogo: View {
         CompositionCoverFace(
             subject: nil,
             cornerRadius: 18,
-            spineWidth: 20,
-            labelWidth: 112,
-            labelHeight: 104,
-            labelOffsetY: 24,
-            showCornerLift: false
+            spineWidth: 22,
+            labelWidth: 102,
+            labelHeight: 88,
+            labelOffsetY: 30
         )
     }
 }
@@ -354,30 +372,36 @@ private struct CompositionCoverLabel: View {
     var isLarge: Bool
 
     var body: some View {
-        VStack(spacing: isLarge ? 8 : 7) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("composition")
-                    Text("book")
-                }
-                .font(.system(size: isLarge ? 13 : 11, weight: .semibold, design: .rounded))
+        VStack(spacing: isLarge ? 7 : 6) {
+            HStack(alignment: .top, spacing: 6) {
+                Text("composition\nbook")
+                    .font(.system(size: isLarge ? 13 : 10.2, weight: .semibold, design: .rounded))
+                    .lineSpacing(-1)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 4)
+                Text("margins")
+                    .font(.system(size: isLarge ? 7 : 5.8, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, isLarge ? 6 : 4)
+                    .frame(height: isLarge ? 23 : 18)
+                    .background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: isLarge ? 5 : 4, style: .continuous))
+                    .minimumScaleFactor(0.68)
+            }
+            HStack(spacing: isLarge ? 7 : 6) {
+                CompositionBadge(text: "80\nsheets", size: isLarge ? 30 : 25)
+                CompositionBadge(text: "college\nruled", size: isLarge ? 30 : 25)
                 Spacer()
             }
-            HStack(spacing: isLarge ? 8 : 7) {
-                CompositionBadge(text: "80\nsheets", size: isLarge ? 34 : 31)
-                CompositionBadge(text: "college\nruled", size: isLarge ? 34 : 31)
-                Spacer()
-            }
-            VStack(spacing: 5) {
+            VStack(spacing: isLarge ? 5 : 4) {
                 ForEach(0..<3, id: \.self) { _ in
-                    Capsule()
+                    RoundedRectangle(cornerRadius: 1, style: .continuous)
                         .fill(.black.opacity(0.22))
                         .frame(height: 1)
                 }
             }
             if let subject {
                 Text(subject)
-                    .font(.system(size: isLarge ? 13 : 11, weight: .semibold, design: .serif))
+                    .font(.system(size: isLarge ? 13 : 10.5, weight: .semibold, design: .serif))
                     .lineLimit(1)
                     .minimumScaleFactor(0.68)
                     .padding(.horizontal, 3)
@@ -385,13 +409,21 @@ private struct CompositionCoverLabel: View {
             }
         }
         .foregroundStyle(.black.opacity(0.78))
-        .padding(.horizontal, isLarge ? 12 : 10)
-        .padding(.vertical, isLarge ? 10 : 9)
-        .background(.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.horizontal, isLarge ? 11 : 9)
+        .padding(.vertical, isLarge ? 9 : 8)
+        .background(
+            LinearGradient(
+                colors: [.white, Color(red: 0.965, green: 0.96, blue: 0.93)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .stroke(.black.opacity(0.18), lineWidth: 1)
         }
+        .shadow(color: .black.opacity(0.16), radius: 1.5, y: 1)
     }
 }
 
@@ -405,11 +437,56 @@ private struct CompositionBadge: View {
             .multilineTextAlignment(.center)
             .lineLimit(2)
             .minimumScaleFactor(0.68)
-            .padding(3)
+            .padding(4)
             .frame(width: size, height: size)
+            .foregroundStyle(.white)
+            .background(.black.opacity(0.78), in: Circle())
             .overlay {
-                Circle().stroke(.black.opacity(0.62), lineWidth: 1)
+                Circle().stroke(.black.opacity(0.72), lineWidth: 1)
             }
+            .overlay {
+                Circle()
+                    .stroke(.white.opacity(0.22), lineWidth: 0.6)
+                    .padding(2)
+            }
+    }
+}
+
+private struct CoverPageEdge: View {
+    var cornerRadius: CGFloat
+
+    var body: some View {
+        UnevenRoundedRectangle(cornerRadii: .init(bottomTrailing: cornerRadius, topTrailing: cornerRadius), style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.92, green: 0.9, blue: 0.82).opacity(0.65),
+                        Color(red: 0.64, green: 0.61, blue: 0.55).opacity(0.58)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .overlay {
+                PageEdgeStack(lineCount: 18)
+                    .opacity(0.78)
+                    .padding(.vertical, 6)
+            }
+    }
+}
+
+private struct PageEdgeStack: View {
+    var lineCount: Int
+
+    var body: some View {
+        VStack(spacing: 3) {
+            ForEach(0..<lineCount, id: \.self) { index in
+                Capsule()
+                    .fill(Color.black.opacity(index.isMultiple(of: 2) ? 0.14 : 0.07))
+                    .frame(height: 0.8)
+                    .padding(.leading, CGFloat(index % 3))
+            }
+        }
     }
 }
 

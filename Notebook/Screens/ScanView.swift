@@ -113,16 +113,17 @@ struct ScanView: View {
                 .foregroundStyle(.white)
 
                 ScannerPhaseRail(activePhase: store.scanPhase)
+                ScannerModelRibbon(activePhase: store.scanPhase)
             }
         }
     }
 
     private var phaseDetail: String {
         switch store.scanPhase {
-        case .framing: "line up the page and keep scanning until you save."
-        case .capturing: "holding the sheet and preserving the page shape."
-        case .processing: "surya reads handwriting while models are isolated."
-        case .organizing: "the page is filed into the right journal."
+        case .framing: "line up the page. capture as many sheets as you need."
+        case .capturing: "visionkit locks page edges and keeps the scan native."
+        case .processing: "surya reads handwriting while sam and triposr inspect diagrams."
+        case .organizing: "gemma classifies the notes and page structure."
         case .sorted: "the notebook is ready."
         }
     }
@@ -155,6 +156,52 @@ struct ScanView: View {
         }
     }
 
+}
+
+private struct ScannerModelRibbon: View {
+    var activePhase: ScanPhase
+
+    private let models: [(ScanPhase, String, String)] = [
+        (.capturing, "doc.viewfinder", "visionkit"),
+        (.processing, "text.viewfinder", "surya"),
+        (.processing, "scope", "sam 3d"),
+        (.processing, "cube.transparent", "triposr"),
+        (.organizing, "sparkle.magnifyingglass", "gemma")
+    ]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(models, id: \.2) { model in
+                    HStack(spacing: 6) {
+                        Image(systemName: model.1)
+                            .font(.system(size: 11, weight: .bold))
+                        Text(model.2)
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(.white.opacity(isActive(model.0) ? 0.96 : 0.44))
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(.white.opacity(isActive(model.0) ? 0.18 : 0.08), in: Capsule())
+                    .overlay {
+                        Capsule().stroke(.white.opacity(isActive(model.0) ? 0.3 : 0.12), lineWidth: 0.7)
+                    }
+                    .scaleEffect(activePhase == model.0 ? 1.02 : 1)
+                    .animation(.spring(response: 0.38, dampingFraction: 0.78), value: activePhase)
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+        .mask {
+            LinearGradient(colors: [.clear, .white, .white, .clear], startPoint: .leading, endPoint: .trailing)
+        }
+    }
+
+    private func isActive(_ target: ScanPhase) -> Bool {
+        guard let current = ScanPhase.allCases.firstIndex(of: activePhase),
+              let target = ScanPhase.allCases.firstIndex(of: target) else { return false }
+        return target <= current
+    }
 }
 
 private struct ScannerPhaseRail: View {

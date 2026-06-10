@@ -125,6 +125,11 @@ struct FloatingCircleButtonStyle: ButtonStyle {
                     Circle()
                         .fill(tint)
                     Circle()
+                        .trim(from: 0.08, to: 0.34)
+                        .stroke(.white.opacity(configuration.isPressed ? 0.5 : 0.24), style: StrokeStyle(lineWidth: 1.4, lineCap: .round))
+                        .rotationEffect(.degrees(configuration.isPressed ? 118 : -18))
+                        .padding(5)
+                    Circle()
                         .fill(
                             RadialGradient(
                                 colors: [.white.opacity(configuration.isPressed ? 0.42 : 0.22), .clear],
@@ -134,6 +139,10 @@ struct FloatingCircleButtonStyle: ButtonStyle {
                             )
                         )
                         .scaleEffect(configuration.isPressed ? 1.12 : 0.86)
+                    Circle()
+                        .fill(.white.opacity(configuration.isPressed ? 0.52 : 0.34))
+                        .frame(width: configuration.isPressed ? 8 : 6, height: configuration.isPressed ? 8 : 6)
+                        .offset(x: configuration.isPressed ? -13 : 14, y: configuration.isPressed ? 15 : -14)
                     Circle()
                         .stroke(.white.opacity(configuration.isPressed ? 0.5 : 0.24), lineWidth: 0.9)
                 }
@@ -467,8 +476,8 @@ struct LegalDocumentView: View {
 
 struct ContainerTextFlip: View {
     var words: [String]
-    private let designs: [Font.Design] = [.serif, .rounded, .monospaced, .default, .rounded, .serif, .default]
-    private let weights: [Font.Weight] = [.semibold, .medium, .regular, .semibold, .bold, .light, .medium]
+    private let designs: [Font.Design] = [.serif, .rounded, .monospaced, .default, .rounded, .serif, .default, .monospaced, .rounded, .serif, .default]
+    private let weights: [Font.Weight] = [.semibold, .medium, .regular, .semibold, .bold, .light, .medium, .semibold, .regular, .bold, .light]
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1.8)) { timeline in

@@ -22,6 +22,10 @@ struct SAM3DObjectReconstructionAdapter: ObjectReconstructionServing {
 
     func reconstruct(from image: UIImage, lines: [String], keywords: [String], visualSignal: Double) async -> [DetectedModel] {
         guard visualSignal > 0.2 else { return [] }
+        if let endpointModel = await requestRemoteModel(from: image, keywords: keywords) {
+            return [endpointModel]
+        }
+
         let joined = lines.joined(separator: " ").lowercased()
         let objectTerms = [
             "model", "diagram", "figure", "shape", "object", "structure", "cell", "atom", "molecule",
@@ -32,11 +36,46 @@ struct SAM3DObjectReconstructionAdapter: ObjectReconstructionServing {
         let defaultNodes = ["outline", "surface", "label", "depth", "relation", "note"]
 
         return [DetectedModel(
-            title: terms.first.map { "\($0) isolation" } ?? "object isolation",
-            summary: "sam 3d objects isolated visual regions from the page so margins can keep diagrams connected to the notes.",
+            title: terms.first.map { "\($0) region" } ?? "visual region",
+            summary: "a diagram region was detected from local scan structure. add a sam 3d objects endpoint to reconstruct the object from the page image.",
             terms: nodes.isEmpty ? defaultNodes : nodes,
             nodes: nodes.isEmpty ? defaultNodes : nodes
         )]
+    }
+
+    private func requestRemoteModel(from image: UIImage, keywords: [String]) async -> DetectedModel? {
+        guard let endpoint = configuredEndpoint,
+              let imageData = image.jpegData(compressionQuality: 0.84) else { return nil }
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 90
+        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        request.httpBody = imageData
+
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse,
+              200..<300 ~= http.statusCode,
+              let envelope = try? JSONDecoder().decode(ReconstructionResponse.self, from: data) else { return nil }
+
+        let nodes = envelope.nodes?.filter { !$0.isEmpty } ?? Array(keywords.prefix(6))
+        return DetectedModel(
+            title: envelope.title ?? "sam 3d object",
+            summary: envelope.summary ?? "sam 3d objects returned an isolated object from the scanned page.",
+            terms: Array(keywords.prefix(6)),
+            nodes: nodes.isEmpty ? ["mask", "object", "depth", "surface"] : nodes
+        )
+    }
+
+    private var configuredEndpoint: URL? {
+        if let value = Bundle.main.object(forInfoDictionaryKey: "SAM3DObjectsEndpoint") as? String,
+           let url = URL(string: value), !value.isEmpty {
+            return url
+        }
+        if let value = ProcessInfo.processInfo.environment["SAM3D_OBJECTS_ENDPOINT"],
+           let url = URL(string: value), !value.isEmpty {
+            return url
+        }
+        return nil
     }
 }
 
@@ -54,8 +93,8 @@ struct TripoSRObjectReconstructionAdapter: ObjectReconstructionServing {
         let terms = Array((keywords + objectWords.filter { joined.contains($0) }).filter { $0.count > 2 }.prefix(6))
         let nodes = terms.isEmpty ? ["front", "surface", "depth", "label", "rotation"] : terms
         return [DetectedModel(
-            title: "single image reconstruction",
-            summary: "triposr prepared a mobile friendly interactive study object from the scan signal.",
+            title: "3d study object",
+            summary: "local scan structure found a reconstructable diagram. add a triposr endpoint to generate a full single image 3d object.",
             terms: terms,
             nodes: nodes
         )]
@@ -73,7 +112,7 @@ struct TripoSRObjectReconstructionAdapter: ObjectReconstructionServing {
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               let http = response as? HTTPURLResponse,
               200..<300 ~= http.statusCode,
-              let envelope = try? JSONDecoder().decode(TripoSRResponse.self, from: data) else { return nil }
+              let envelope = try? JSONDecoder().decode(ReconstructionResponse.self, from: data) else { return nil }
 
         let nodes = envelope.nodes?.filter { !$0.isEmpty } ?? Array(keywords.prefix(6))
         return DetectedModel(
@@ -97,7 +136,7 @@ struct TripoSRObjectReconstructionAdapter: ObjectReconstructionServing {
     }
 }
 
-private struct TripoSRResponse: Decodable {
+private struct ReconstructionResponse: Decodable {
     var title: String?
     var summary: String?
     var nodes: [String]?

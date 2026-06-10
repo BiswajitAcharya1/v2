@@ -1,4 +1,6 @@
 import Foundation
+import CoreImage
+import CoreImage.CIFilterBuiltins
 import UIKit
 @preconcurrency import Vision
 
@@ -19,22 +21,39 @@ struct HybridSuryaOCRService: OCRServing {
     private let surya = SuryaOCRClient(endpoint: SuryaOCRClient.configuredEndpoint)
 
     func recognize(in image: UIImage) async -> OCRScanResult {
-        if let result = await surya.recognize(in: image), !result.lines.isEmpty {
-            return result
+        let suryaResult = await surya.recognize(in: image)
+        if let suryaResult, suryaResult.isStrongRemoteResult {
+            return suryaResult
         }
 
-        let recognizedText = await VisionOCRTextScanner.recognizeText(in: image)
-        let lines = recognizedText
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return OCRScanResult(
-            rawText: recognizedText,
-            lines: lines,
-            tables: [],
-            confidence: lines.isEmpty ? 0.18 : 0.74,
-            engine: "apple vision"
-        )
+        let visionResult = await VisionOCRTextScanner.recognize(in: image)
+        if let suryaResult {
+            return OCRResultRanker.best(suryaResult, visionResult)
+        }
+        return visionResult
+    }
+}
+
+private extension OCRScanResult {
+    var isStrongRemoteResult: Bool {
+        confidence >= 0.84 && lines.count >= 3 && rawText.count >= 24
+    }
+
+    var qualityScore: Double {
+        let lineScore = min(0.22, Double(lines.count) * 0.018)
+        let textScore = min(0.18, Double(rawText.count) / 900)
+        let tableScore = tables.isEmpty ? 0 : min(0.08, Double(tables.count) * 0.03)
+        let garbagePenalty = rawText.garbageRatio * 0.28
+        return confidence * 0.62 + lineScore + textScore + tableScore - garbagePenalty
+    }
+}
+
+private enum OCRResultRanker {
+    static func best(_ lhs: OCRScanResult, _ rhs: OCRScanResult) -> OCRScanResult {
+        if lhs.qualityScore == rhs.qualityScore {
+            return lhs.rawText.count >= rhs.rawText.count ? lhs : rhs
+        }
+        return lhs.qualityScore > rhs.qualityScore ? lhs : rhs
     }
 }
 
@@ -159,34 +178,167 @@ private struct SuryaBlock: Decodable {
 }
 
 private enum VisionOCRTextScanner {
-    static func recognizeText(in image: UIImage) async -> String {
-        guard let cgImage = image.cgImage else { return "" }
+    static func recognize(in image: UIImage) async -> OCRScanResult {
+        let variants = OCRImagePreprocessor.variants(from: image)
+        var best = OCRScanResult(rawText: "", lines: [], tables: [], confidence: 0.12, engine: "apple vision")
 
-        return await withCheckedContinuation { continuation in
+        for variant in variants {
+            let result = await recognize(cgImage: variant.image, orientation: variant.orientation, name: variant.name)
+            best = OCRResultRanker.best(best, result)
+        }
+        return best
+    }
+
+    private static func recognize(cgImage: CGImage, orientation: CGImagePropertyOrientation, name: String) async -> OCRScanResult {
+        await withCheckedContinuation { continuation in
             let request = VNRecognizeTextRequest { request, _ in
-                let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let text = observations
-                    .compactMap { $0.topCandidates(1).first?.string }
-                    .joined(separator: "\n")
-                continuation.resume(returning: text)
+                let observations = (request.results as? [VNRecognizedTextObservation] ?? [])
+                    .sortedForReadingOrder()
+                let candidates = observations.compactMap { observation -> VNRecognizedText? in
+                    observation.topCandidates(3).first { candidate in
+                        candidate.string.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
+                    }
+                }
+                let lines = candidates
+                    .map(\.string)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).normalizedOCRLine }
+                    .filter { !$0.isEmpty }
+                let averageConfidence = candidates.isEmpty
+                    ? 0.14
+                    : Double(candidates.reduce(Float(0)) { $0 + $1.confidence }) / Double(candidates.count)
+                let confidence = min(0.94, max(0.14, averageConfidence))
+                continuation.resume(returning: OCRScanResult(
+                    rawText: lines.joined(separator: "\n"),
+                    lines: lines,
+                    tables: [],
+                    confidence: confidence,
+                    engine: "apple vision \(name)"
+                ))
             }
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
             request.recognitionLanguages = ["en-US"]
+            request.minimumTextHeight = 0.008
+            request.customWords = OCRVocabulary.studentNotebookWords
 
-            let handler = VNImageRequestHandler(cgImage: cgImage, orientation: CGImagePropertyOrientation(image.imageOrientation), options: [:])
+            let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     try handler.perform([request])
                 } catch {
-                    continuation.resume(returning: "")
+                    continuation.resume(returning: OCRScanResult(
+                        rawText: "",
+                        lines: [],
+                        tables: [],
+                        confidence: 0.12,
+                        engine: "apple vision \(name)"
+                    ))
                 }
             }
         }
     }
 }
 
+private enum OCRVocabulary {
+    static let studentNotebookWords = [
+        "algebra", "geometry", "calculus", "derivative", "integral", "equation", "function", "limit",
+        "biology", "chemistry", "physics", "molecule", "atom", "cell", "mitosis", "photosynthesis",
+        "history", "government", "revolution", "treaty", "empire", "english", "literature", "theme",
+        "thesis", "evidence", "paragraph", "computer", "algorithm", "variable", "loop", "array",
+        "hypothesis", "experiment", "example", "definition", "formula", "notes", "homework"
+    ]
+}
+
+private enum OCRImagePreprocessor {
+    private static let context = CIContext(options: [
+        .useSoftwareRenderer: false
+    ])
+
+    struct Variant {
+        var name: String
+        var image: CGImage
+        var orientation: CGImagePropertyOrientation
+    }
+
+    static func variants(from image: UIImage) -> [Variant] {
+        guard let base = CIImage(image: image)?.oriented(forExifOrientation: image.imageOrientation.exifOrientation) else {
+            return image.cgImage.map { [Variant(name: "original", image: $0, orientation: CGImagePropertyOrientation(image.imageOrientation))] } ?? []
+        }
+
+        let filters: [(String, (CIImage) -> CIImage)] = [
+            ("original", { $0 }),
+            ("ink", highContrastInk),
+            ("pencil", faintPencilBoost),
+            ("sharp", sharpenedNotebook)
+        ]
+
+        return filters.compactMap { name, transform in
+            let output = transform(base)
+            guard let cgImage = context.createCGImage(output, from: output.extent) else { return nil }
+            return Variant(name: name, image: cgImage, orientation: .up)
+        }
+    }
+
+    private static func highContrastInk(_ image: CIImage) -> CIImage {
+        let color = CIFilter.colorControls()
+        color.inputImage = image
+        color.saturation = 0
+        color.contrast = 1.42
+        color.brightness = 0.035
+
+        let sharpen = CIFilter.sharpenLuminance()
+        sharpen.inputImage = color.outputImage ?? image
+        sharpen.sharpness = 0.62
+        return sharpen.outputImage ?? color.outputImage ?? image
+    }
+
+    private static func faintPencilBoost(_ image: CIImage) -> CIImage {
+        let mono = CIFilter.colorControls()
+        mono.inputImage = image
+        mono.saturation = 0
+        mono.contrast = 1.78
+        mono.brightness = 0.09
+
+        let gamma = CIFilter.gammaAdjust()
+        gamma.inputImage = mono.outputImage ?? image
+        gamma.power = 0.74
+
+        let unsharp = CIFilter.unsharpMask()
+        unsharp.inputImage = gamma.outputImage ?? mono.outputImage ?? image
+        unsharp.radius = 1.3
+        unsharp.intensity = 0.72
+        return unsharp.outputImage ?? gamma.outputImage ?? mono.outputImage ?? image
+    }
+
+    private static func sharpenedNotebook(_ image: CIImage) -> CIImage {
+        let color = CIFilter.colorControls()
+        color.inputImage = image
+        color.saturation = 0.08
+        color.contrast = 1.22
+        color.brightness = 0.015
+
+        let unsharp = CIFilter.unsharpMask()
+        unsharp.inputImage = color.outputImage ?? image
+        unsharp.radius = 0.9
+        unsharp.intensity = 0.55
+        return unsharp.outputImage ?? color.outputImage ?? image
+    }
+}
+
 private extension String {
+    var normalizedOCRLine: String {
+        replacingOccurrences(of: #" {2,}"#, with: " ", options: .regularExpression)
+            .replacingOccurrences(of: " | ", with: " | ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    var garbageRatio: Double {
+        guard !isEmpty else { return 1 }
+        let useful = filter { $0.isLetter || $0.isNumber || $0.isWhitespace || ".,:;+-=()/%".contains($0) }.count
+        return 1 - Double(useful) / Double(count)
+    }
+
     func htmlToPlainText() -> String {
         self
             .replacingOccurrences(of: "</tr>", with: "\n")
@@ -230,6 +382,18 @@ private extension String {
     }
 }
 
+private extension Array where Element == VNRecognizedTextObservation {
+    func sortedForReadingOrder() -> [VNRecognizedTextObservation] {
+        sorted { lhs, rhs in
+            let yDelta = abs(lhs.boundingBox.midY - rhs.boundingBox.midY)
+            if yDelta > 0.028 {
+                return lhs.boundingBox.midY > rhs.boundingBox.midY
+            }
+            return lhs.boundingBox.minX < rhs.boundingBox.minX
+        }
+    }
+}
+
 private extension Data {
     mutating func append(_ string: String) {
         append(Data(string.utf8))
@@ -248,6 +412,22 @@ private extension CGImagePropertyOrientation {
         case .leftMirrored: self = .leftMirrored
         case .rightMirrored: self = .rightMirrored
         @unknown default: self = .up
+        }
+    }
+}
+
+private extension UIImage.Orientation {
+    var exifOrientation: Int32 {
+        switch self {
+        case .up: 1
+        case .down: 3
+        case .left: 8
+        case .right: 6
+        case .upMirrored: 2
+        case .downMirrored: 4
+        case .leftMirrored: 5
+        case .rightMirrored: 7
+        @unknown default: 1
         }
     }
 }

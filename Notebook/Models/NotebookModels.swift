@@ -116,7 +116,7 @@ enum VoiceReplicationBackend: String, Hashable, Codable {
 
     var modelID: String {
         switch self {
-        case .mossTTSV15: "OpenMOSS/MOSS-TTS"
+        case .mossTTSV15: "OpenMOSS-Team/MOSS-TTS-v1.5"
         case .kokoro: "hexgrad/kokoro"
         }
     }
@@ -124,9 +124,16 @@ enum VoiceReplicationBackend: String, Hashable, Codable {
     var sourceURL: URL {
         switch self {
         case .mossTTSV15:
-            URL(string: "https://github.com/OpenMOSS/MOSS-TTS")!
+            URL(string: "https://huggingface.co/spaces/OpenMOSS-Team/MOSS-TTS-v1.5/tree/main")!
         case .kokoro:
             URL(string: "https://github.com/hexgrad/kokoro")!
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .mossTTSV15: "moss-tts v1.5"
+        case .kokoro: "kokoro"
         }
     }
 }

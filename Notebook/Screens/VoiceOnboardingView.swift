@@ -23,7 +23,7 @@ struct VoiceOnboardingView: View {
                         Text("voice setup")
                             .font(.system(.largeTitle, design: .serif, weight: .semibold))
                             .foregroundStyle(NotebookTheme.ink)
-                        Text(store.isRecordingVoice ? durationText(store.voiceRecordingElapsed) : "record three short lines to personalize reading.")
+                        Text(voiceSubtitle)
                             .font(.system(.subheadline, design: .rounded))
                             .foregroundStyle(NotebookTheme.muted)
                             .multilineTextAlignment(.center)
@@ -34,11 +34,17 @@ struct VoiceOnboardingView: View {
                             Text("sentence \(min(recordedCount + 1, prompts.count)) of \(prompts.count)")
                                 .font(.system(.caption, design: .rounded, weight: .semibold))
                                 .foregroundStyle(NotebookTheme.muted)
-                            Text(currentPrompt)
-                                .font(.system(.title3, design: .rounded, weight: .semibold))
-                                .foregroundStyle(NotebookTheme.ink)
-                                .lineSpacing(4)
-                                .animation(.spring(response: 0.45, dampingFraction: 0.84), value: store.isRecordingVoice)
+                            VoicePromptWordsView(
+                                prompt: currentPrompt,
+                                progress: store.voicePromptWordProgress,
+                                recording: store.isRecordingVoice,
+                                voiceActive: store.voiceSignalActive
+                            )
+                            Text(statusText)
+                                .font(.system(.caption, design: .rounded, weight: .semibold))
+                                .foregroundStyle(store.isRecordingVoice && store.voiceSignalActive ? NotebookTheme.accent(.green) : NotebookTheme.muted)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .animation(.spring(response: 0.25, dampingFraction: 0.76), value: store.voiceSignalActive)
                             VoiceLevelStrip(level: store.voiceRecordingLevel, recording: store.isRecordingVoice)
                             Button {
                                 recordCurrentPrompt()
@@ -97,6 +103,26 @@ struct VoiceOnboardingView: View {
 
     private var recordedCount: Int {
         store.voiceProfile.samples.count
+    }
+
+    private var statusText: String {
+        guard store.isRecordingVoice else {
+            return "tap once and read naturally."
+        }
+        if store.voiceSignalActive {
+            if store.voiceRecognitionAvailable {
+                return "\(min(store.voicePromptWordProgress, currentPrompt.split(separator: " ").count)) words heard"
+            }
+            return "voice captured"
+        }
+        return store.voiceRecognitionAvailable ? "listening for words" : "listening for your voice"
+    }
+
+    private var voiceSubtitle: String {
+        if store.isRecordingVoice && !store.voiceRecognitionAvailable {
+            return "keep reading naturally. the meter saves your voice sample."
+        }
+        return store.isRecordingVoice ? durationText(store.voiceRecordingElapsed) : "record three short lines to personalize reading."
     }
 
     private func recordCurrentPrompt() {

@@ -21,15 +21,13 @@ struct LivingPaperBackground: View {
                     .blendMode(.plusLighter)
                     .opacity(0.7)
                     .transition(.opacity)
-            } else {
-                StaticLightField()
-                    .blendMode(.plusLighter)
-                    .opacity(0.58)
             }
 
-            PaperGrain(density: grainDensity)
-                .opacity(0.36)
-                .blendMode(.multiply)
+            if animated, grainDensity > 0 {
+                PaperGrain(density: grainDensity)
+                    .opacity(0.36)
+                    .blendMode(.multiply)
+            }
         }
     }
 }

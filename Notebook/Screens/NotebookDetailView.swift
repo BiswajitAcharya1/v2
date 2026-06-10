@@ -637,6 +637,8 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
     let leftContent: LeftContent
     let rightContent: RightContent
     let onSelect: (NotebookPage) -> Void
+    @State private var touchOffset: CGSize = .zero
+    @State private var touching = false
 
     init(
         left: NotebookPage,
@@ -691,10 +693,36 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
             .overlay {
+                DirectionAwareTouchHighlight(offset: touchOffset, isActive: touching, cornerRadius: 30)
+                    .opacity(0.42)
+            }
+            .overlay {
                 RoundedRectangle(cornerRadius: 30, style: .continuous)
                     .stroke(.white.opacity(0.55), lineWidth: 0.8)
             }
             .shadow(color: .black.opacity(0.07), radius: 7, y: 4)
+            .scaleEffect(touching ? 0.995 : 1)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        if !touching {
+                            Haptics.softTap()
+                        }
+                        touching = true
+                        touchOffset = CGSize(
+                            width: max(min(value.translation.width, 46), -46),
+                            height: max(min(value.translation.height, 46), -46)
+                        )
+                    }
+                    .onEnded { _ in
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                            touching = false
+                            touchOffset = .zero
+                        }
+                    }
+            )
+            .animation(.spring(response: 0.3, dampingFraction: 0.78), value: touching)
+            .animation(.spring(response: 0.32, dampingFraction: 0.78), value: touchOffset)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 0)
@@ -963,6 +991,7 @@ private struct ScanProcessingOverlay: View {
 
                 ScanPhaseRail(current: phase)
                 ScanIntelligenceRibbon(phase: phase, active: sweep)
+                ScanModelStackRibbon(phase: phase)
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 26)
@@ -1022,9 +1051,9 @@ private struct ScanProcessingOverlay: View {
         case .capturing:
             "locking the page edges"
         case .processing:
-            "cleaning ink, tables, and diagrams"
+            "surya reads ink while sam 3d and triposr rebuild diagrams"
         case .organizing:
-            "reading the subject and structure"
+            "gemma files the page by subject"
         case .sorted:
             "sliding it into your notebook"
         }
@@ -1141,6 +1170,43 @@ private struct ScanIntelligenceRibbon: View {
 
     private func isCurrent(_ target: ScanPhase) -> Bool {
         phase == target
+    }
+}
+
+private struct ScanModelStackRibbon: View {
+    let phase: ScanPhase
+
+    private let models: [(ScanPhase, String, String)] = [
+        (.processing, "surya", "text.viewfinder"),
+        (.processing, "sam 3d", "scope"),
+        (.processing, "triposr", "cube.transparent"),
+        (.organizing, "gemma", "sparkle.magnifyingglass")
+    ]
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(models, id: \.1) { model in
+                HStack(spacing: 5) {
+                    Image(systemName: model.2)
+                        .font(.system(size: 10, weight: .bold))
+                    Text(model.1)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                }
+                .foregroundStyle(.white.opacity(isActive(model.0) ? 0.9 : 0.4))
+                .padding(.horizontal, 9)
+                .frame(height: 28)
+                .background(.white.opacity(isActive(model.0) ? 0.16 : 0.07), in: Capsule())
+                .overlay {
+                    Capsule().stroke(.white.opacity(isActive(model.0) ? 0.26 : 0.12), lineWidth: 0.7)
+                }
+            }
+        }
+    }
+
+    private func isActive(_ target: ScanPhase) -> Bool {
+        guard let currentIndex = ScanPhase.allCases.firstIndex(of: phase),
+              let targetIndex = ScanPhase.allCases.firstIndex(of: target) else { return false }
+        return targetIndex <= currentIndex
     }
 }
 

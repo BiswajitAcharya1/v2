@@ -136,7 +136,7 @@ struct LocalScanProcessingService: ScanProcessingServing {
             sections: sections,
             tables: tables,
             models: models,
-            confidence: max(ocrResult.confidence, cleaned.isEmpty ? 0.18 : 0.82)
+            confidence: cleaned.isEmpty ? min(ocrResult.confidence, 0.18) : ocrResult.confidence
         )
     }
 }
@@ -326,10 +326,15 @@ struct MossTTSVoiceService: VoiceServing {
         }
 
         let words = request.text.split(separator: " ").count
-        let voiceMode = request.referenceAudioURLs.isEmpty ? "direct generation" : "clone mode"
+        let summary: String
+        if request.referenceAudioURLs.isEmpty {
+            summary = "\(backend.displayName) is selected for \(words) words. playing system speech until a tts endpoint is configured."
+        } else {
+            summary = "\(backend.displayName) has \(request.referenceAudioURLs.count) saved reference samples. playing system speech until a cloning endpoint is configured."
+        }
         return VoicePlayback(
             style: style,
-            summary: "\(backend.rawValue) \(voiceMode) prepared \(words) words with \(request.referenceAudioURLs.count) reference samples.",
+            summary: summary,
             engine: backend,
             referenceSampleCount: request.referenceAudioURLs.count
         )

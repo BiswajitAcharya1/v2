@@ -112,7 +112,7 @@ private struct SetupFlowView: View {
                 Text("voice")
                     .font(.system(.title2, design: .serif, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
-                Text("read each sentence once. words darken only while your voice is heard.")
+                Text(voiceInstructionText)
                     .font(.system(.footnote, design: .rounded, weight: .medium))
                     .foregroundStyle(NotebookTheme.muted)
                     .multilineTextAlignment(.center)
@@ -121,7 +121,7 @@ private struct SetupFlowView: View {
                     prompt: currentVoicePrompt,
                     progress: store.voicePromptWordProgress,
                     recording: store.isRecordingVoice,
-                    recognitionAvailable: store.voiceRecognitionAvailable
+                    voiceActive: store.voiceSignalActive
                 )
 
                 VoiceRecognitionStatus(
@@ -179,6 +179,13 @@ private struct SetupFlowView: View {
 
     private var currentVoicePrompt: String {
         prompts[min(store.voiceProfile.samples.count, prompts.count - 1)]
+    }
+
+    private var voiceInstructionText: String {
+        if store.isRecordingVoice && !store.voiceRecognitionAvailable {
+            return "keep reading naturally. the meter saves your voice sample."
+        }
+        return "read each sentence once. words darken only when they are matched."
     }
 
     private var subjectChoice: some View {
@@ -347,14 +354,14 @@ private struct VoiceRecognitionStatus: View {
     }
 
     private var statusText: String {
-        if isRecording && !recognitionAvailable {
-            return "waiting for voice"
-        }
         guard isRecording else { return "\(min(heardWords, totalWords)) of \(totalWords) words" }
-        if voiceActive {
+        if voiceActive && recognitionAvailable {
             return "\(min(heardWords, totalWords)) of \(totalWords) heard"
         }
-        return "waiting for voice"
+        if voiceActive {
+            return "voice captured"
+        }
+        return recognitionAvailable ? "listening for words" : "listening for your voice"
     }
 }
 
@@ -362,31 +369,15 @@ private struct VoicePromptText: View {
     var prompt: String
     var progress: Int
     var recording: Bool
-    var recognitionAvailable: Bool
-
-    private var words: [String] {
-        prompt.split(separator: " ").map(String.init)
-    }
+    var voiceActive: Bool
 
     var body: some View {
-        let activeIndex = recording && recognitionAvailable ? min(words.count - 1, progress - 1) : -1
-        highlightedSentence(activeIndex: activeIndex)
-            .font(.system(.title3, design: .rounded, weight: .semibold))
-            .lineSpacing(6)
-            .multilineTextAlignment(.center)
-            .animation(.spring(response: 0.32, dampingFraction: 0.78), value: activeIndex)
-        .frame(maxWidth: .infinity)
-    }
-
-    private func highlightedSentence(activeIndex: Int) -> Text {
-        var text = Text("")
-        for (index, word) in words.enumerated() {
-            let rawPiece = Text(word + (index == words.count - 1 ? "" : " "))
-                .foregroundStyle(index <= activeIndex ? NotebookTheme.ink : NotebookTheme.muted.opacity(recording ? 0.42 : 0.82))
-            let piece = index == activeIndex ? rawPiece.fontWeight(.semibold) : rawPiece.fontWeight(.regular)
-            text = text + piece
-        }
-        return text
+        VoicePromptWordsView(
+            prompt: prompt,
+            progress: progress,
+            recording: recording,
+            voiceActive: voiceActive
+        )
     }
 }
 

@@ -45,7 +45,10 @@ final class NotebookStore {
     @ObservationIgnored private var recordingPrompt: String?
     @ObservationIgnored private var voiceRecordingStartedAt: Date?
     @ObservationIgnored private var lastVoiceHeardAt: Date?
-    @ObservationIgnored private var lastFallbackWordAdvanceAt: Date?
+    @ObservationIgnored private var voiceNoiseFloor: Double = 0.025
+    @ObservationIgnored private var voiceSignalStartedAt: Date?
+    @ObservationIgnored private var voiceActiveSpeechDuration: TimeInterval = 0
+    @ObservationIgnored private var lastVoiceActivityTick: Date?
 
     var pinnedNotebooks: [SubjectNotebook] {
         notebooks.filter(\.isPinned)
@@ -173,12 +176,16 @@ final class NotebookStore {
         voiceSignalActive = false
         voiceRecognitionAvailable = false
         voicePromptWordProgress = 0
+        latestVoiceTranscript = nil
         stopLiveVoiceCapture(cancelRecognition: true)
         recordingURL = nil
         recordingPrompt = nil
         voiceRecordingStartedAt = nil
         lastVoiceHeardAt = nil
-        lastFallbackWordAdvanceAt = nil
+        voiceNoiseFloor = 0.025
+        voiceSignalStartedAt = nil
+        voiceActiveSpeechDuration = 0
+        lastVoiceActivityTick = nil
         withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
             setupStep = .subjects
         }
@@ -295,6 +302,7 @@ final class NotebookStore {
                         Task { @MainActor in
                             self.liveRecognitionTask = nil
                             self.liveRecognitionRequest = nil
+                            self.voiceRecognitionAvailable = false
                         }
                     }
                 }
@@ -312,13 +320,28 @@ final class NotebookStore {
                     guard let self, self.isRecordingVoice else { return }
                     let activeLevel = self.isVoicePaused ? 0 : level
                     let now = Date()
-                    if activeLevel > 0.055 {
-                        self.lastVoiceHeardAt = now
-                        if self.liveRecognitionRequest == nil {
-                            self.advanceFallbackVoiceProgress(prompt: prompt, now: now)
-                        }
+                    let elapsed = self.voiceRecordingStartedAt.map { now.timeIntervalSince($0) } ?? 0
+                    if elapsed < 0.55 {
+                        self.voiceNoiseFloor = min(0.08, max(0.012, self.voiceNoiseFloor * 0.84 + activeLevel * 0.16))
                     }
-                    self.voiceSignalActive = self.lastVoiceHeardAt.map { now.timeIntervalSince($0) < 0.85 } ?? false
+                    let speechThreshold = max(0.045, min(0.18, self.voiceNoiseFloor + 0.045))
+                    if activeLevel > speechThreshold {
+                        if self.voiceSignalStartedAt == nil {
+                            self.voiceSignalStartedAt = now
+                        }
+                        let sustainedSpeech = self.voiceSignalStartedAt.map { now.timeIntervalSince($0) > 0.08 } ?? false
+                        if sustainedSpeech {
+                            self.lastVoiceHeardAt = now
+                            self.trackVoiceActivity(now: now)
+                        }
+                    } else if activeLevel < speechThreshold * 0.72 {
+                        self.voiceSignalStartedAt = nil
+                        self.lastVoiceActivityTick = nil
+                    }
+                    self.voiceSignalActive = self.lastVoiceHeardAt.map { now.timeIntervalSince($0) < 0.42 } ?? false
+                    if !self.voiceSignalActive {
+                        self.latestVoiceTranscript = nil
+                    }
                     self.voiceRecordingLevel = activeLevel
                     if let startedAt = self.voiceRecordingStartedAt {
                         self.voiceRecordingElapsed = now.timeIntervalSince(startedAt)
@@ -341,11 +364,14 @@ final class NotebookStore {
             voiceRecordingElapsed = 0
             voiceRecordingLevel = 0
             voiceSignalActive = false
-            voiceRecognitionAvailable = true
+            voiceRecognitionAvailable = recognitionRequest != nil
             voicePromptWordProgress = 0
             latestVoiceTranscript = nil
             lastVoiceHeardAt = nil
-            lastFallbackWordAdvanceAt = nil
+            voiceNoiseFloor = 0.025
+            voiceSignalStartedAt = nil
+            voiceActiveSpeechDuration = 0
+            lastVoiceActivityTick = nil
         } catch {
             stopLiveVoiceCapture(cancelRecognition: true)
             recordingURL = nil
@@ -358,7 +384,10 @@ final class NotebookStore {
             voicePromptWordProgress = 0
             voiceRecordingStartedAt = nil
             lastVoiceHeardAt = nil
-            lastFallbackWordAdvanceAt = nil
+            voiceNoiseFloor = 0.025
+            voiceSignalStartedAt = nil
+            voiceActiveSpeechDuration = 0
+            lastVoiceActivityTick = nil
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
             authMessage = "voice recording could not start."
         }
@@ -374,6 +403,8 @@ final class NotebookStore {
         let prompt = recordingPrompt ?? ""
         let duration = voiceRecordingElapsed
         let completedProgress = voicePromptWordProgress
+        let hadWordRecognition = voiceRecognitionAvailable
+        let capturedSpeechDuration = voiceActiveSpeechDuration
         voiceRecordingElapsed = 0
         voiceRecordingLevel = 0
         voiceSignalActive = false
@@ -381,7 +412,10 @@ final class NotebookStore {
         voicePromptWordProgress = 0
         voiceRecordingStartedAt = nil
         lastVoiceHeardAt = nil
-        lastFallbackWordAdvanceAt = nil
+        voiceNoiseFloor = 0.025
+        voiceSignalStartedAt = nil
+        voiceActiveSpeechDuration = 0
+        lastVoiceActivityTick = nil
         recordingURL = nil
         recordingPrompt = nil
         guard duration >= 0.5 else {
@@ -389,10 +423,19 @@ final class NotebookStore {
             try? FileManager.default.removeItem(at: url)
             return
         }
-        guard completedProgress >= max(1, prompt.normalizedSpeechWords.count - 1) else {
-            authMessage = "read the sentence once so the voice sample can match it."
-            try? FileManager.default.removeItem(at: url)
-            return
+        if hadWordRecognition {
+            guard completedProgress >= max(1, prompt.normalizedSpeechWords.count - 1) else {
+                authMessage = "read the sentence once so the voice sample can match it."
+                try? FileManager.default.removeItem(at: url)
+                return
+            }
+        } else {
+            let targetSpeechDuration = max(0.9, min(2.4, Double(prompt.normalizedSpeechWords.count) * 0.24))
+            guard capturedSpeechDuration >= targetSpeechDuration else {
+                authMessage = "keep reading until the voice meter stays active."
+                try? FileManager.default.removeItem(at: url)
+                return
+            }
         }
         let sampleID = UUID()
         voiceProfile.samples.append(VoiceSample(id: sampleID, prompt: prompt, isRecorded: true, audioURL: url, duration: duration))
@@ -413,23 +456,16 @@ final class NotebookStore {
         }
     }
 
-    private func advanceFallbackVoiceProgress(prompt: String, now: Date) {
-        let targetCount = prompt.normalizedSpeechWords.count
-        guard targetCount > 0, voicePromptWordProgress < targetCount else { return }
-        if let lastFallbackWordAdvanceAt, now.timeIntervalSince(lastFallbackWordAdvanceAt) < 0.36 {
-            return
+    private func trackVoiceActivity(now: Date) {
+        if let lastVoiceActivityTick {
+            voiceActiveSpeechDuration += min(0.18, max(0, now.timeIntervalSince(lastVoiceActivityTick)))
         }
-        lastFallbackWordAdvanceAt = now
-        voicePromptWordProgress += 1
-        Haptics.selection()
-        if voicePromptWordProgress >= targetCount, voiceRecordingElapsed > 0.9 {
-            scheduleVoicePromptFinish(expectedProgress: targetCount)
-        }
+        lastVoiceActivityTick = now
     }
 
     private func applyLiveVoiceTranscript(_ transcript: String, prompt: String) {
         guard isRecordingVoice else { return }
-        let heardRecently = lastVoiceHeardAt.map { Date().timeIntervalSince($0) < 1.1 } ?? false
+        let heardRecently = lastVoiceHeardAt.map { Date().timeIntervalSince($0) < 0.58 } ?? false
         guard heardRecently else {
             latestVoiceTranscript = nil
             return
@@ -478,7 +514,7 @@ final class NotebookStore {
     private func scheduleVoicePromptFinish(expectedProgress: Int) {
         guard pendingVoiceFinishTask == nil else { return }
         pendingVoiceFinishTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(520))
+            try? await Task.sleep(for: .milliseconds(380))
             guard isRecordingVoice, voicePromptWordProgress >= expectedProgress else {
                 pendingVoiceFinishTask = nil
                 return
@@ -497,7 +533,10 @@ final class NotebookStore {
         voiceAudioFile = nil
         voiceSignalActive = false
         voiceRecognitionAvailable = false
-        lastFallbackWordAdvanceAt = nil
+        voiceSignalStartedAt = nil
+        voiceNoiseFloor = 0.025
+        voiceActiveSpeechDuration = 0
+        lastVoiceActivityTick = nil
         liveRecognitionRequest?.endAudio()
         liveRecognitionRequest = nil
         if cancelRecognition {

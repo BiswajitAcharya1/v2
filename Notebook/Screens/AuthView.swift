@@ -27,7 +27,7 @@ struct AuthView: View {
                 heroStack
                     .scaleEffect(appeared ? 1 : 0.92)
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: notebookOpen ? -44 : -86)
+                    .offset(y: notebookOpen ? -74 : -188)
 
                 if notebookOpen {
                     authPanel
@@ -73,7 +73,7 @@ struct AuthView: View {
             if openProgress > 0.18 {
                 VStack(spacing: 8) {
                     BrandSignUpTitle()
-                    ContainerTextFlip(words: ["scan", "organize", "study", "remember", "focus", "listen", "review", "recall", "learn", "master"])
+                    ContainerTextFlip(words: ["scan", "organize", "study", "remember", "focus", "listen", "review", "recall", "diagram", "practice", "learn", "master"])
                 }
                 .opacity(Double(min(1, openProgress * 1.35)))
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -136,12 +136,12 @@ struct AuthView: View {
 
             CompositionCoverFace(
                 subject: nil,
-                cornerRadius: 24,
-                spineWidth: 38,
-                labelWidth: 136,
-                labelHeight: 116,
-                labelOffsetY: 28,
-                showCornerLift: false
+                cornerRadius: 22,
+                spineWidth: 42,
+                labelWidth: 118,
+                labelHeight: 96,
+                labelOffsetY: 36,
+                paperGrainDensity: notebookOpen || coverDrag < -2 ? 90 : 0
             )
                 .frame(width: 190, height: 248)
                 .rotation3DEffect(.degrees(-156 * openProgress + (leatherDrift ? 2.5 : -2.5)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
@@ -519,30 +519,32 @@ private struct AuthPaperInterior: View {
             let pageWidth = max(0, (width - gap) / 2)
 
             ZStack {
-                ForEach(0..<3, id: \.self) { index in
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(Color(red: 0.72, green: 0.74, blue: 0.78).opacity(0.2 - Double(index) * 0.04))
-                        .offset(x: CGFloat(index) * 3, y: CGFloat(index + 1) * 4)
-                }
+                if openProgress > 0.01 {
+                    ForEach(0..<3, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .fill(Color(red: 0.72, green: 0.74, blue: 0.78).opacity(0.2 - Double(index) * 0.04))
+                            .offset(x: CGFloat(index) * 3, y: CGFloat(index + 1) * 4)
+                    }
 
-                HStack(spacing: gap) {
-                    authPage(isLeft: true)
-                        .frame(width: pageWidth)
-                    authPage(isLeft: false)
-                        .frame(width: pageWidth)
-                }
+                    HStack(spacing: gap) {
+                        authPage(isLeft: true)
+                            .frame(width: pageWidth)
+                        authPage(isLeft: false)
+                            .frame(width: pageWidth)
+                    }
 
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [.black.opacity(0.16), .white.opacity(0.42), .black.opacity(0.1)],
-                            startPoint: .leading,
-                            endPoint: .trailing
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [.black.opacity(0.16), .white.opacity(0.42), .black.opacity(0.1)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
                         )
-                    )
-                    .frame(width: 16)
-                    .blur(radius: 1.8)
-                    .opacity(Double(openProgress))
+                        .frame(width: 16)
+                        .blur(radius: 1.8)
+                        .opacity(Double(openProgress))
+                }
             }
         }
     }

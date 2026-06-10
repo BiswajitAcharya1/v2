@@ -173,9 +173,18 @@ struct HomeView: View {
     }
 
     private var shelfNotes: some View {
-        HStack(spacing: 10) {
-            MiniSignal(text: "\(store.notebooks.count) journals", systemName: "books.vertical.fill")
-            MiniSignal(text: activeJournalText, systemName: "sparkle.magnifyingglass")
+        VStack(spacing: 12) {
+            HStack(spacing: 6) {
+                Text("margins")
+                    .font(.system(.callout, design: .serif, weight: .semibold))
+                ContainerTextFlip(words: ["scan", "sort", "study", "listen", "remember", "rebuild", "review", "focus", "recall", "diagram", "practice", "master"])
+            }
+            .foregroundStyle(NotebookTheme.ink.opacity(0.78))
+
+            HStack(spacing: 10) {
+                MiniSignal(text: "\(store.notebooks.count) journals", systemName: "books.vertical.fill")
+                MiniSignal(text: activeJournalText, systemName: "sparkle.magnifyingglass")
+            }
         }
         .padding(.horizontal, 20)
         .opacity(entered ? 1 : 0)
