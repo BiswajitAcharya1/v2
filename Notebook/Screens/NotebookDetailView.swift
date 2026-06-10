@@ -18,6 +18,8 @@ struct NotebookDetailView: View {
     @State private var showingCamera = false
     @State private var closeRotation = 0.0
     @State private var didAutoOpenScanner = false
+    @State private var chromeEntered = false
+    @State private var actionRailAwake = false
 
     let notebook: SubjectNotebook
 
@@ -42,40 +44,19 @@ struct NotebookDetailView: View {
     var body: some View {
         ZStack {
             LivingPaperBackground().ignoresSafeArea()
-            AmbientPageGlow()
+            NotebookDetailAtmosphere(accent: NotebookTheme.accent(liveNotebook.accent))
                 .ignoresSafeArea()
 
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
+                notebookChrome
                 pageReader
                 if !pages.isEmpty {
-                    circularDock
+                    notebookActionRail
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.top, 18)
-            .padding(.bottom, 22)
-
-            VStack {
-                HStack {
-                    Spacer()
-                    Button {
-                        Haptics.softTap()
-                        closeNotebook()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(NotebookTheme.ink)
-                            .frame(width: 44, height: 44)
-                            .background(.ultraThinMaterial, in: Circle())
-                            .rotationEffect(.degrees(closeRotation))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("close notebook")
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-                Spacer()
-            }
+            .padding(.horizontal, 4)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
 
             if isScanning {
                 ScanProcessingOverlay(phase: store.scanPhase)
@@ -109,6 +90,12 @@ struct NotebookDetailView: View {
         }
         .onAppear {
             editedText = currentPage?.content.cleanedText ?? ""
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) {
+                chromeEntered = true
+            }
+            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+                actionRailAwake = true
+            }
             autoOpenScannerIfNeeded()
         }
         .onChange(of: pages.count) {
@@ -118,13 +105,77 @@ struct NotebookDetailView: View {
         }
     }
 
+    private var notebookChrome: some View {
+        HStack(spacing: 12) {
+            Button {
+                Haptics.softTap()
+                closeNotebook()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .frame(width: 38, height: 38)
+                    .background(.white.opacity(0.62), in: Circle())
+                    .overlay {
+                        Circle().stroke(.white.opacity(0.72), lineWidth: 0.8)
+                    }
+                    .rotationEffect(.degrees(closeRotation))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("close notebook")
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(liveNotebook.subject)
+                    .font(.system(.subheadline, design: .serif, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .lineLimit(1)
+                Text(notebookStatusLine)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(NotebookTheme.muted)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if let currentPage {
+                Text("page \(min(pageIndex * 2 + 1, pages.count))")
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink.opacity(0.74))
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(.white.opacity(0.5), in: Capsule())
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                    .id(currentPage.id)
+            }
+        }
+        .padding(6)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.66), lineWidth: 0.8)
+        }
+        .shadow(color: .black.opacity(0.08), radius: 12, y: 7)
+        .offset(y: chromeEntered ? 0 : -16)
+        .opacity(chromeEntered ? 1 : 0)
+    }
+
+    private var notebookStatusLine: String {
+        guard !pages.isEmpty else { return "ready for notes" }
+        let tables = pages.reduce(0) { $0 + $1.content.tables.count }
+        let models = pages.reduce(0) { $0 + $1.content.models.count }
+        let extras = [
+            tables > 0 ? "\(tables) tables" : nil,
+            models > 0 ? "\(models) models" : nil
+        ].compactMap(\.self).joined(separator: "  ")
+        return extras.isEmpty ? "\(pages.count) pages" : "\(pages.count) pages  \(extras)"
+    }
+
     private var pageReader: some View {
         ZStack {
             if currentPage != nil {
                 ZStack {
                     PageStackBackdrop(pageCount: pages.count)
-                        .padding(.horizontal, 14)
-                        .padding(.top, 22)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 8)
 
                     TabView(selection: $pageIndex) {
                         ForEach(0..<spreadCount, id: \.self) { spread in
@@ -167,16 +218,18 @@ struct NotebookDetailView: View {
 
     private func pageContent(_ page: NotebookPage, index: Int, compact: Bool = false) -> some View {
         let scale = compact ? textScale * 0.82 : textScale
-        return VStack(alignment: .leading, spacing: 16) {
+        return VStack(alignment: .leading, spacing: 12) {
+            pageHeader(page, index: index, scale: scale)
+
             if isEditing && currentPage?.id == page.id {
                 TextEditor(text: $editedText)
                     .font(.system(size: 16 * scale, weight: .regular, design: .rounded))
                     .scrollContentBackground(.hidden)
                     .foregroundStyle(NotebookTheme.ink)
-                    .frame(minHeight: 420)
+                    .frame(minHeight: 360, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 14) {
                         if page.content.sections.count > 1 {
                             ForEach(page.content.sections) { section in
                                 VStack(alignment: .leading, spacing: 7) {
@@ -215,58 +268,103 @@ struct NotebookDetailView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(minHeight: 420)
+                .frame(minHeight: 360, maxHeight: .infinity)
             }
         }
     }
 
-    private var emptyNotebook: some View {
-        NotebookPaperView(cornerRadius: 28) {
-            VStack(spacing: 22) {
-                Spacer()
-
-                Text("scan your notes")
-                    .font(.system(.largeTitle, design: .serif, weight: .semibold))
+    private func pageHeader(_ page: NotebookPage, index: Int, scale: Double) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(page.title.lowercased())
+                    .font(.system(size: 18 * scale, weight: .semibold, design: .serif))
                     .foregroundStyle(NotebookTheme.ink)
-                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                Text(page.createdAt.formatted(date: .abbreviated, time: .omitted).lowercased())
+                    .font(.system(size: 11 * scale, weight: .medium, design: .rounded))
+                    .foregroundStyle(NotebookTheme.muted)
+            }
 
-                Button {
-                    Haptics.open()
-                    showingCamera = true
-                } label: {
-                    Image(systemName: isScanning ? "sparkles" : "viewfinder")
-                        .font(.system(size: 22, weight: .bold))
-                        .frame(width: 86, height: 86)
+            Spacer(minLength: 8)
+
+            HStack(spacing: 5) {
+                PageSignalDot(symbol: "text.viewfinder", count: page.content.keywords.count)
+                if !page.content.tables.isEmpty {
+                    PageSignalDot(symbol: "tablecells", count: page.content.tables.count)
                 }
-                .buttonStyle(CircleButtonStyle(tint: NotebookTheme.accent(liveNotebook.accent), foreground: .white))
-                .disabled(isScanning)
-                .scaleEffect(isScanning ? 1.08 : 1)
-                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isScanning)
-                Spacer()
+                if !page.content.models.isEmpty {
+                    PageSignalDot(symbol: "cube.transparent", count: page.content.models.count)
+                }
+            }
+        }
+        .padding(.bottom, 2)
+    }
+
+    private var emptyNotebook: some View {
+        NotebookPaperView(cornerRadius: 32) {
+            ZStack {
+                OpenCompositionRules(isLeft: false)
+                    .opacity(0.82)
+                    .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+
+                VStack(spacing: 18) {
+                    Spacer()
+
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 30, style: .continuous)
+                            .stroke(NotebookTheme.ink.opacity(0.12), style: StrokeStyle(lineWidth: 1.2, dash: [10, 11]))
+                            .frame(width: 220, height: 276)
+                        EdgeLockCorners()
+                            .stroke(NotebookTheme.ink.opacity(0.44), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+                            .frame(width: 198, height: 254)
+                            .scaleEffect(actionRailAwake ? 1.04 : 0.98)
+                        ScannerGlow()
+                            .frame(width: 188, height: 20)
+                            .offset(y: actionRailAwake ? 96 : -96)
+                            .opacity(0.58)
+                    }
+                    .frame(height: 302)
+
+                    Button {
+                        Haptics.open()
+                        showingCamera = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "viewfinder")
+                                .font(.system(size: 17, weight: .bold))
+                            Text("scan notes")
+                                .font(.system(.headline, design: .rounded, weight: .semibold))
+                        }
+                        .padding(.horizontal, 20)
+                        .frame(height: 58)
+                    }
+                    .buttonStyle(PillButtonStyle(tint: NotebookTheme.ink, foreground: .white))
+                    .disabled(isScanning)
+
+                    Spacer()
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 560)
         }
     }
 
-    private var circularDock: some View {
-        HStack(spacing: 12) {
-            Button {
+    private var notebookActionRail: some View {
+        HStack(spacing: 10) {
+            railButton(symbol: "viewfinder", label: "scan") {
                 Haptics.open()
                 showingCamera = true
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: isScanning ? "sparkles" : "viewfinder")
-                        .font(.system(size: 17, weight: .bold))
-                    Text("scan more")
-                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                }
-                .padding(.horizontal, 18)
-                .frame(height: 52)
             }
-            .buttonStyle(PillButtonStyle(tint: NotebookTheme.ink, foreground: .white))
             .disabled(isScanning)
 
-            Button {
+            railButton(symbol: "sparkles", label: "study") {
+                if let page = currentPage {
+                    Haptics.open()
+                    selectedPage = page
+                }
+            }
+            .disabled(currentPage == nil || isEditing)
+
+            railButton(symbol: isEditing ? "checkmark" : "pencil", label: isEditing ? "save" : "edit") {
                 Haptics.selection()
                 if let page = currentPage {
                     if isEditing {
@@ -278,21 +376,39 @@ struct NotebookDetailView: View {
                         isEditing.toggle()
                     }
                 }
-            } label: {
-                Image(systemName: isEditing ? "checkmark" : "pencil")
-                    .font(.system(size: 18, weight: .bold))
-                    .frame(width: 52, height: 52)
             }
-            .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
             .disabled(currentPage == nil)
         }
-        .padding(8)
+        .padding(7)
         .background(.ultraThinMaterial, in: Capsule())
         .overlay {
             Capsule()
                 .stroke(.white.opacity(0.62), lineWidth: 0.8)
         }
         .shadow(color: .black.opacity(0.11), radius: 18, y: 10)
+        .scaleEffect(actionRailAwake ? 1.01 : 0.985)
+    }
+
+    private func railButton(symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .bold))
+                    .frame(width: 32, height: 32)
+                    .background(.white.opacity(0.18), in: Circle())
+                Text(label)
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .padding(.leading, 10)
+            .padding(.trailing, 15)
+            .frame(height: 50)
+            .background(NotebookTheme.ink, in: Capsule())
+            .overlay {
+                Capsule().stroke(.white.opacity(0.18), lineWidth: 0.7)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var typedPageComposer: some View {
@@ -375,23 +491,55 @@ struct NotebookDetailView: View {
     }
 }
 
-private struct AmbientPageGlow: View {
+private struct NotebookDetailAtmosphere: View {
+    let accent: Color
+
     var body: some View {
         TimelineView(.animation) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
-                let x = size.width * (0.5 + 0.22 * sin(t * 0.18))
-                let y = size.height * (0.25 + 0.08 * cos(t * 0.23))
-                context.fill(
-                    Path(ellipseIn: CGRect(x: x - 120, y: y - 120, width: 240, height: 240)),
-                    with: .radialGradient(
-                        Gradient(colors: [Color.white.opacity(0.34), .clear]),
-                        center: CGPoint(x: x, y: y),
-                        startRadius: 0,
-                        endRadius: 140
+                for index in 0..<9 {
+                    var path = Path()
+                    let y = size.height * (0.1 + CGFloat(index) * 0.105)
+                    let drift = CGFloat(sin(t * 0.16 + Double(index))) * 18
+                    path.move(to: CGPoint(x: -30, y: y + drift))
+                    path.addCurve(
+                        to: CGPoint(x: size.width + 40, y: y + CGFloat(cos(t * 0.12 + Double(index))) * 14),
+                        control1: CGPoint(x: size.width * 0.28, y: y - 22 + drift),
+                        control2: CGPoint(x: size.width * 0.68, y: y + 24 - drift)
                     )
-                )
+                    context.stroke(path, with: .color(NotebookTheme.ink.opacity(0.025 + Double(index % 3) * 0.01)), lineWidth: 1)
+                }
+
+                for index in 0..<18 {
+                    let x = size.width * CGFloat((index * 37) % 101) / 100
+                    let y = size.height * CGFloat((index * 53) % 97) / 100
+                    let offset = CGFloat(sin(t * 0.22 + Double(index))) * 5
+                    let rect = CGRect(x: x + offset, y: y, width: 2.4, height: 2.4)
+                    context.fill(Path(ellipseIn: rect), with: .color(accent.opacity(index.isMultiple(of: 3) ? 0.16 : 0.07)))
+                }
             }
+        }
+    }
+}
+
+private struct PageSignalDot: View {
+    let symbol: String
+    let count: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .bold))
+            Text("\(count)")
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+        }
+        .foregroundStyle(NotebookTheme.ink.opacity(0.72))
+        .padding(.horizontal, 7)
+        .frame(height: 24)
+        .background(.white.opacity(0.44), in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.5), lineWidth: 0.6)
         }
     }
 }
@@ -442,7 +590,7 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
     var body: some View {
         GeometryReader { proxy in
             let isWide = proxy.size.width > 560
-            let pageGap = isWide ? 36.0 : 18.0
+            let pageGap = isWide ? 24.0 : 12.0
 
             ZStack {
                 OpenCompositionSpreadBackground()
@@ -450,10 +598,10 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
                 HStack(spacing: pageGap) {
                     leftContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(.leading, isWide ? 42 : 24)
-                        .padding(.trailing, isWide ? 18 : 10)
-                        .padding(.top, 54)
-                        .padding(.bottom, 28)
+                        .padding(.leading, isWide ? 34 : 18)
+                        .padding(.trailing, isWide ? 12 : 6)
+                        .padding(.top, 38)
+                        .padding(.bottom, 18)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             onSelect(left)
@@ -461,10 +609,10 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
 
                     rightContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(.leading, isWide ? 18 : 10)
-                        .padding(.trailing, isWide ? 42 : 24)
-                        .padding(.top, 54)
-                        .padding(.bottom, 28)
+                        .padding(.leading, isWide ? 12 : 6)
+                        .padding(.trailing, isWide ? 34 : 18)
+                        .padding(.top, 38)
+                        .padding(.bottom, 18)
                         .opacity(right == nil ? 0.42 : 1)
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -473,19 +621,19 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
                             }
                         }
                 }
-                .padding(.horizontal, isWide ? 8 : 0)
+                .padding(.horizontal, isWide ? 4 : 0)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 32, style: .continuous)
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
                     .stroke(.white.opacity(0.55), lineWidth: 0.8)
             }
-            .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
+            .shadow(color: .black.opacity(0.07), radius: 7, y: 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 2)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 0)
+        .padding(.vertical, 0)
     }
 }
 
@@ -493,7 +641,7 @@ private struct OpenCompositionSpreadBackground: View {
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let gap: CGFloat = size.width > 560 ? 36 : 18
+            let gap: CGFloat = size.width > 560 ? 24 : 12
             let pageWidth = max(0, (size.width - gap) / 2)
             ZStack {
                 bottomPageStack(size: size)
@@ -725,6 +873,7 @@ private struct ScanProcessingOverlay: View {
                 }
 
                 ScanPhaseRail(current: phase)
+                ScanIntelligenceRibbon(phase: phase, active: sweep)
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 26)
@@ -842,6 +991,9 @@ private struct ProcessingPage: View {
             if phase == .organizing || phase == .sorted {
                 ProcessingParticles(active: sweep)
                     .padding(18)
+                ReconstructedObjectGlyph(active: sweep)
+                    .frame(width: 96, height: 96)
+                    .transition(.opacity.combined(with: .scale(scale: 0.86)))
             }
         }
         .overlay {
@@ -855,6 +1007,93 @@ private struct ProcessingPage: View {
                     lineWidth: 1
                 )
         }
+    }
+}
+
+private struct ScanIntelligenceRibbon: View {
+    let phase: ScanPhase
+    let active: Bool
+
+    private let steps: [(ScanPhase, String, String)] = [
+        (.capturing, "viewfinder", "capture"),
+        (.processing, "text.viewfinder", "ocr"),
+        (.organizing, "tablecells", "tables"),
+        (.sorted, "cube.transparent", "models")
+    ]
+
+    var body: some View {
+        HStack(spacing: 9) {
+            ForEach(steps, id: \.2) { step in
+                VStack(spacing: 6) {
+                    Image(systemName: step.1)
+                        .font(.system(size: 12, weight: .bold))
+                        .frame(width: 30, height: 30)
+                        .background(isActive(step.0) ? .white.opacity(0.28) : .white.opacity(0.1), in: Circle())
+                        .scaleEffect(isCurrent(step.0) && active ? 1.08 : 1)
+                    Text(step.2)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                }
+                .foregroundStyle(.white.opacity(isActive(step.0) ? 0.92 : 0.42))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.11), in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.24), lineWidth: 0.7)
+        }
+    }
+
+    private func isActive(_ target: ScanPhase) -> Bool {
+        guard let currentIndex = ScanPhase.allCases.firstIndex(of: phase),
+              let targetIndex = ScanPhase.allCases.firstIndex(of: target) else { return false }
+        return targetIndex <= currentIndex
+    }
+
+    private func isCurrent(_ target: ScanPhase) -> Bool {
+        phase == target
+    }
+}
+
+private struct ReconstructedObjectGlyph: View {
+    let active: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            Canvas { context, size in
+                let points = [
+                    CGPoint(x: size.width * 0.5, y: size.height * 0.16),
+                    CGPoint(x: size.width * 0.78, y: size.height * 0.36),
+                    CGPoint(x: size.width * 0.68, y: size.height * 0.74),
+                    CGPoint(x: size.width * 0.32, y: size.height * 0.74),
+                    CGPoint(x: size.width * 0.22, y: size.height * 0.36)
+                ]
+
+                var shell = Path()
+                shell.move(to: points[0])
+                for point in points.dropFirst() {
+                    shell.addLine(to: point)
+                }
+                shell.closeSubpath()
+                context.stroke(shell, with: .color(.white.opacity(0.72)), style: StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round))
+
+                for point in points {
+                    var line = Path()
+                    line.move(to: center)
+                    line.addLine(to: point)
+                    context.stroke(line, with: .color(.white.opacity(0.24)), lineWidth: 1)
+                }
+            }
+            .rotation3DEffect(.degrees(active ? 18 : -18), axis: (x: 0.2, y: 1, z: 0), perspective: 0.8)
+            .animation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true), value: active)
+        }
+        .padding(12)
+        .background(.white.opacity(0.12), in: Circle())
+        .overlay {
+            Circle().stroke(.white.opacity(0.28), lineWidth: 0.8)
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -1016,10 +1255,10 @@ private struct DetectedTableView: View {
     let table: DetectedTable
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(table.title)
                 .font(.system(.subheadline, design: .serif, weight: .semibold))
-                .foregroundStyle(NotebookTheme.ink.opacity(0.7))
+                .foregroundStyle(NotebookTheme.ink.opacity(0.62))
 
             VStack(spacing: 0) {
                 tableRow(table.headers, isHeader: true)
@@ -1027,10 +1266,10 @@ private struct DetectedTableView: View {
                     tableRow(row, isHeader: false)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(NotebookTheme.ink.opacity(0.1), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(NotebookTheme.ink.opacity(0.12), lineWidth: 0.8)
             )
         }
     }
@@ -1042,9 +1281,9 @@ private struct DetectedTableView: View {
                     .font(.system(.caption, design: .rounded, weight: isHeader ? .semibold : .regular))
                     .foregroundStyle(NotebookTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 9)
-                    .background(isHeader ? NotebookTheme.ink.opacity(0.08) : .white.opacity(0.28))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 8)
+                    .background(isHeader ? NotebookTheme.ink.opacity(0.055) : .white.opacity(0.12))
             }
         }
         .overlay(alignment: .bottom) {

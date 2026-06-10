@@ -61,8 +61,23 @@ struct PillButtonStyle: ButtonStyle {
             .foregroundStyle(foreground)
             .padding(.horizontal, 18)
             .padding(.vertical, 12)
-            .background(tint, in: Capsule())
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .background {
+                Capsule()
+                    .fill(tint)
+                    .overlay(alignment: configuration.isPressed ? .bottomTrailing : .topLeading) {
+                        Capsule()
+                            .fill(.white.opacity(configuration.isPressed ? 0.18 : 0.09))
+                            .frame(width: configuration.isPressed ? 88 : 54, height: 26)
+                            .blur(radius: 10)
+                    }
+            }
+            .overlay {
+                Capsule()
+                    .stroke(.white.opacity(configuration.isPressed ? 0.34 : 0.16), lineWidth: 0.8)
+            }
+            .scaleEffect(configuration.isPressed ? 0.965 : 1)
+            .rotation3DEffect(.degrees(configuration.isPressed ? -4 : 0), axis: (x: 1, y: 0, z: 0), perspective: 0.75)
+            .shadow(color: tint.opacity(configuration.isPressed ? 0.08 : 0.16), radius: configuration.isPressed ? 4 : 8, y: configuration.isPressed ? 2 : 6)
             .animation(.spring(response: 0.28, dampingFraction: 0.72), value: configuration.isPressed)
             .modifier(HapticPressFeedback(isPressed: configuration.isPressed))
     }
@@ -75,8 +90,22 @@ struct CircleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(foreground)
-            .background(tint, in: Circle())
+            .background {
+                Circle()
+                    .fill(tint)
+                    .overlay(alignment: configuration.isPressed ? .bottomTrailing : .topLeading) {
+                        Circle()
+                            .fill(.white.opacity(configuration.isPressed ? 0.22 : 0.1))
+                            .frame(width: configuration.isPressed ? 34 : 24, height: configuration.isPressed ? 34 : 24)
+                            .blur(radius: 8)
+                    }
+            }
+            .overlay {
+                Circle()
+                    .stroke(.white.opacity(configuration.isPressed ? 0.36 : 0.18), lineWidth: 0.8)
+            }
             .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .rotation3DEffect(.degrees(configuration.isPressed ? 8 : 0), axis: (x: 0.6, y: 1, z: 0), perspective: 0.72)
             .shadow(color: tint.opacity(configuration.isPressed ? 0.08 : 0.18), radius: configuration.isPressed ? 3 : 8, y: configuration.isPressed ? 2 : 5)
             .animation(.spring(response: 0.24, dampingFraction: 0.72), value: configuration.isPressed)
             .modifier(HapticPressFeedback(isPressed: configuration.isPressed))
