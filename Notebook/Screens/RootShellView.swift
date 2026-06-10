@@ -15,32 +15,12 @@ struct RootShellView: View {
                 AuthView()
             }
         }
-        .preferredColorScheme(store.preferredColorScheme)
+        .preferredColorScheme(.light)
     }
 
     private var appTabs: some View {
-        TabView {
-            NavigationStack {
-                HomeView()
-            }
-            .tabItem {
-                Label("shelf", systemImage: "books.vertical.fill")
-            }
-
-            ScanView()
-                .tabItem {
-                    Label("scan", systemImage: "viewfinder")
-                }
-
-            VoiceOnboardingView()
-                .tabItem {
-                    Label("voice", systemImage: "waveform")
-                }
-
-            SettingsView()
-                .tabItem {
-                    Label("settings", systemImage: "gearshape.fill")
-                }
+        NavigationStack {
+            HomeView()
         }
         .tint(NotebookTheme.ink)
     }
@@ -48,11 +28,19 @@ struct RootShellView: View {
 
 private struct SetupFlowView: View {
     @Environment(NotebookStore.self) private var store
-    @State private var subjectText = "math, science, history, english"
+    @State private var subjectDraft = ""
+    @State private var subjects: [String] = []
     private let prompts = [
         "today i will study with calm focus.",
         "explain this page like a patient tutor.",
         "help me remember only what matters."
+    ]
+    private let allowedSubjects = [
+        "math", "algebra", "geometry", "calculus", "statistics",
+        "science", "biology", "chemistry", "physics", "earth science",
+        "history", "world history", "us history", "government",
+        "english", "literature", "writing", "spanish", "french",
+        "computer science", "economics", "psychology", "art", "music"
     ]
 
     var body: some View {
@@ -69,7 +57,7 @@ private struct SetupFlowView: View {
                 case .voiceRecording:
                     voiceRecording
                 case .theme:
-                    themeChoice
+                    subjectChoice
                 case .subjects:
                     subjectChoice
                 }
@@ -83,7 +71,7 @@ private struct SetupFlowView: View {
     private var voiceRecording: some View {
         GlassSurface(radius: 34, padding: 20, interactive: true) {
             VStack(spacing: 18) {
-                Text("voice print")
+                Text("voice")
                     .font(.system(.title2, design: .serif, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
                 Text(prompts[min(store.voiceProfile.samples.count, prompts.count - 1)])
@@ -92,9 +80,20 @@ private struct SetupFlowView: View {
                     .multilineTextAlignment(.center)
                     .lineSpacing(5)
 
-                VoiceProgress(count: store.voiceProfile.samples.count, total: prompts.count, recording: store.isRecordingVoice)
+                Text(store.isRecordingVoice ? "tap again to save this sentence." : "tap once, read the sentence, then tap again.")
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
+                    .foregroundStyle(NotebookTheme.muted)
+                    .multilineTextAlignment(.center)
 
-                HStack(spacing: 22) {
+                VoiceProgress(count: store.voiceProfile.samples.count, total: prompts.count, recording: store.isRecordingVoice)
+                VoiceRecordingReadout(
+                    elapsed: store.voiceRecordingElapsed,
+                    level: store.voiceRecordingLevel,
+                    paused: store.isVoicePaused,
+                    samples: store.voiceProfile.samples
+                )
+
+                HStack(spacing: 14) {
                     Button {
                         store.retakeVoicePrompt()
                     } label: {
@@ -104,53 +103,42 @@ private struct SetupFlowView: View {
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.muted.opacity(0.6), foreground: NotebookTheme.ink))
 
+                    if store.isRecordingVoice {
+                        Button {
+                            if store.isVoicePaused {
+                                store.resumeVoiceRecording()
+                            } else {
+                                store.pauseVoiceRecording()
+                            }
+                        } label: {
+                            Image(systemName: store.isVoicePaused ? "play.fill" : "pause.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .frame(width: 56, height: 56)
+                        }
+                        .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.76), foreground: NotebookTheme.ink))
+                        .transition(.scale.combined(with: .opacity))
+                    }
+
                     Button {
                         Task {
                             await store.recordVoicePrompt(prompts[min(store.voiceProfile.samples.count, prompts.count - 1)])
                         }
                     } label: {
-                        Image(systemName: store.isRecordingVoice ? "waveform" : "mic.fill")
+                        Image(systemName: store.isRecordingVoice ? "stop.fill" : "mic.fill")
                             .font(.system(size: 22, weight: .bold))
                             .frame(width: 72, height: 72)
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
-                }
-            }
-        }
-    }
 
-    private var themeChoice: some View {
-        GlassSurface(radius: 26, padding: 18, interactive: true) {
-            VStack(spacing: 16) {
-                Text("choose theme")
-                    .font(.system(.title2, design: .serif, weight: .semibold))
-                    .foregroundStyle(NotebookTheme.ink)
-                HStack(spacing: 10) {
-                    ForEach(AppTheme.allCases) { theme in
-                        Button {
-                            store.chooseTheme(theme)
-                        } label: {
-                            VStack(spacing: 8) {
-                                Image(systemName: symbol(for: theme))
-                                Text(theme.rawValue)
-                            }
-                            .font(.system(.caption, design: .rounded, weight: .semibold))
-                            .foregroundStyle(store.appTheme == theme ? .white : NotebookTheme.ink)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(store.appTheme == theme ? NotebookTheme.ink : .white.opacity(0.62), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
+                    Button {
+                        store.skipVoiceSetup()
+                    } label: {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: 17, weight: .bold))
+                            .frame(width: 56, height: 56)
                     }
+                    .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
                 }
-                Button {
-                    store.continueToSubjects()
-                } label: {
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 18, weight: .bold))
-                        .frame(width: 58, height: 58)
-                }
-                .buttonStyle(CircleButtonStyle())
             }
         }
     }
@@ -161,53 +149,103 @@ private struct SetupFlowView: View {
                 Text("subjects")
                     .font(.system(.title2, design: .serif, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
-                Text("type your classes separated by commas.")
-                    .font(.system(.subheadline, design: .rounded))
-                    .foregroundStyle(NotebookTheme.muted)
-                TextField("math, science, history", text: $subjectText)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .font(.system(.body, design: .rounded))
-                    .padding(14)
-                    .background(.white.opacity(0.66), in: Capsule())
 
-                HStack(spacing: 8) {
-                    ForEach(parsedSubjects.prefix(4), id: \.self) { subject in
-                        Text(subject)
-                            .font(.system(.caption, design: .rounded, weight: .semibold))
-                            .foregroundStyle(NotebookTheme.ink)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .background(.white.opacity(0.58), in: Capsule())
+                HStack(spacing: 10) {
+                    TextField("", text: $subjectDraft)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.system(.body, design: .rounded))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .tint(NotebookTheme.ink)
+                        .padding(14)
+                        .background(.white.opacity(0.66), in: Capsule())
+                        .onSubmit(addSubject)
+
+                    Button(action: addSubject) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .bold))
+                            .frame(width: 50, height: 50)
+                    }
+                    .buttonStyle(CircleButtonStyle())
+                    .disabled(bestSubjectMatch == nil)
+                }
+
+                if !subjectSuggestions.isEmpty {
+                    VStack(spacing: 7) {
+                        ForEach(subjectSuggestions, id: \.self) { subject in
+                            Button {
+                                addSubject(subject)
+                            } label: {
+                                HStack {
+                                    Text(subject)
+                                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                    Spacer()
+                                    Image(systemName: "return")
+                                        .font(.system(size: 12, weight: .bold))
+                            }
+                                .foregroundStyle(NotebookTheme.ink)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(.ultraThinMaterial, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
+                if !subjects.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(subjects, id: \.self) { subject in
+                                SubjectToken(subject: subject) {
+                                    subjects.removeAll { $0 == subject }
+                                }
+                            }
+                        }
                     }
                 }
 
                 Button {
-                    store.setSubjects(parsedSubjects)
+                    store.setSubjects(subjects)
                 } label: {
                     Image(systemName: "checkmark")
                         .font(.system(size: 18, weight: .bold))
                         .frame(width: 58, height: 58)
                 }
                 .buttonStyle(CircleButtonStyle())
+                .disabled(subjects.isEmpty)
             }
         }
     }
 
-    private var parsedSubjects: [String] {
-        subjectText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
-            .filter { !$0.isEmpty }
+    private func addSubject() {
+        guard let subject = bestSubjectMatch else { return }
+        addSubject(subject)
     }
 
-    private func symbol(for theme: AppTheme) -> String {
-        switch theme {
-        case .light: "sun.max.fill"
-        case .dark: "moon.fill"
-        case .device: "iphone"
+    private func addSubject(_ subject: String) {
+        guard !subject.isEmpty, !subjects.contains(subject) else { return }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
+            subjects.append(subject)
+            subjectDraft = ""
         }
     }
+
+    private var subjectSuggestions: [String] {
+        let draft = subjectDraft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !draft.isEmpty else { return [] }
+        let matches = allowedSubjects.filter { $0.hasPrefix(draft) || $0.localizedCaseInsensitiveContains(draft) }
+        return Array(matches[0..<min(matches.count, 4)])
+    }
+
+    private var bestSubjectMatch: String? {
+        let draft = subjectDraft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !draft.isEmpty else { return nil }
+        if allowedSubjects.contains(draft) { return draft }
+        return allowedSubjects.first { $0.hasPrefix(draft) }
+    }
+
 }
 
 private struct VoiceProgress: View {
@@ -229,6 +267,98 @@ private struct VoiceProgress: View {
         }
         .frame(width: 118, height: 118)
         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: count)
+    }
+}
+
+private struct VoiceRecordingReadout: View {
+    var elapsed: TimeInterval
+    var level: Double
+    var paused: Bool
+    var samples: [VoiceSample]
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Text(durationText(elapsed))
+                    .font(.system(.title3, design: .monospaced, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .contentTransition(.numericText())
+                if paused {
+                    Image(systemName: "pause.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(NotebookTheme.muted)
+                }
+            }
+
+            HStack(alignment: .center, spacing: 4) {
+                ForEach(0..<18, id: \.self) { index in
+                    Capsule()
+                        .fill(NotebookTheme.ink.opacity(barOpacity(index)))
+                        .frame(width: 5, height: barHeight(index))
+                }
+            }
+            .frame(height: 34)
+            .animation(.spring(response: 0.22, dampingFraction: 0.68), value: level)
+
+            if !samples.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(samples) { sample in
+                        Text(durationText(sample.duration))
+                            .font(.system(.caption2, design: .monospaced, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.muted)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(.white.opacity(0.58), in: Capsule())
+                    }
+                }
+            }
+        }
+    }
+
+    private func barHeight(_ index: Int) -> CGFloat {
+        let wave = 0.5 + 0.5 * sin(Double(index) * 0.88 + level * 9)
+        return 7 + CGFloat(max(0.06, level) * wave) * 28
+    }
+
+    private func barOpacity(_ index: Int) -> Double {
+        paused ? 0.2 : 0.24 + min(0.7, level + Double(index % 3) * 0.04)
+    }
+
+    private func durationText(_ duration: TimeInterval) -> String {
+        let seconds = max(0, Int(duration.rounded()))
+        return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
+    }
+}
+
+private struct SubjectToken: View {
+    var subject: String
+    var remove: () -> Void
+    @State private var rotation = 0.0
+
+    var body: some View {
+        Button {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.7)) {
+                rotation += 90
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    remove()
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(subject)
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .rotationEffect(.degrees(rotation))
+            }
+            .font(.system(.caption, design: .rounded, weight: .semibold))
+            .foregroundStyle(NotebookTheme.ink)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -257,15 +387,6 @@ private struct SettingsView: View {
                                 .animation(.linear(duration: 5).repeatForever(autoreverses: false), value: spinning)
                         }
                         .foregroundStyle(NotebookTheme.ink)
-                    }
-
-                    settingSection("theme") {
-                        Picker("theme", selection: Bindable(store).appTheme) {
-                            ForEach(AppTheme.allCases) { theme in
-                                Text(theme.rawValue).tag(theme)
-                            }
-                        }
-                        .pickerStyle(.segmented)
                     }
 
                     settingSection("voice") {

@@ -15,7 +15,7 @@ all visible product text in the app uses lowercase lettering. this is a native s
 - handwriting recognition: https://github.com/microsoft/unilm/tree/master/trocr
 - subject classification / multimodal note understanding / page q&a: gemma 4 12b it
 - pdf extraction: pdf data extractor pagewise
-- tts / ai reading voice / optional user voice replication: moss-tts v1.5
+- tts / ai reading voice / optional user voice replication: https://huggingface.co/spaces/OpenMOSS-Team/MOSS-TTS-v1.5/tree/main
 - fast on-device tts option: https://github.com/hexgrad/kokoro
 - voice transcription option: https://github.com/SYSTRAN/faster-whisper
 - spaced repetition / memory scheduling: https://github.com/open-spaced-repetition
@@ -30,4 +30,5 @@ all visible product text in the app uses lowercase lettering. this is a native s
 - scan flow uses a cinematic local capture rehearsal with edge guides, scan sweep, processing phases, and an animated page-to-notebook handoff.
 - models are defined for user, subject notebook, page, scan job, extracted content, flashcard, review state, ai action, and voice profile.
 - service adapters are protocol-based so opencv, sam 2, trocr, gemma, pdf extraction, moss-tts, kokoro, faster-whisper, and open spaced repetition can be wired behind the same app surfaces cleanly.
+- voice replication uses the moss-tts v1.5 hugging face space model id `OpenMOSS-Team/MOSS-TTS-v1.5`; personalized playback uses clone mode with the recorded onboarding audio samples as reference audio, matching the space's `run_inference` path.
 - liquid glass uses native swiftui glass APIs on ios 26 with material fallbacks on earlier ios targets.

@@ -10,6 +10,10 @@ struct NotebookDetailView: View {
     @State private var dragX: CGFloat = 0
     @State private var isEditing = false
     @State private var editedText = ""
+    @State private var showingComposer = false
+    @State private var typedText = ""
+    @State private var isScanning = false
+    @State private var composerCloseRotation = 0.0
 
     let notebook: SubjectNotebook
 
@@ -37,36 +41,36 @@ struct NotebookDetailView: View {
             AmbientPageGlow()
                 .ignoresSafeArea()
 
-            VStack(spacing: 18) {
-                coverHeader
-                controls
+            VStack(spacing: 12) {
                 pageReader
-                circularDock
+                if !pages.isEmpty {
+                    circularDock
+                }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
+            .padding(.horizontal, 16)
+            .padding(.top, 18)
             .padding(.bottom, 22)
-        }
-        .navigationTitle(liveNotebook.subject)
-        .toolbarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button("rename notebook") { store.rename(liveNotebook, to: "\(liveNotebook.subject) notes") }
-                    Button(liveNotebook.isPinned ? "unpin notebook" : "pin notebook") { store.pin(liveNotebook) }
-                    Button("move earlier") { store.move(liveNotebook, direction: .earlier) }
-                    Button("move later") { store.move(liveNotebook, direction: .later) }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(NotebookTheme.ink)
-                        .frame(width: 42, height: 42)
-                        .background(.ultraThinMaterial, in: Circle())
+
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    StudyAgentBubble(mode: .notebook)
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 88)
                 }
             }
         }
+        .navigationTitle("")
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(item: $selectedPage) { page in
             StudyFocusView(page: page)
+        }
+        .sheet(isPresented: $showingComposer) {
+            typedPageComposer
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .onChange(of: currentPage?.id) {
             editedText = currentPage?.content.cleanedText ?? ""
@@ -77,136 +81,123 @@ struct NotebookDetailView: View {
         }
     }
 
-    private var coverHeader: some View {
-        HStack(spacing: 14) {
-            CompositionNotebookCard(notebook: liveNotebook, namespace: nil)
-                .frame(width: 74)
-                .rotation3DEffect(.degrees(-12), axis: (x: 0, y: 1, z: 0), perspective: 0.7)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(liveNotebook.subject)
-                    .font(.system(.largeTitle, design: .serif, weight: .semibold))
-                    .foregroundStyle(NotebookTheme.ink)
-                Text("\(liveNotebook.pages.count) pages")
-                    .font(.system(.footnote, design: .rounded, weight: .semibold))
-                    .foregroundStyle(NotebookTheme.muted)
-            }
-            Spacer()
-        }
-    }
-
-    private var controls: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(NotebookTheme.muted)
-            TextField("search pages", text: $query)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(.system(.body, design: .rounded))
-
-            Picker("view", selection: $displayMode) {
-                ForEach(PageDisplayMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 142)
-        }
-        .padding(10)
-        .background(.ultraThinMaterial, in: Capsule())
-        .foregroundStyle(NotebookTheme.ink)
-    }
-
     private var pageReader: some View {
         ZStack {
             if let page = currentPage {
-                NotebookPaperView(cornerRadius: 20) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Text(page.title)
-                                .font(.system(.title3, design: .rounded, weight: .semibold))
-                            Spacer()
-                            PageChip(text: "\(pageIndex + 1)/\(max(pages.count, 1))", systemName: "book.pages")
+                TabView(selection: $pageIndex) {
+                    ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
+                        NotebookPaperView(cornerRadius: 26) {
+                            pageContent(page, index: index)
                         }
-                        .foregroundStyle(NotebookTheme.ink)
-
-                        if isEditing {
-                            TextEditor(text: $editedText)
-                                .font(.system(size: 16 * textScale, weight: .regular, design: .rounded))
-                                .scrollContentBackground(.hidden)
-                                .foregroundStyle(NotebookTheme.ink)
-                                .frame(minHeight: 260)
-                        } else {
-                            ScrollView {
-                                Text(displayMode == .cleaned ? page.content.cleanedText : page.content.rawText)
-                                    .font(.system(size: 16 * textScale, weight: .regular, design: .rounded))
-                                    .foregroundStyle(NotebookTheme.ink)
-                                    .lineSpacing(6)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 2)
+                        .tag(index)
+                        .onTapGesture {
+                            guard !isEditing else { return }
+                            withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
+                                turnPage(1)
                             }
-                            .frame(minHeight: 260)
                         }
-
-                        HStack {
-                            Image(systemName: "textformat.size.smaller")
-                            Slider(value: $textScale, in: 0.88...1.38)
-                            Image(systemName: "textformat.size.larger")
-                        }
-                        .foregroundStyle(NotebookTheme.muted)
                     }
                 }
-                .frame(maxHeight: 470)
-                .rotation3DEffect(.degrees(Double(dragX / 14)), axis: (x: 0, y: 1, z: 0), perspective: 0.72)
-                .offset(x: dragX * 0.18)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(maxHeight: .infinity)
                 .shadow(color: .black.opacity(0.12), radius: 18, y: 10)
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            dragX = max(min(value.translation.width, 120), -120)
-                        }
-                        .onEnded { value in
-                            withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) {
-                                if value.translation.width < -60 {
-                                    turnPage(1)
-                                } else if value.translation.width > 60 {
-                                    turnPage(-1)
-                                }
-                                dragX = 0
-                            }
-                        }
-                )
                 .animation(.spring(response: 0.45, dampingFraction: 0.82), value: pageIndex)
             } else {
                 emptyNotebook
             }
         }
+        .frame(maxHeight: .infinity)
+    }
+
+    private func pageContent(_ page: NotebookPage, index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if isEditing && currentPage?.id == page.id {
+                TextEditor(text: $editedText)
+                    .font(.system(size: 16 * textScale, weight: .regular, design: .rounded))
+                    .scrollContentBackground(.hidden)
+                    .foregroundStyle(NotebookTheme.ink)
+                    .frame(minHeight: 420)
+            } else {
+                ScrollView {
+                    Text(page.content.cleanedText)
+                        .font(.system(size: 16 * textScale, weight: .regular, design: .rounded))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .lineSpacing(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(minHeight: 420)
+            }
+        }
     }
 
     private var emptyNotebook: some View {
-        NotebookPaperView(cornerRadius: 20) {
-            VStack(spacing: 18) {
-                Image(systemName: "viewfinder.circle.fill")
-                    .font(.system(size: 46, weight: .semibold))
-                    .foregroundStyle(NotebookTheme.muted)
-                Text("scan a page to fill this notebook.")
-                    .font(.notebookBody)
-                    .foregroundStyle(NotebookTheme.muted)
+        NotebookPaperView(cornerRadius: 28) {
+            VStack(spacing: 22) {
+                Spacer()
+
+                Text("scan your notes")
+                    .font(.system(.largeTitle, design: .serif, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
                     .multilineTextAlignment(.center)
+
+                Button {
+                    Task {
+                        isScanning = true
+                        await store.scanPage(into: liveNotebook.id)
+                        pageIndex = 0
+                        isScanning = false
+                    }
+                } label: {
+                    Image(systemName: isScanning ? "sparkles" : "viewfinder")
+                        .font(.system(size: 22, weight: .bold))
+                        .frame(width: 86, height: 86)
+                }
+                .buttonStyle(CircleButtonStyle(tint: NotebookTheme.accent(liveNotebook.accent), foreground: .white))
+                .disabled(isScanning)
+                .scaleEffect(isScanning ? 1.08 : 1)
+                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isScanning)
+                Spacer()
             }
-            .frame(maxWidth: .infinity, minHeight: 340)
+            .frame(maxWidth: .infinity, minHeight: 560)
         }
     }
 
     private var circularDock: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 8) {
+            Button {
+                Task {
+                    isScanning = true
+                    await store.scanPage(into: liveNotebook.id)
+                    pageIndex = 0
+                    isScanning = false
+                }
+            } label: {
+                Image(systemName: isScanning ? "sparkles" : "viewfinder")
+                    .font(.system(size: 17, weight: .bold))
+                    .frame(width: 46, height: 46)
+            }
+            .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
+            .disabled(isScanning)
+
+            Button {
+                showingComposer = true
+            } label: {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 17, weight: .bold))
+                    .frame(width: 46, height: 46)
+            }
+            .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
+
             Button {
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { turnPage(-1) }
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .bold))
-                    .frame(width: 54, height: 54)
+                    .frame(width: 46, height: 46)
             }
             .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
+            .disabled(pages.isEmpty)
 
             Button {
                 if let page = currentPage {
@@ -222,9 +213,10 @@ struct NotebookDetailView: View {
             } label: {
                 Image(systemName: isEditing ? "checkmark" : "pencil")
                     .font(.system(size: 18, weight: .bold))
-                    .frame(width: 62, height: 62)
+                    .frame(width: 52, height: 52)
             }
             .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
+            .disabled(currentPage == nil)
 
             Button {
                 if let page = currentPage {
@@ -233,24 +225,81 @@ struct NotebookDetailView: View {
             } label: {
                 Image(systemName: "sparkles")
                     .font(.system(size: 18, weight: .bold))
-                    .frame(width: 54, height: 54)
+                    .frame(width: 46, height: 46)
             }
             .buttonStyle(CircleButtonStyle(tint: NotebookTheme.accent(liveNotebook.accent), foreground: .white))
+            .disabled(currentPage == nil)
 
             Button {
                 withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { turnPage(1) }
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 18, weight: .bold))
-                    .frame(width: 54, height: 54)
+                    .frame(width: 46, height: 46)
             }
             .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
+            .disabled(pages.isEmpty)
+        }
+    }
+
+    private var typedPageComposer: some View {
+        ZStack {
+            NotebookTheme.field.ignoresSafeArea()
+            VStack(spacing: 16) {
+                HStack {
+                    Text("type notes")
+                        .font(.system(.title3, design: .serif, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                    Spacer()
+                    Button {
+                        closeComposer()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .frame(width: 42, height: 42)
+                            .rotationEffect(.degrees(composerCloseRotation))
+                    }
+                    .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.76), foreground: NotebookTheme.ink))
+                }
+
+                NotebookPaperView(cornerRadius: 20) {
+                    TextEditor(text: $typedText)
+                        .scrollContentBackground(.hidden)
+                        .font(.system(.body, design: .rounded))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .tint(NotebookTheme.ink)
+                        .frame(minHeight: 250)
+                }
+
+                Button {
+                    store.addTypedPage(to: liveNotebook.id, text: typedText)
+                    typedText = ""
+                    pageIndex = 0
+                    showingComposer = false
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 18, weight: .bold))
+                        .frame(width: 58, height: 58)
+                }
+                .buttonStyle(CircleButtonStyle())
+                .disabled(typedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(20)
         }
     }
 
     private func turnPage(_ delta: Int) {
         guard !pages.isEmpty else { return }
         pageIndex = min(max(pageIndex + delta, 0), pages.count - 1)
+    }
+
+    private func closeComposer() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
+            composerCloseRotation += 90
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            showingComposer = false
+        }
     }
 }
 

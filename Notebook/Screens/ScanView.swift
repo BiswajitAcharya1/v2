@@ -74,13 +74,6 @@ struct ScanView: View {
                     Label(store.scanPhase.caption, systemImage: icon(for: store.scanPhase))
                         .font(.system(.headline, design: .rounded, weight: .semibold))
                     Spacer()
-                    if store.scanPhase == .sorted {
-                        Text("math")
-                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(NotebookTheme.paper, in: Capsule())
-                    }
                 }
                 .foregroundStyle(.white)
 

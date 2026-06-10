@@ -22,6 +22,7 @@
 		10000000000000000000010D /* NotebookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000D /* NotebookDetailView.swift */; };
 		10000000000000000000010E /* StudyFocusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000E /* StudyFocusView.swift */; };
 		10000000000000000000010F /* VoiceOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000F /* VoiceOnboardingView.swift */; };
+		100000000000000000000110 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000010 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		10000000000000000000000D /* NotebookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookDetailView.swift; sourceTree = "<group>"; };
 		10000000000000000000000E /* StudyFocusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyFocusView.swift; sourceTree = "<group>"; };
 		10000000000000000000000F /* VoiceOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceOnboardingView.swift; sourceTree = "<group>"; };
+		100000000000000000000010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		100000000000000000000020 /* notebook.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = notebook.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -71,6 +73,7 @@
 				100000000000000000000045 /* Design */,
 				100000000000000000000046 /* Components */,
 				100000000000000000000047 /* Screens */,
+				100000000000000000000010 /* Assets.xcassets */,
 			);
 			path = Notebook;
 			sourceTree = "<group>";
@@ -198,6 +201,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				100000000000000000000110 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -349,6 +353,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
@@ -378,6 +383,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";

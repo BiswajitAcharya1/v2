@@ -3,25 +3,29 @@ import SwiftUI
 struct CompositionNotebookCard: View {
     let notebook: SubjectNotebook
     var namespace: Namespace.ID?
+    var onOpen: (() -> Void)?
 
     @State private var dragOffset: CGSize = .zero
     @State private var isPressed = false
+    @State private var float = false
 
-    private var rotationX: Double { -Double(dragOffset.height / 12) }
-    private var rotationY: Double { Double(dragOffset.width / 10) }
+    private var rotationX: Double { -Double(dragOffset.height / 8) + (float ? 1.4 : -1.2) }
+    private var rotationY: Double { Double(dragOffset.width / 7) + (float ? -1.6 : 1.3) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(NotebookTheme.graphite)
-                    .shadow(color: .black.opacity(isPressed ? 0.12 : 0.22), radius: isPressed ? 4 : 10, y: isPressed ? 3 : 9)
+                    .shadow(color: .black.opacity(isPressed ? 0.12 : 0.28), radius: isPressed ? 5 : 16, y: isPressed ? 4 : 16)
 
                 SpeckledCompositionTexture()
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .opacity(0.94)
 
+                movingSheen
                 notebookSpine
+                coverDepth
 
                 VStack(spacing: 10) {
                     Text("composition book")
@@ -29,14 +33,10 @@ struct CompositionNotebookCard: View {
                         .foregroundStyle(.black.opacity(0.72))
                     labelPlate
                     Spacer()
-                    HStack {
-                        progressStamp
-                        Spacer()
-                        Image(systemName: notebook.isPinned ? "pin.fill" : "sparkle.magnifyingglass")
-                            .foregroundStyle(.black.opacity(0.58))
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 14)
+                    Image(systemName: "arrow.up.forward.circle.fill")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(.white.opacity(isPressed ? 0.95 : 0.56))
+                        .padding(.bottom, 16)
                 }
                 .padding(.top, 16)
                 .offset(x: dragOffset.width / 22, y: dragOffset.height / 22)
@@ -44,9 +44,11 @@ struct CompositionNotebookCard: View {
             .aspectRatio(0.72, contentMode: .fit)
             .rotation3DEffect(.degrees(rotationX), axis: (x: 1, y: 0, z: 0), perspective: 0.62)
             .rotation3DEffect(.degrees(rotationY), axis: (x: 0, y: 1, z: 0), perspective: 0.62)
-            .scaleEffect(isPressed ? 0.975 : 1)
+            .scaleEffect(isPressed ? 0.96 : 1)
+            .offset(y: float ? -5 : 4)
             .animation(.spring(response: 0.35, dampingFraction: 0.72), value: dragOffset)
             .animation(.spring(response: 0.28, dampingFraction: 0.78), value: isPressed)
+            .animation(.easeInOut(duration: 4.2).repeatForever(autoreverses: true), value: float)
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
@@ -56,19 +58,19 @@ struct CompositionNotebookCard: View {
                             height: max(min(value.translation.height, 40), -40)
                         )
                     }
-                    .onEnded { _ in
+                    .onEnded { value in
+                        let moved = hypot(value.translation.width, value.translation.height)
                         isPressed = false
                         dragOffset = .zero
+                        if moved < 10 {
+                            onOpen?()
+                        }
                     }
             )
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(notebook.lastActivity)
-                    .font(.system(.footnote, design: .rounded, weight: .medium))
-                    .foregroundStyle(NotebookTheme.muted)
-                ProgressView(value: notebook.progress)
-                    .tint(NotebookTheme.accent(notebook.accent))
+            .onAppear {
+                float = true
             }
+
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(notebook.subject) notebook")
@@ -76,13 +78,23 @@ struct CompositionNotebookCard: View {
 
     private var notebookSpine: some View {
         HStack {
-            Rectangle()
+            UnevenRoundedRectangle(cornerRadii: .init(topLeading: 22, bottomLeading: 22), style: .continuous)
                 .fill(.black.opacity(0.68))
-                .frame(width: 18)
+                .frame(width: 28)
                 .overlay(alignment: .trailing) {
-                    Rectangle()
+                    Capsule()
                         .fill(.white.opacity(0.2))
                         .frame(width: 1)
+                }
+                .overlay {
+                    VStack(spacing: 14) {
+                        ForEach(0..<7, id: \.self) { _ in
+                            Capsule()
+                                .fill(.white.opacity(0.18))
+                                .frame(width: 6, height: 18)
+                        }
+                    }
+                    .padding(.vertical, 22)
                 }
             Spacer()
         }
@@ -98,9 +110,6 @@ struct CompositionNotebookCard: View {
                 .foregroundStyle(.black)
                 .minimumScaleFactor(0.72)
                 .lineLimit(1)
-            Rectangle()
-                .fill(NotebookTheme.redRule.opacity(0.45))
-                .frame(height: 1)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -112,29 +121,99 @@ struct CompositionNotebookCard: View {
         }
     }
 
-    private var progressStamp: some View {
-        Text("\(Int(notebook.progress * 100))%")
-            .font(.system(.caption, design: .monospaced, weight: .semibold))
-            .foregroundStyle(.black.opacity(0.72))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(.white.opacity(0.6), in: Capsule())
+    private var movingSheen: some View {
+        LinearGradient(
+            colors: [.clear, .white.opacity(0.2), .clear],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .rotationEffect(.degrees(18))
+        .offset(x: dragOffset.width * 0.7 + (float ? 34 : -34))
+        .blendMode(.screen)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var coverDepth: some View {
+        VStack {
+            Spacer()
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.black.opacity(0.22))
+                .frame(height: 12)
+                .blur(radius: 1)
+                .offset(y: 6)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+}
+
+struct MinimalAppLogo: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.white.opacity(0.74))
+                .overlay {
+                    Circle().stroke(.white.opacity(0.82), lineWidth: 1)
+                }
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(NotebookTheme.graphite)
+                .frame(width: 28, height: 38)
+                .overlay {
+                    SpeckledCompositionTexture()
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(.black.opacity(0.8))
+                        .frame(width: 5)
+                }
+                .rotationEffect(.degrees(-7))
+                .shadow(color: .black.opacity(0.16), radius: 4, y: 3)
+        }
     }
 }
 
 struct NotebookLogo: View {
+    var isOpen = false
+
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(NotebookTheme.paper)
+                .overlay {
+                    VStack(spacing: 10) {
+                        ForEach(0..<7, id: \.self) { index in
+                            Capsule()
+                                .fill(index == 0 ? NotebookTheme.redRule.opacity(0.38) : NotebookTheme.blueLine.opacity(0.42))
+                                .frame(height: 1)
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                }
+                .scaleEffect(isOpen ? 1 : 0.92)
+                .offset(x: isOpen ? 22 : 0, y: isOpen ? 5 : 0)
+                .rotation3DEffect(.degrees(isOpen ? -7 : 0), axis: (x: 0, y: 1, z: 0), anchor: .leading, perspective: 0.72)
+                .shadow(color: .black.opacity(isOpen ? 0.12 : 0), radius: 8, y: 5)
+
+            cover
+                .rotation3DEffect(.degrees(isOpen ? -42 : 0), axis: (x: 0, y: 1, z: 0), anchor: .leading, perspective: 0.72)
+                .offset(x: isOpen ? -18 : 0, y: isOpen ? 3 : 0)
+                .shadow(color: .black.opacity(isOpen ? 0.18 : 0), radius: isOpen ? 12 : 0, x: -4, y: 8)
+        }
+        .animation(.spring(response: 0.78, dampingFraction: 0.76), value: isOpen)
+    }
+
+    private var cover: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(NotebookTheme.graphite)
             SpeckledCompositionTexture()
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             HStack {
-                Rectangle()
+                UnevenRoundedRectangle(cornerRadii: .init(topLeading: 18, bottomLeading: 18), style: .continuous)
                     .fill(.black.opacity(0.88))
                     .frame(width: 12)
                     .overlay(alignment: .trailing) {
-                        Rectangle().fill(.white.opacity(0.18)).frame(width: 1)
+                        Capsule().fill(.white.opacity(0.18)).frame(width: 1)
                     }
                 Spacer()
             }
@@ -149,11 +228,6 @@ struct NotebookLogo: View {
                     Spacer()
                     Image(systemName: "calendar")
                         .font(.system(size: 14, weight: .semibold))
-                }
-                VStack(spacing: 5) {
-                    Rectangle().fill(.black.opacity(0.28)).frame(height: 1)
-                    Rectangle().fill(.black.opacity(0.18)).frame(height: 1)
-                    Rectangle().fill(.black.opacity(0.18)).frame(height: 1)
                 }
                 HStack(spacing: 8) {
                     Circle().stroke(.black.opacity(0.72), lineWidth: 1.2).frame(width: 18, height: 18)

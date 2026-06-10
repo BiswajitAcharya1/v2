@@ -33,6 +33,19 @@ protocol VoiceServing {
     func transcribeQuestion() async -> String
 }
 
+struct MossTTSRequest: Hashable {
+    var text: String
+    var referenceAudioURLs: [URL]
+    var mode: String
+    var language: String?
+    var temperature: Double
+    var topP: Double
+    var topK: Int
+    var repetitionPenalty: Double
+    var modelID: String
+    var spaceURL: URL
+}
+
 struct LocalAuthService: LocalAuthServing {
     func signIn(provider: AuthProvider) async -> AuthSession {
         AuthSession(provider: provider, email: provider.defaultEmail, username: "student", createdAt: .now)
@@ -124,10 +137,29 @@ struct LocalSpacedRepetitionService: SpacedRepetitionServing {
     }
 }
 
-struct LocalVoiceService: VoiceServing {
+struct MossTTSVoiceService: VoiceServing {
     func makePlayback(_ text: String, style: PlaybackStyle, profile: VoiceProfile) async -> VoicePlayback {
-        let engine = profile.isPersonalized ? "personal voice" : "kokoro"
-        return VoicePlayback(style: style, summary: "\(engine) prepared \(text.split(separator: " ").count) words")
+        let backend: VoiceReplicationBackend = profile.isPersonalized ? .mossTTSV15 : .kokoro
+        let request = MossTTSRequest(
+            text: text,
+            referenceAudioURLs: profile.samples.compactMap(\.audioURL),
+            mode: profile.isPersonalized ? "Clone" : "Direct Generation",
+            language: "English",
+            temperature: 0.7,
+            topP: 0.95,
+            topK: 50,
+            repetitionPenalty: 1.1,
+            modelID: backend.modelID,
+            spaceURL: backend.sourceURL
+        )
+        let words = request.text.split(separator: " ").count
+        let voiceMode = request.referenceAudioURLs.isEmpty ? "direct generation" : "clone mode"
+        return VoicePlayback(
+            style: style,
+            summary: "\(backend.rawValue) \(voiceMode) prepared \(words) words with \(request.referenceAudioURLs.count) reference samples.",
+            engine: backend,
+            referenceSampleCount: request.referenceAudioURLs.count
+        )
     }
 
     func transcribeQuestion() async -> String {

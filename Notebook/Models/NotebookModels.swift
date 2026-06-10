@@ -73,17 +73,43 @@ struct VoiceProfile: Identifiable, Hashable {
     var samples: [VoiceSample] = []
     var isPersonalized = false
     var wantsPersonalVoice = false
+    var replicationBackend: VoiceReplicationBackend = .mossTTSV15
 }
 
 struct VoiceSample: Identifiable, Hashable {
     let id = UUID()
     var prompt: String
     var isRecorded: Bool
+    var audioURL: URL?
+    var duration: TimeInterval = 0
 }
 
 struct VoicePlayback: Hashable {
     var style: PlaybackStyle
     var summary: String
+    var engine: VoiceReplicationBackend
+    var referenceSampleCount: Int
+}
+
+enum VoiceReplicationBackend: String, Hashable {
+    case mossTTSV15 = "moss-tts v1.5"
+    case kokoro = "kokoro"
+
+    var modelID: String {
+        switch self {
+        case .mossTTSV15: "OpenMOSS-Team/MOSS-TTS-v1.5"
+        case .kokoro: "hexgrad/kokoro"
+        }
+    }
+
+    var sourceURL: URL {
+        switch self {
+        case .mossTTSV15:
+            URL(string: "https://huggingface.co/spaces/OpenMOSS-Team/MOSS-TTS-v1.5/tree/main")!
+        case .kokoro:
+            URL(string: "https://github.com/hexgrad/kokoro")!
+        }
+    }
 }
 
 enum PageDisplayMode: String, CaseIterable, Identifiable {
@@ -214,7 +240,7 @@ enum ScanPhase: String, CaseIterable, Identifiable {
         case .capturing: "capturing knowledge"
         case .processing: "cleaning ink"
         case .organizing: "finding subject"
-        case .sorted: "placed in math"
+        case .sorted: "organized"
         }
     }
 }

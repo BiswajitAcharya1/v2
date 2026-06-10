@@ -23,7 +23,11 @@ struct PaperRules: View {
             let left = size.width * 0.16
             var vertical = Path()
             vertical.move(to: CGPoint(x: left, y: 0))
-            vertical.addLine(to: CGPoint(x: left, y: size.height))
+            vertical.addCurve(
+                to: CGPoint(x: left, y: size.height),
+                control1: CGPoint(x: left - 6, y: size.height * 0.28),
+                control2: CGPoint(x: left + 6, y: size.height * 0.72)
+            )
             context.stroke(vertical, with: .color(NotebookTheme.redRule.opacity(0.35)), lineWidth: 1)
 
             let lineSpacing: CGFloat = 24
@@ -31,7 +35,11 @@ struct PaperRules: View {
             while y < size.height {
                 var line = Path()
                 line.move(to: CGPoint(x: 0, y: y))
-                line.addLine(to: CGPoint(x: size.width, y: y))
+                line.addCurve(
+                    to: CGPoint(x: size.width, y: y),
+                    control1: CGPoint(x: size.width * 0.33, y: y - 2.2),
+                    control2: CGPoint(x: size.width * 0.66, y: y + 2.2)
+                )
                 context.stroke(line, with: .color(NotebookTheme.blueLine.opacity(0.28)), lineWidth: 0.7)
                 y += lineSpacing
             }
