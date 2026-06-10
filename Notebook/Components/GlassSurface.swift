@@ -42,6 +42,20 @@ struct PillButtonStyle: ButtonStyle {
     }
 }
 
+struct CircleButtonStyle: ButtonStyle {
+    var tint: Color = NotebookTheme.ink
+    var foreground: Color = .white
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(foreground)
+            .background(tint, in: Circle())
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .shadow(color: tint.opacity(configuration.isPressed ? 0.08 : 0.18), radius: configuration.isPressed ? 3 : 8, y: configuration.isPressed ? 2 : 5)
+            .animation(.spring(response: 0.24, dampingFraction: 0.72), value: configuration.isPressed)
+    }
+}
+
 struct IconGlassButton: View {
     var systemName: String
     var label: String

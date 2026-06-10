@@ -72,6 +72,7 @@ struct VoiceProfile: Identifiable, Hashable {
     var name: String = "my voice"
     var samples: [VoiceSample] = []
     var isPersonalized = false
+    var wantsPersonalVoice = false
 }
 
 struct VoiceSample: Identifiable, Hashable {
@@ -105,6 +106,97 @@ enum PlaybackStyle: String, CaseIterable, Identifiable {
     case examPrep = "exam prep"
 
     var id: String { rawValue }
+}
+
+struct AuthSession: Hashable {
+    var provider: AuthProvider
+    var email: String
+    var username: String
+    var createdAt: Date
+}
+
+enum AuthProvider: String, CaseIterable, Identifiable {
+    case apple
+    case google
+    case email
+
+    var id: String { rawValue }
+
+    var defaultEmail: String {
+        switch self {
+        case .apple: "student@icloud.com"
+        case .google: "student@gmail.com"
+        case .email: "student@email.com"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .apple: "sign up with apple"
+        case .google: "sign up with google"
+        case .email: "sign up with email"
+        }
+    }
+
+    var signInTitle: String {
+        switch self {
+        case .apple: "sign in with apple"
+        case .google: "sign in with google"
+        case .email: "sign in with email"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .apple: "apple.logo"
+        case .google: "g.circle.fill"
+        case .email: "envelope.fill"
+        }
+    }
+}
+
+enum AuthError: LocalizedError {
+    case invalidEmail
+    case weakPassword
+    case passwordMismatch
+    case missingUsername
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidEmail: "enter a valid email."
+        case .weakPassword: "use at least six characters."
+        case .passwordMismatch: "passwords must match."
+        case .missingUsername: "choose a username."
+        }
+    }
+}
+
+enum AppTheme: String, CaseIterable, Identifiable {
+    case light
+    case dark
+    case device
+
+    var id: String { rawValue }
+}
+
+enum SetupStep: Hashable {
+    case voiceRecording
+    case theme
+    case subjects
+}
+
+enum PasswordStrength: String {
+    case weak
+    case medium
+    case good
+
+    var color: Color {
+        switch self {
+        case .weak: .red
+        case .medium: .yellow
+        case .good: .green
+        }
+    }
 }
 
 enum ScanPhase: String, CaseIterable, Identifiable {

@@ -41,10 +41,12 @@ struct VoiceOnboardingView: View {
                         Button {
                             recordCurrentPrompt()
                         } label: {
-                            Label(currentIndex >= prompts.count ? "voice ready" : "hold to record", systemImage: currentIndex >= prompts.count ? "checkmark.circle.fill" : "mic.fill")
-                                .frame(maxWidth: .infinity)
+                            Image(systemName: currentIndex >= prompts.count ? "checkmark" : "mic.fill")
+                                .font(.system(size: 20, weight: .bold))
+                                .frame(width: 64, height: 64)
                         }
-                        .buttonStyle(PillButtonStyle(tint: currentIndex >= prompts.count ? NotebookTheme.accent(.green) : NotebookTheme.ink))
+                        .buttonStyle(CircleButtonStyle(tint: currentIndex >= prompts.count ? NotebookTheme.accent(.green) : NotebookTheme.ink, foreground: .white))
+                        .accessibilityLabel(currentIndex >= prompts.count ? "voice ready" : "record")
                     }
                 }
                 .padding(.horizontal, 22)

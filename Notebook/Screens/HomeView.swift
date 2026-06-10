@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(NotebookStore.self) private var store
     @Namespace private var notebookNamespace
+    @State private var sparkleSpin = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 18),
@@ -13,7 +14,6 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
-                activityStrip
                 shelf
             }
             .padding(.horizontal, 20)
@@ -28,58 +28,41 @@ struct HomeView: View {
         }
         .navigationTitle("notebook")
         .toolbarTitleDisplayMode(.inline)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("good afternoon, \(store.user.name)")
-                .font(.system(.title2, design: .rounded, weight: .semibold))
-                .foregroundStyle(NotebookTheme.ink)
-            Text("a living shelf for the notes you actually study.")
-                .font(.system(.subheadline, design: .rounded))
-                .foregroundStyle(NotebookTheme.muted)
+        .onAppear {
+            withAnimation(.linear(duration: 9).repeatForever(autoreverses: false)) {
+                sparkleSpin = true
+            }
         }
     }
 
-    private var activityStrip: some View {
-        HStack(spacing: 12) {
-            GlassSurface(radius: 18, padding: 14, interactive: true) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("today")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .foregroundStyle(NotebookTheme.muted)
-                    Text("18 reviews")
-                        .font(.system(.headline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(NotebookTheme.ink)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+    private var header: some View {
+        HStack(spacing: 16) {
+            NotebookLogo()
+                .frame(width: 54, height: 70)
+                .rotation3DEffect(.degrees(sparkleSpin ? 360 : 0), axis: (x: 0, y: 1, z: 0), perspective: 0.8)
+                .animation(.linear(duration: 18).repeatForever(autoreverses: false), value: sparkleSpin)
 
-            GlassSurface(radius: 18, padding: 14, interactive: true) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("next")
-                        .font(.system(.caption, design: .rounded, weight: .semibold))
-                        .foregroundStyle(NotebookTheme.muted)
-                    Text("math quiz")
-                        .font(.system(.headline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(NotebookTheme.ink)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("hello, \(store.user.name)")
+                    .font(.system(.title2, design: .rounded, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                HStack(spacing: 7) {
+                    ForEach(store.notebooks.prefix(3)) { notebook in
+                        Text(notebook.subject)
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.ink)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.ultraThinMaterial, in: Capsule())
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            Spacer()
         }
     }
 
     private var shelf: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("subject shelf")
-                    .font(.notebookSection)
-                    .foregroundStyle(NotebookTheme.ink)
-                Spacer()
-                Image(systemName: "square.grid.2x2.fill")
-                    .foregroundStyle(NotebookTheme.muted)
-            }
-
             LazyVGrid(columns: columns, spacing: 22) {
                 ForEach(store.notebooks) { notebook in
                     NavigationLink(value: notebook.id) {

@@ -357,6 +357,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = notebook;
 				INFOPLIST_KEY_NSCameraUsageDescription = "notebook uses the camera to scan study pages.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "notebook uses face id to verify password reset requests.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "notebook uses the microphone for optional voice personalization.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
@@ -385,6 +386,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = notebook;
 				INFOPLIST_KEY_NSCameraUsageDescription = "notebook uses the camera to scan study pages.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "notebook uses face id to verify password reset requests.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "notebook uses the microphone for optional voice personalization.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;

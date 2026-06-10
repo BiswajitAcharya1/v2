@@ -112,13 +112,12 @@ struct ScanView: View {
                 isRunning = false
             }
         } label: {
-            HStack(spacing: 10) {
-                Image(systemName: isRunning ? "arrow.counterclockwise" : "camera.viewfinder")
-                Text(isRunning ? "reset scan" : "capture page")
-            }
-            .frame(maxWidth: .infinity)
+            Image(systemName: isRunning ? "arrow.counterclockwise" : "camera.viewfinder")
+                .font(.system(size: 24, weight: .bold))
+                .frame(width: 74, height: 74)
         }
-        .buttonStyle(PillButtonStyle(tint: .white, foreground: NotebookTheme.ink))
+        .buttonStyle(CircleButtonStyle(tint: .white, foreground: NotebookTheme.ink))
+        .accessibilityLabel(isRunning ? "reset scan" : "capture page")
     }
 
     private func icon(for phase: ScanPhase) -> String {

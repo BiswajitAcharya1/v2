@@ -1,4 +1,14 @@
 import Foundation
+import LocalAuthentication
+
+@MainActor
+protocol LocalAuthServing {
+    func signIn(provider: AuthProvider) async -> AuthSession
+    func signIn(email: String, password: String) async throws -> AuthSession
+    func signUp(username: String, email: String, password: String, confirmPassword: String) async throws -> AuthSession
+    func sendReset(email: String) async throws -> String
+    func verifyWithFaceID() async -> Bool
+}
 
 @MainActor
 protocol ScanProcessingServing {
@@ -20,9 +30,56 @@ protocol SpacedRepetitionServing {
 @MainActor
 protocol VoiceServing {
     func makePlayback(_ text: String, style: PlaybackStyle, profile: VoiceProfile) async -> VoicePlayback
+    func transcribeQuestion() async -> String
 }
 
-struct MockScanProcessingService: ScanProcessingServing {
+struct LocalAuthService: LocalAuthServing {
+    func signIn(provider: AuthProvider) async -> AuthSession {
+        AuthSession(provider: provider, email: provider.defaultEmail, username: "student", createdAt: .now)
+    }
+
+    func signIn(email: String, password: String) async throws -> AuthSession {
+        guard email.contains("@"), email.contains(".") else { throw AuthError.invalidEmail }
+        guard password.count >= 6 else { throw AuthError.weakPassword }
+        return AuthSession(provider: .email, email: email.lowercased(), username: email.split(separator: "@").first.map(String.init) ?? "student", createdAt: .now)
+    }
+
+    func signUp(username: String, email: String, password: String, confirmPassword: String) async throws -> AuthSession {
+        guard username.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 else { throw AuthError.missingUsername }
+        guard email.lowercased().hasSuffix("@gmail.com") else { throw AuthError.invalidEmail }
+        guard password == confirmPassword else { throw AuthError.passwordMismatch }
+        guard passwordStrength(password) != .weak else { throw AuthError.weakPassword }
+        return AuthSession(provider: .email, email: email.lowercased(), username: username.lowercased(), createdAt: .now)
+    }
+
+    func sendReset(email: String) async throws -> String {
+        guard email.contains("@"), email.contains(".") else { throw AuthError.invalidEmail }
+        if await verifyWithFaceID() {
+            return "identity verified. reset link sent to \(email.lowercased())."
+        }
+        return "reset link sent to \(email.lowercased())."
+    }
+
+    func verifyWithFaceID() async -> Bool {
+        let context = LAContext()
+        var error: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else { return false }
+        return (try? await context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "verify before resetting your notebook password")) == true
+    }
+}
+
+func passwordStrength(_ password: String) -> PasswordStrength {
+    var score = 0
+    if password.count >= 8 { score += 1 }
+    if password.rangeOfCharacter(from: .uppercaseLetters) != nil { score += 1 }
+    if password.rangeOfCharacter(from: .decimalDigits) != nil { score += 1 }
+    if password.rangeOfCharacter(from: CharacterSet(charactersIn: "!@#$%^&*()-_=+[]{};:,.?/")) != nil { score += 1 }
+    if score <= 1 { return .weak }
+    if score <= 3 { return .medium }
+    return .good
+}
+
+struct LocalScanProcessingService: ScanProcessingServing {
     func processDemoCapture() async -> ExtractedContent {
         ExtractedContent(
             cleanedText: "limits describe what a graph approaches. factor first, cancel matching terms, then substitute. if both sides approach the same value, the limit exists.",
@@ -38,7 +95,7 @@ struct MockScanProcessingService: ScanProcessingServing {
     }
 }
 
-struct MockNoteUnderstandingService: NoteUnderstandingServing {
+struct LocalNoteUnderstandingService: NoteUnderstandingServing {
     func classify(_ content: ExtractedContent) async -> String {
         content.keywords.contains("limits") ? "math" : "science"
     }
@@ -56,7 +113,7 @@ struct MockNoteUnderstandingService: NoteUnderstandingServing {
     }
 }
 
-struct MockSpacedRepetitionService: SpacedRepetitionServing {
+struct LocalSpacedRepetitionService: SpacedRepetitionServing {
     func schedule(_ card: Flashcard, mode: MemorizationMode) -> ReviewState {
         switch mode {
         case .shortTerm:
@@ -67,8 +124,13 @@ struct MockSpacedRepetitionService: SpacedRepetitionServing {
     }
 }
 
-struct MockVoiceService: VoiceServing {
+struct LocalVoiceService: VoiceServing {
     func makePlayback(_ text: String, style: PlaybackStyle, profile: VoiceProfile) async -> VoicePlayback {
-        VoicePlayback(style: style, summary: "\(style.rawValue) prepared \(text.split(separator: " ").count) words")
+        let engine = profile.isPersonalized ? "personal voice" : "kokoro"
+        return VoicePlayback(style: style, summary: "\(engine) prepared \(text.split(separator: " ").count) words")
+    }
+
+    func transcribeQuestion() async -> String {
+        "can you explain the limit step more simply?"
     }
 }

@@ -5,6 +5,7 @@ struct StudyFocusView: View {
     @State private var selectedTerm: StudyTerm?
     @State private var playback: VoicePlayback?
     @State private var isReading = false
+    @State private var isListening = false
 
     let page: NotebookPage
 
@@ -19,6 +20,7 @@ struct StudyFocusView: View {
                 insightCard
                 tapToStudy
                 flashcards
+                gemmaVoiceMode
                 voiceControls
             }
             .padding(20)
@@ -147,6 +149,39 @@ struct StudyFocusView: View {
             .foregroundStyle(NotebookTheme.ink)
         }
     }
+
+    private var gemmaVoiceMode: some View {
+        GlassSurface(radius: 22, padding: 16, interactive: true) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("voice mode", systemImage: "waveform.circle.fill")
+                        .font(.system(.headline, design: .rounded, weight: .semibold))
+                    Spacer()
+                    Toggle("", isOn: Bindable(store).gemmaVoiceModeEnabled)
+                        .labelsHidden()
+                }
+
+                Text(store.latestVoiceQuestion ?? (isListening ? "listening through faster whisper" : "talk to gemma about this page."))
+                    .font(.system(.subheadline, design: .rounded))
+                    .foregroundStyle(NotebookTheme.muted)
+
+                Button {
+                    isListening = true
+                    Task { @MainActor in
+                        await store.askGemmaByVoice()
+                        isListening = false
+                    }
+                } label: {
+                    Image(systemName: isListening ? "waveform" : "mic.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .frame(width: 58, height: 58)
+                }
+                .buttonStyle(CircleButtonStyle(tint: NotebookTheme.accent(.plum), foreground: .white))
+                .accessibilityLabel(isListening ? "transcribing" : "ask with voice")
+            }
+            .foregroundStyle(NotebookTheme.ink)
+        }
+    }
 }
 
 private struct ExplanationSheet: View {
@@ -165,7 +200,7 @@ private struct ExplanationSheet: View {
             Text(store.flashcards(for: NotebookFixtures.notebooks[0].pages[0]).first?.back ?? "study this idea in one small step.")
                 .font(.notebookBody)
                 .foregroundStyle(NotebookTheme.muted)
-            Text(MockNoteUnderstandingService().explain(term.lowercased()))
+            Text(store.explain(term.lowercased()))
                 .font(.notebookBody)
                 .foregroundStyle(NotebookTheme.ink)
                 .lineSpacing(5)
