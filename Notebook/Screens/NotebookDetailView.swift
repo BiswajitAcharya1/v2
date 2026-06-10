@@ -49,6 +49,9 @@ struct NotebookDetailView: View {
 
             VStack(spacing: 8) {
                 notebookChrome
+                if !liveNotebook.pages.isEmpty {
+                    notebookSearch
+                }
                 pageReader
                 if !pages.isEmpty {
                     notebookActionRail
@@ -98,10 +101,15 @@ struct NotebookDetailView: View {
             }
             autoOpenScannerIfNeeded()
         }
-        .onChange(of: pages.count) {
-            if pages.isEmpty {
+        .onChange(of: liveNotebook.pages.count) {
+            if liveNotebook.pages.isEmpty {
                 autoOpenScannerIfNeeded()
+            } else {
+                pageIndex = min(pageIndex, spreadCount - 1)
             }
+        }
+        .onChange(of: query) {
+            pageIndex = 0
         }
     }
 
@@ -124,16 +132,11 @@ struct NotebookDetailView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("close notebook")
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(liveNotebook.subject)
-                    .font(.system(.subheadline, design: .serif, weight: .semibold))
-                    .foregroundStyle(NotebookTheme.ink)
-                    .lineLimit(1)
-                Text(notebookStatusLine)
-                    .font(.system(.caption, design: .rounded, weight: .medium))
-                    .foregroundStyle(NotebookTheme.muted)
-                    .lineLimit(1)
-            }
+            Spacer(minLength: 8)
+
+            MinimalAppLogo()
+                .frame(width: 34, height: 34)
+                .opacity(0.9)
 
             Spacer(minLength: 8)
 
@@ -156,6 +159,40 @@ struct NotebookDetailView: View {
         .shadow(color: .black.opacity(0.08), radius: 12, y: 7)
         .offset(y: chromeEntered ? 0 : -16)
         .opacity(chromeEntered ? 1 : 0)
+    }
+
+    private var notebookSearch: some View {
+        HStack(spacing: 10) {
+            GooeyInput(
+                label: "search notes",
+                systemName: "magnifyingglass",
+                text: $query,
+                onSubmit: {
+                    Haptics.selection()
+                    pageIndex = 0
+                }
+            )
+
+            if !query.isEmpty {
+                Button {
+                    Haptics.softTap()
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                        query = ""
+                        pageIndex = 0
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 42, height: 42)
+                }
+                .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 10)
+        .opacity(chromeEntered ? 1 : 0)
+        .offset(y: chromeEntered ? 0 : -8)
+        .animation(.spring(response: 0.42, dampingFraction: 0.84), value: query.isEmpty)
     }
 
     private var notebookStatusLine: String {
@@ -205,6 +242,8 @@ struct NotebookDetailView: View {
                 }
                 .shadow(color: .black.opacity(0.12), radius: 18, y: 10)
                 .animation(.spring(response: 0.45, dampingFraction: 0.82), value: pageIndex)
+            } else if !liveNotebook.pages.isEmpty {
+                noSearchResults
             } else {
                 emptyNotebook
             }
@@ -348,6 +387,41 @@ struct NotebookDetailView: View {
         }
     }
 
+    private var noSearchResults: some View {
+        NotebookPaperView(cornerRadius: 32) {
+            ZStack {
+                OpenCompositionRules(isLeft: false)
+                    .opacity(0.78)
+                    .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+
+                VStack(spacing: 16) {
+                    Spacer()
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .frame(width: 72, height: 72)
+                        .background(.white.opacity(0.56), in: Circle())
+                    Text("no matching notes")
+                        .font(.system(.title3, design: .serif, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                    Button {
+                        Haptics.softTap()
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                            query = ""
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .frame(width: 54, height: 54)
+                    }
+                    .buttonStyle(FloatingCircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
+                    Spacer()
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 560)
+        }
+    }
+
     private var notebookActionRail: some View {
         HStack(spacing: 10) {
             railButton(symbol: "viewfinder", label: "scan") {
@@ -379,7 +453,7 @@ struct NotebookDetailView: View {
             }
             .disabled(currentPage == nil)
         }
-        .padding(7)
+        .padding(8)
         .background(.ultraThinMaterial, in: Capsule())
         .overlay {
             Capsule()
@@ -391,24 +465,15 @@ struct NotebookDetailView: View {
 
     private func railButton(symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            ZStack {
                 Image(systemName: symbol)
                     .font(.system(size: 16, weight: .bold))
-                    .frame(width: 32, height: 32)
-                    .background(.white.opacity(0.18), in: Circle())
-                Text(label)
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    .frame(width: 54, height: 54)
             }
             .foregroundStyle(.white)
-            .padding(.leading, 10)
-            .padding(.trailing, 15)
-            .frame(height: 50)
-            .background(NotebookTheme.ink, in: Capsule())
-            .overlay {
-                Capsule().stroke(.white.opacity(0.18), lineWidth: 0.7)
-            }
+            .accessibilityLabel(label)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(FloatingCircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
     }
 
     private var typedPageComposer: some View {
@@ -495,7 +560,7 @@ private struct NotebookDetailAtmosphere: View {
     let accent: Color
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.periodic(from: .now, by: 1.0 / 18.0)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 for index in 0..<9 {
@@ -590,7 +655,7 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
     var body: some View {
         GeometryReader { proxy in
             let isWide = proxy.size.width > 560
-            let pageGap = isWide ? 24.0 : 12.0
+            let pageGap = isWide ? 18.0 : 2.0
 
             ZStack {
                 OpenCompositionSpreadBackground()
@@ -599,7 +664,7 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
                     leftContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .padding(.leading, isWide ? 34 : 18)
-                        .padding(.trailing, isWide ? 12 : 6)
+                        .padding(.trailing, isWide ? 14 : 10)
                         .padding(.top, 38)
                         .padding(.bottom, 18)
                         .contentShape(Rectangle())
@@ -641,7 +706,7 @@ private struct OpenCompositionSpreadBackground: View {
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let gap: CGFloat = size.width > 560 ? 24 : 12
+            let gap: CGFloat = size.width > 560 ? 18 : 2
             let pageWidth = max(0, (size.width - gap) / 2)
             ZStack {
                 bottomPageStack(size: size)
@@ -653,6 +718,7 @@ private struct OpenCompositionSpreadBackground: View {
                 }
                 .padding(.horizontal, 0)
                 centerFold
+                pageCrown(size: size)
                 HStack {
                     sidePageEdges()
                     Spacer()
@@ -745,6 +811,29 @@ private struct OpenCompositionSpreadBackground: View {
             Capsule()
                 .stroke(.white.opacity(0.44), lineWidth: 0.8)
                 .frame(width: 10)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func pageCrown(size: CGSize) -> some View {
+        VStack {
+            HStack(spacing: 0) {
+                UnevenRoundedRectangle(
+                    cornerRadii: .init(topLeading: 30, bottomLeading: 6, bottomTrailing: 0, topTrailing: 8),
+                    style: .continuous
+                )
+                .fill(.white.opacity(0.38))
+                .frame(width: size.width * 0.5, height: 10)
+                .offset(y: -2)
+                UnevenRoundedRectangle(
+                    cornerRadii: .init(topLeading: 8, bottomLeading: 0, bottomTrailing: 6, topTrailing: 30),
+                    style: .continuous
+                )
+                .fill(.white.opacity(0.34))
+                .frame(width: size.width * 0.5, height: 10)
+                .offset(y: -2)
+            }
+            Spacer()
         }
         .allowsHitTesting(false)
     }

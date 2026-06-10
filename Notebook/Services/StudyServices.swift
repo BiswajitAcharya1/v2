@@ -1,7 +1,6 @@
 import Foundation
 import LocalAuthentication
 import UIKit
-@preconcurrency import Vision
 
 @MainActor
 protocol LocalAuthServing {
@@ -15,16 +14,6 @@ protocol LocalAuthServing {
 @MainActor
 protocol ScanProcessingServing {
     func process(image: UIImage) async -> ExtractedContent
-}
-
-@MainActor
-protocol OCRServing {
-    func recognize(in image: UIImage) async -> OCRScanResult
-}
-
-@MainActor
-protocol ObjectReconstructionServing {
-    func reconstruct(from image: UIImage, lines: [String], keywords: [String], visualSignal: Double) async -> DetectedModel?
 }
 
 @MainActor
@@ -56,14 +45,6 @@ struct MossTTSRequest: Hashable {
     var repetitionPenalty: Double
     var modelID: String
     var spaceURL: URL
-}
-
-struct OCRScanResult: Hashable {
-    var rawText: String
-    var lines: [String]
-    var tables: [DetectedTable]
-    var confidence: Double
-    var engine: String
 }
 
 struct LocalAuthService: LocalAuthServing {
@@ -122,7 +103,7 @@ func passwordStrength(_ password: String) -> PasswordStrength {
 
 struct LocalScanProcessingService: ScanProcessingServing {
     private let ocr: OCRServing = HybridSuryaOCRService()
-    private let objectReconstructor: ObjectReconstructionServing = SAM3DObjectReconstructionAdapter()
+    private let objectReconstructor: ObjectReconstructionServing = NotebookObjectReconstructionPipeline()
 
     func process(image: UIImage) async -> ExtractedContent {
         let ocrResult = await ocr.recognize(in: image)
@@ -144,9 +125,7 @@ struct LocalScanProcessingService: ScanProcessingServing {
         let tables = ocrResult.tables.isEmpty ? NoteLayoutAnalyzer.tables(from: lines) : ocrResult.tables
         let visualSignal = ImageStructureAnalyzer.visualModelSignal(in: image)
         var models = NoteLayoutAnalyzer.models(from: lines, keywords: keywords, visualSignal: visualSignal)
-        if let reconstructed = await objectReconstructor.reconstruct(from: image, lines: lines, keywords: keywords, visualSignal: visualSignal) {
-            models.append(reconstructed)
-        }
+        models.append(contentsOf: await objectReconstructor.reconstruct(from: image, lines: lines, keywords: keywords, visualSignal: visualSignal))
         let sections = NoteLayoutAnalyzer.sections(from: lines, fallback: usableText)
 
         return ExtractedContent(
@@ -158,174 +137,6 @@ struct LocalScanProcessingService: ScanProcessingServing {
             tables: tables,
             models: models,
             confidence: max(ocrResult.confidence, cleaned.isEmpty ? 0.18 : 0.82)
-        )
-    }
-}
-
-struct HybridSuryaOCRService: OCRServing {
-    private let surya = SuryaOCRClient(endpoint: SuryaOCRClient.configuredEndpoint)
-
-    func recognize(in image: UIImage) async -> OCRScanResult {
-        if let result = await surya.recognize(in: image), !result.lines.isEmpty {
-            return result
-        }
-
-        let recognizedText = await VisionOCRTextScanner.recognizeText(in: image)
-        let lines = recognizedText
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return OCRScanResult(
-            rawText: recognizedText,
-            lines: lines,
-            tables: [],
-            confidence: lines.isEmpty ? 0.18 : 0.74,
-            engine: "apple vision"
-        )
-    }
-}
-
-struct SuryaOCRClient {
-    static var configuredEndpoint: URL? {
-        if let value = Bundle.main.object(forInfoDictionaryKey: "SuryaOCREndpoint") as? String,
-           let url = URL(string: value), !value.isEmpty {
-            return url
-        }
-        if let value = ProcessInfo.processInfo.environment["SURYA_OCR_ENDPOINT"],
-           let url = URL(string: value), !value.isEmpty {
-            return url
-        }
-        return nil
-    }
-
-    let endpoint: URL?
-
-    func recognize(in image: UIImage) async -> OCRScanResult? {
-        guard let endpoint, let imageData = image.jpegData(compressionQuality: 0.88) else { return nil }
-        let boundary = "marbled-surya-\(UUID().uuidString)"
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 60
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = multipartBody(imageData: imageData, boundary: boundary)
-
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else { return nil }
-            return SuryaOCRParser.parse(data)
-        } catch {
-            return nil
-        }
-    }
-
-    private func multipartBody(imageData: Data, boundary: String) -> Data {
-        var body = Data()
-        body.append("--\(boundary)\r\n")
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"scan.jpg\"\r\n")
-        body.append("Content-Type: image/jpeg\r\n\r\n")
-        body.append(imageData)
-        body.append("\r\n")
-        body.append("--\(boundary)\r\n")
-        body.append("Content-Disposition: form-data; name=\"mode\"\r\n\r\n")
-        body.append("ocr\r\n")
-        body.append("--\(boundary)--\r\n")
-        return body
-    }
-}
-
-private enum SuryaOCRParser {
-    static func parse(_ data: Data) -> OCRScanResult? {
-        let decoder = JSONDecoder()
-        guard let envelope = try? decoder.decode(SuryaOCRResponse.self, from: data) else { return nil }
-        let pages = envelope.resolvedPages
-        let blocks = pages.flatMap(\.resolvedBlocks).sorted { ($0.readingOrder ?? 0) < ($1.readingOrder ?? 0) }
-        guard !blocks.isEmpty else { return nil }
-
-        var lines: [String] = []
-        var tables: [DetectedTable] = []
-        var confidenceValues: [Double] = []
-
-        for block in blocks {
-            if let confidence = block.confidence {
-                confidenceValues.append(confidence)
-            }
-            let html = block.html ?? block.text ?? ""
-            let text = html.htmlToPlainText()
-            if !text.isEmpty {
-                lines.append(contentsOf: text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty })
-            }
-            let label = (block.label ?? block.rawLabel ?? "").lowercased()
-            if label.contains("table") || html.localizedCaseInsensitiveContains("<table") {
-                if let table = html.detectedTable(title: "surya table") {
-                    tables.append(table)
-                }
-            }
-        }
-
-        let rawText = lines.joined(separator: "\n")
-        let confidence = confidenceValues.isEmpty ? 0.86 : confidenceValues.reduce(0, +) / Double(confidenceValues.count)
-        return OCRScanResult(rawText: rawText, lines: lines, tables: tables, confidence: confidence, engine: "surya")
-    }
-}
-
-private struct SuryaOCRResponse: Decodable {
-    var pages: [SuryaPage]?
-    var blocks: [SuryaBlock]?
-    var results: [String: [SuryaPage]]?
-
-    var resolvedPages: [SuryaPage] {
-        if let pages { return pages }
-        if let results { return results.values.flatMap { $0 } }
-        if let blocks { return [SuryaPage(blocks: blocks)] }
-        return []
-    }
-}
-
-private struct SuryaPage: Decodable {
-    var blocks: [SuryaBlock]?
-
-    var resolvedBlocks: [SuryaBlock] {
-        blocks ?? []
-    }
-}
-
-private struct SuryaBlock: Decodable {
-    var label: String?
-    var rawLabel: String?
-    var readingOrder: Int?
-    var html: String?
-    var text: String?
-    var confidence: Double?
-
-    enum CodingKeys: String, CodingKey {
-        case label
-        case rawLabel = "raw_label"
-        case readingOrder = "reading_order"
-        case html
-        case text
-        case confidence
-    }
-}
-
-struct SAM3DObjectReconstructionAdapter: ObjectReconstructionServing {
-    static let sourceURL = URL(string: "https://github.com/facebookresearch/sam-3d-objects")!
-
-    func reconstruct(from image: UIImage, lines: [String], keywords: [String], visualSignal: Double) async -> DetectedModel? {
-        guard visualSignal > 0.2 else { return nil }
-        let joined = lines.joined(separator: " ").lowercased()
-        let objectTerms = [
-            "model", "diagram", "figure", "shape", "object", "structure", "cell", "atom", "molecule",
-            "circuit", "graph", "map", "cycle", "system", "force", "lens", "organ"
-        ]
-        let terms = objectTerms.filter { joined.contains($0) }
-        let nodes = Array((keywords + terms).filter { $0.count > 2 }.prefix(6))
-        let defaultNodes = ["outline", "surface", "label", "depth", "relation", "note"]
-
-        return DetectedModel(
-            title: terms.first.map { "\($0) reconstruction" } ?? "object reconstruction",
-            summary: "the scan geometry was lifted into an interactive study model from the page.",
-            terms: nodes.isEmpty ? defaultNodes : nodes,
-            nodes: nodes.isEmpty ? defaultNodes : nodes
         )
     }
 }
@@ -433,47 +244,6 @@ private enum NoteLayoutAnalyzer {
     }
 }
 
-private enum ImageStructureAnalyzer {
-    static func visualModelSignal(in image: UIImage) -> Double {
-        guard let cgImage = image.cgImage else { return 0 }
-        let width = 56
-        let height = 72
-        var pixels = [UInt8](repeating: 255, count: width * height)
-        guard let context = CGContext(
-            data: &pixels,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width,
-            space: CGColorSpaceCreateDeviceGray(),
-            bitmapInfo: CGImageAlphaInfo.none.rawValue
-        ) else { return 0 }
-
-        context.interpolationQuality = .low
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-
-        var darkCount = 0
-        var edgeCount = 0
-        for y in 1..<(height - 1) {
-            for x in 1..<(width - 1) {
-                let index = y * width + x
-                let value = Int(pixels[index])
-                if value < 154 { darkCount += 1 }
-                let right = Int(pixels[index + 1])
-                let down = Int(pixels[index + width])
-                if abs(value - right) > 44 || abs(value - down) > 44 {
-                    edgeCount += 1
-                }
-            }
-        }
-
-        let sampleCount = Double((width - 2) * (height - 2))
-        let inkDensity = Double(darkCount) / sampleCount
-        let edgeDensity = Double(edgeCount) / sampleCount
-        return min(1, inkDensity * 0.55 + edgeDensity * 0.75)
-    }
-}
-
 private enum RegexSeparator {
     static let multipleSpaces = try! NSRegularExpression(pattern: #" {2,}"#)
 }
@@ -492,98 +262,6 @@ private extension String {
         return components
     }
 
-    func htmlToPlainText() -> String {
-        self
-            .replacingOccurrences(of: "</tr>", with: "\n")
-            .replacingOccurrences(of: "</p>", with: "\n")
-            .replacingOccurrences(of: "<br ?/?>", with: "\n", options: .regularExpression)
-            .replacingOccurrences(of: "</t[dh]>", with: " | ", options: .regularExpression)
-            .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: "&nbsp;", with: " ")
-            .replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
-            .components(separatedBy: .newlines)
-            .map { $0.replacingOccurrences(of: #" {2,}"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n")
-            .lowercased()
-    }
-
-    func detectedTable(title: String) -> DetectedTable? {
-        let rowFragments = regexCaptures(pattern: #"<tr[^>]*>(.*?)</tr>"#)
-        let rows = rowFragments
-            .map { fragment in
-                fragment
-                    .regexCaptures(pattern: #"<t[dh][^>]*>(.*?)</t[dh]>"#)
-                    .map { $0.htmlToPlainText().replacingOccurrences(of: "\n", with: " ") }
-                    .filter { !$0.isEmpty }
-            }
-            .filter { !$0.isEmpty }
-
-        guard rows.count >= 2 else { return nil }
-        return DetectedTable(title: title, headers: rows[0], rows: Array(rows.dropFirst()))
-    }
-
-    private func regexCaptures(pattern: String) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return [] }
-        let nsRange = NSRange(startIndex..<endIndex, in: self)
-        return regex.matches(in: self, range: nsRange).compactMap { match in
-            guard match.numberOfRanges > 1,
-                  let range = Range(match.range(at: 1), in: self) else { return nil }
-            return String(self[range])
-        }
-    }
-}
-
-private extension Data {
-    mutating func append(_ string: String) {
-        append(Data(string.utf8))
-    }
-}
-
-private enum VisionOCRTextScanner {
-    static func recognizeText(in image: UIImage) async -> String {
-        guard let cgImage = image.cgImage else { return "" }
-
-        return await withCheckedContinuation { continuation in
-            let request = VNRecognizeTextRequest { request, _ in
-                let observations = request.results as? [VNRecognizedTextObservation] ?? []
-                let text = observations
-                    .compactMap { $0.topCandidates(1).first?.string }
-                    .joined(separator: "\n")
-                continuation.resume(returning: text)
-            }
-            request.recognitionLevel = .accurate
-            request.usesLanguageCorrection = true
-            request.recognitionLanguages = ["en-US"]
-
-            let handler = VNImageRequestHandler(cgImage: cgImage, orientation: CGImagePropertyOrientation(image.imageOrientation), options: [:])
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    try handler.perform([request])
-                } catch {
-                    continuation.resume(returning: "")
-                }
-            }
-        }
-    }
-}
-
-private extension CGImagePropertyOrientation {
-    init(_ orientation: UIImage.Orientation) {
-        switch orientation {
-        case .up: self = .up
-        case .down: self = .down
-        case .left: self = .left
-        case .right: self = .right
-        case .upMirrored: self = .upMirrored
-        case .downMirrored: self = .downMirrored
-        case .leftMirrored: self = .leftMirrored
-        case .rightMirrored: self = .rightMirrored
-        @unknown default: self = .up
-        }
-    }
 }
 
 struct LocalNoteUnderstandingService: NoteUnderstandingServing {
@@ -608,7 +286,7 @@ struct LocalNoteUnderstandingService: NoteUnderstandingServing {
         [
             Flashcard(front: "what does a limit measure?", back: "the value a function approaches near a point."),
             Flashcard(front: "when should you factor first?", back: "when direct substitution creates an undefined expression."),
-            Flashcard(front: "what confirms a two-sided limit?", back: "both one-sided limits approach the same value.")
+            Flashcard(front: "what confirms a two sided limit?", back: "both one sided limits approach the same value.")
         ]
     }
 
@@ -643,6 +321,10 @@ struct MossTTSVoiceService: VoiceServing {
             modelID: backend.modelID,
             spaceURL: backend.sourceURL
         )
+        if let remotePlayback = await requestRemotePlayback(request: request, style: style, backend: backend) {
+            return remotePlayback
+        }
+
         let words = request.text.split(separator: " ").count
         let voiceMode = request.referenceAudioURLs.isEmpty ? "direct generation" : "clone mode"
         return VoicePlayback(
@@ -655,5 +337,88 @@ struct MossTTSVoiceService: VoiceServing {
 
     func transcribeQuestion() async -> String {
         "can you explain the limit step more simply?"
+    }
+
+    private func requestRemotePlayback(request: MossTTSRequest, style: PlaybackStyle, backend: VoiceReplicationBackend) async -> VoicePlayback? {
+        guard let endpoint = configuredEndpoint else { return nil }
+        var urlRequest = URLRequest(url: endpoint)
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = 90
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let payload = MossTTSPayload(
+            text: request.text,
+            mode: request.mode,
+            style: style.rawValue,
+            language: request.language ?? "English",
+            temperature: request.temperature,
+            topP: request.topP,
+            topK: request.topK,
+            repetitionPenalty: request.repetitionPenalty,
+            modelID: request.modelID,
+            referenceAudioURLs: request.referenceAudioURLs.map(\.absoluteString)
+        )
+        guard let body = try? JSONEncoder().encode(payload) else { return nil }
+        urlRequest.httpBody = body
+
+        guard let (data, response) = try? await URLSession.shared.data(for: urlRequest),
+              let http = response as? HTTPURLResponse,
+              200..<300 ~= http.statusCode,
+              let envelope = try? JSONDecoder().decode(MossTTSResponse.self, from: data) else { return nil }
+
+        return VoicePlayback(
+            style: style,
+            summary: envelope.summary ?? "\(backend.rawValue) generated personalized reading audio.",
+            engine: backend,
+            referenceSampleCount: request.referenceAudioURLs.count,
+            audioURL: envelope.audioURL
+        )
+    }
+
+    private var configuredEndpoint: URL? {
+        if let value = Bundle.main.object(forInfoDictionaryKey: "MossTTSEndpoint") as? String,
+           let url = URL(string: value), !value.isEmpty {
+            return url
+        }
+        if let value = ProcessInfo.processInfo.environment["MOSS_TTS_ENDPOINT"],
+           let url = URL(string: value), !value.isEmpty {
+            return url
+        }
+        return nil
+    }
+}
+
+private struct MossTTSPayload: Encodable {
+    var text: String
+    var mode: String
+    var style: String
+    var language: String
+    var temperature: Double
+    var topP: Double
+    var topK: Int
+    var repetitionPenalty: Double
+    var modelID: String
+    var referenceAudioURLs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case text
+        case mode
+        case style
+        case language
+        case temperature
+        case topP = "top_p"
+        case topK = "top_k"
+        case repetitionPenalty = "repetition_penalty"
+        case modelID = "model_id"
+        case referenceAudioURLs = "reference_audio_urls"
+    }
+}
+
+private struct MossTTSResponse: Decodable {
+    var summary: String?
+    var audioURL: URL?
+
+    enum CodingKeys: String, CodingKey {
+        case summary
+        case audioURL = "audio_url"
     }
 }

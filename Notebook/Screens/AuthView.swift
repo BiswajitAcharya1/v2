@@ -3,7 +3,7 @@ import UIKit
 
 struct AuthView: View {
     @Environment(NotebookStore.self) private var store
-    @State private var appeared = false
+    @State private var appeared = true
     @State private var showingEmail = false
     @State private var isSignIn = false
     @State private var username = ""
@@ -15,10 +15,11 @@ struct AuthView: View {
     @State private var notebookOpen = false
     @State private var coverDrag: CGFloat = 0
     @State private var legalDocument: LegalDocument?
+    @State private var ambientMotion = false
 
     var body: some View {
         ZStack {
-            AmbientNotebookBackground().ignoresSafeArea()
+            AmbientNotebookBackground(animated: ambientMotion).ignoresSafeArea()
 
             VStack(spacing: 16) {
                 Spacer(minLength: 0)
@@ -26,7 +27,7 @@ struct AuthView: View {
                 heroStack
                     .scaleEffect(appeared ? 1 : 0.92)
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: notebookOpen ? -42 : 0)
+                    .offset(y: notebookOpen ? -44 : -86)
 
                 if notebookOpen {
                     authPanel
@@ -50,11 +51,14 @@ struct AuthView: View {
 
         }
         .onAppear {
-            withAnimation(.spring(response: 0.85, dampingFraction: 0.82).delay(0.08)) {
-                appeared = true
-            }
-            withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true)) {
-                leatherDrift = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(650))
+                withAnimation(.easeInOut(duration: 0.42)) {
+                    ambientMotion = true
+                }
+                withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true)) {
+                    leatherDrift = true
+                }
             }
         }
         .sheet(item: $legalDocument) { document in
@@ -69,7 +73,7 @@ struct AuthView: View {
             if openProgress > 0.18 {
                 VStack(spacing: 8) {
                     BrandSignUpTitle()
-                    ContainerTextFlip(words: ["scan", "organize", "study", "remember"])
+                    ContainerTextFlip(words: ["scan", "organize", "study", "remember", "focus", "listen", "review", "recall", "learn", "master"])
                 }
                 .opacity(Double(min(1, openProgress * 1.35)))
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -130,10 +134,18 @@ struct AuthView: View {
                 .offset(x: openProgress * 74, y: openProgress * 16)
                 .shadow(color: .black.opacity(0.12), radius: 14, y: 9)
 
-            NotebookLogo(isOpen: false)
+            CompositionCoverFace(
+                subject: nil,
+                cornerRadius: 24,
+                spineWidth: 38,
+                labelWidth: 136,
+                labelHeight: 116,
+                labelOffsetY: 28,
+                showCornerLift: false
+            )
                 .frame(width: 190, height: 248)
-                .rotation3DEffect(.degrees(-132 * openProgress + (leatherDrift ? 3 : -3)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
-                .offset(x: -104 * openProgress, y: 4 + 12 * openProgress)
+                .rotation3DEffect(.degrees(-156 * openProgress + (leatherDrift ? 2.5 : -2.5)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
+                .offset(x: -118 * openProgress, y: 4 + 12 * openProgress)
                 .opacity(Double(1 - max(0, (openProgress - 0.74) / 0.26)))
                 .scaleEffect(1 - openProgress * 0.08)
                 .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
@@ -223,8 +235,8 @@ struct AuthView: View {
     private struct FontFlipText: View {
         let text: String
         @State private var index = 0
-        private let designs: [Font.Design] = [.serif, .rounded, .monospaced, .default, .serif, .rounded, .default, .monospaced, .serif]
-        private let weights: [Font.Weight] = [.semibold, .regular, .bold, .medium, .light, .semibold, .thin, .bold, .regular]
+        private let designs: [Font.Design] = [.serif, .rounded, .monospaced, .default, .rounded, .serif, .default, .monospaced, .rounded, .serif, .default, .rounded]
+        private let weights: [Font.Weight] = [.semibold, .regular, .bold, .medium, .light, .semibold, .thin, .bold, .regular, .medium, .semibold, .light]
 
         init(_ text: String) {
             self.text = text
@@ -459,30 +471,13 @@ struct AuthView: View {
     }
 
     private func secureField(_ title: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(NotebookTheme.muted)
-            HStack(spacing: 10) {
-                Image(systemName: "lock.fill")
-                    .foregroundStyle(NotebookTheme.muted)
-                SecureField("", text: text)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .textContentType(.password)
-                    .foregroundStyle(NotebookTheme.ink)
-                    .tint(NotebookTheme.ink)
-            }
-            .font(.system(.body, design: typingDesign(for: text.wrappedValue), weight: .regular))
-            .animation(.spring(response: 0.28, dampingFraction: 0.8), value: text.wrappedValue.count)
-            .padding(14)
-            .background(.white.opacity(0.68), in: Capsule())
-        }
-    }
-
-    private func typingDesign(for text: String) -> Font.Design {
-        let designs: [Font.Design] = [.rounded, .serif, .monospaced, .default]
-        return designs[max(0, text.count) % designs.count]
+        GooeyInput(
+            label: title,
+            systemName: "lock.fill",
+            text: text,
+            isSecure: true,
+            textContentType: .password
+        )
     }
 
     private func closeEmail() {
@@ -505,30 +500,12 @@ private struct AuthField: View {
     var keyboardType: UIKeyboardType = .default
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(.system(.caption, design: .rounded, weight: .semibold))
-                .foregroundStyle(NotebookTheme.muted)
-            HStack(spacing: 10) {
-                Image(systemName: systemName)
-                    .foregroundStyle(NotebookTheme.muted)
-                TextField("", text: $text)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(keyboardType)
-                    .foregroundStyle(NotebookTheme.ink)
-                    .tint(NotebookTheme.ink)
-            }
-            .font(.system(.body, design: typingDesign, weight: .regular))
-            .animation(.spring(response: 0.28, dampingFraction: 0.8), value: text.count)
-            .padding(14)
-            .background(.white.opacity(0.68), in: Capsule())
-        }
-    }
-
-    private var typingDesign: Font.Design {
-        let designs: [Font.Design] = [.rounded, .serif, .monospaced, .default]
-        return designs[max(0, text.count) % designs.count]
+        GooeyInput(
+            label: label,
+            systemName: systemName,
+            text: $text,
+            keyboardType: keyboardType
+        )
     }
 }
 
@@ -674,7 +651,9 @@ private struct GoogleLogo: View {
 }
 
 private struct AmbientNotebookBackground: View {
+    var animated: Bool
+
     var body: some View {
-        LivingPaperBackground()
+        LivingPaperBackground(animated: animated, grainDensity: 90)
     }
 }

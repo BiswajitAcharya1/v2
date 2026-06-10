@@ -8,6 +8,7 @@ struct StudyFocusView: View {
     @State private var isReading = false
     @State private var speechSynthesizer = AVSpeechSynthesizer()
     @State private var speechDelegate = SpeechCompletionDelegate()
+    @State private var audioPlayer: AVAudioPlayer?
 
     let page: NotebookPage
 
@@ -147,7 +148,7 @@ struct StudyFocusView: View {
                                 isReading = true
                                 Task { @MainActor in
                                     playback = await store.readAloud(page, style: style)
-                                    speak(page.content.cleanedText, style: style)
+                                    await play(page.content.cleanedText, style: style, playback: playback)
                                 }
                             }
                         } label: {
@@ -184,6 +185,20 @@ struct StudyFocusView: View {
         speechSynthesizer.speak(utterance)
     }
 
+    private func play(_ text: String, style: PlaybackStyle, playback: VoicePlayback?) async {
+        if let audioURL = playback?.audioURL,
+           let (data, _) = try? await URLSession.shared.data(from: audioURL),
+           let player = try? AVAudioPlayer(data: data) {
+            audioPlayer = player
+            player.play()
+            DispatchQueue.main.asyncAfter(deadline: .now() + player.duration) {
+                isReading = false
+            }
+            return
+        }
+        speak(text, style: style)
+    }
+
 }
 
 private final class SpeechCompletionDelegate: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
@@ -211,13 +226,9 @@ private struct ExplanationSheet: View {
             Text(term.lowercased())
                 .font(.system(.largeTitle, design: .serif, weight: .semibold))
                 .foregroundStyle(NotebookTheme.ink)
-            Text(store.flashcards(for: NotebookFixtures.notebooks[0].pages[0]).first?.back ?? "study this idea in one small step.")
-                .font(.notebookBody)
-                .foregroundStyle(NotebookTheme.muted)
             Text(store.explain(term.lowercased()))
                 .font(.notebookBody)
-                .foregroundStyle(NotebookTheme.ink)
-                .lineSpacing(5)
+                .foregroundStyle(NotebookTheme.muted)
             Spacer()
         }
         .padding(24)
@@ -229,6 +240,8 @@ private struct FlashcardPaper: View {
     let card: Flashcard
     let dueLabel: String
     let tilt: Double
+    @State private var touchOffset: CGSize = .zero
+    @State private var pressed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -255,8 +268,30 @@ private struct FlashcardPaper: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(.white.opacity(0.68), lineWidth: 0.8)
         }
+        .overlay {
+            DirectionAwareTouchHighlight(offset: touchOffset, isActive: pressed, cornerRadius: 18)
+                .opacity(0.7)
+        }
         .rotationEffect(.degrees(tilt))
-        .shadow(color: .black.opacity(0.1), radius: 12, y: 8)
+        .scaleEffect(pressed ? 0.985 : 1)
+        .rotation3DEffect(.degrees(pressed ? Double(touchOffset.width / 8) : 0), axis: (x: 0, y: 1, z: 0), perspective: 0.72)
+        .shadow(color: .black.opacity(pressed ? 0.07 : 0.1), radius: pressed ? 8 : 12, y: pressed ? 5 : 8)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    if !pressed {
+                        Haptics.softTap()
+                    }
+                    pressed = true
+                    touchOffset = CGSize(width: max(min(value.translation.width, 34), -34), height: max(min(value.translation.height, 34), -34))
+                }
+                .onEnded { _ in
+                    pressed = false
+                    touchOffset = .zero
+                }
+        )
+        .animation(.spring(response: 0.3, dampingFraction: 0.78), value: pressed)
+        .animation(.spring(response: 0.32, dampingFraction: 0.78), value: touchOffset)
     }
 }
 

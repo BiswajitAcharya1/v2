@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct LivingPaperBackground: View {
+    var animated = true
+    var grainDensity = 180
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -13,20 +16,58 @@ struct LivingPaperBackground: View {
                 endPoint: .bottomTrailing
             )
 
-            LiquidLightField()
-                .blendMode(.plusLighter)
-                .opacity(0.7)
+            if animated {
+                LiquidLightField()
+                    .blendMode(.plusLighter)
+                    .opacity(0.7)
+                    .transition(.opacity)
+            } else {
+                StaticLightField()
+                    .blendMode(.plusLighter)
+                    .opacity(0.58)
+            }
 
-            PaperGrain()
+            PaperGrain(density: grainDensity)
                 .opacity(0.36)
                 .blendMode(.multiply)
         }
     }
 }
 
+struct StaticLightField: View {
+    var body: some View {
+        Canvas { context, size in
+            glow(
+                context: context,
+                center: CGPoint(x: size.width * 0.2, y: size.height * 0.18),
+                radius: min(size.width, size.height) * 0.44,
+                color: Color.white.opacity(0.42)
+            )
+            glow(
+                context: context,
+                center: CGPoint(x: size.width * 0.78, y: size.height * 0.66),
+                radius: min(size.width, size.height) * 0.34,
+                color: Color(red: 0.72, green: 0.82, blue: 0.78).opacity(0.2)
+            )
+        }
+    }
+
+    private func glow(context: GraphicsContext, center: CGPoint, radius: CGFloat, color: Color) {
+        context.fill(
+            Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
+            with: .radialGradient(
+                Gradient(colors: [color, .clear]),
+                center: center,
+                startRadius: 0,
+                endRadius: radius
+            )
+        )
+    }
+}
+
 struct LiquidLightField: View {
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.periodic(from: .now, by: 1.0 / 12.0)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 let first = CGPoint(
@@ -57,7 +98,7 @@ struct LiquidLightField: View {
 }
 
 struct PaperGrain: View {
-    var density: Int = 520
+    var density: Int = 180
 
     var body: some View {
         Canvas { context, size in

@@ -112,31 +112,28 @@ private struct SetupFlowView: View {
                 Text("voice")
                     .font(.system(.title2, design: .serif, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
-                Text("record each sentence in your natural voice.")
+                Text("read each sentence once. words darken only while your voice is heard.")
                     .font(.system(.footnote, design: .rounded, weight: .medium))
                     .foregroundStyle(NotebookTheme.muted)
                     .multilineTextAlignment(.center)
 
                 VoicePromptText(
-                    prompt: prompts[min(store.voiceProfile.samples.count, prompts.count - 1)],
-                    elapsed: store.voiceRecordingElapsed,
-                    recording: store.isRecordingVoice
+                    prompt: currentVoicePrompt,
+                    progress: store.voicePromptWordProgress,
+                    recording: store.isRecordingVoice,
+                    recognitionAvailable: store.voiceRecognitionAvailable
                 )
 
-                Text(store.isRecordingVoice ? "tap the wave when you finish." : "tap the mic and start reading.")
-                    .font(.system(.footnote, design: .rounded, weight: .medium))
-                    .foregroundStyle(NotebookTheme.muted)
-                    .multilineTextAlignment(.center)
-                if let transcript = store.latestVoiceTranscript, !transcript.isEmpty {
-                    Text(transcript)
-                        .font(.system(.footnote, design: .serif, weight: .semibold))
-                        .foregroundStyle(NotebookTheme.ink.opacity(0.82))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(.white.opacity(0.52), in: Capsule())
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+                VoiceRecognitionStatus(
+                    sentenceIndex: min(store.voiceProfile.samples.count + 1, prompts.count),
+                    totalSentences: prompts.count,
+                    heardWords: store.voicePromptWordProgress,
+                    totalWords: currentVoicePrompt.split(separator: " ").count,
+                    isRecording: store.isRecordingVoice,
+                    voiceActive: store.voiceSignalActive,
+                    recognitionAvailable: store.voiceRecognitionAvailable,
+                    level: store.voiceRecordingLevel
+                )
 
                 VoiceProgress(count: store.voiceProfile.samples.count, total: prompts.count, recording: store.isRecordingVoice)
                 VoiceRecordingReadout(
@@ -160,8 +157,7 @@ private struct SetupFlowView: View {
                     Button {
                         Haptics.open()
                         Task {
-                            let prompt = prompts[min(store.voiceProfile.samples.count, prompts.count - 1)]
-                            await store.recordVoicePrompt(prompt)
+                            await store.recordVoicePrompt(currentVoicePrompt)
                         }
                     } label: {
                         ZStack {
@@ -181,6 +177,10 @@ private struct SetupFlowView: View {
         }
     }
 
+    private var currentVoicePrompt: String {
+        prompts[min(store.voiceProfile.samples.count, prompts.count - 1)]
+    }
+
     private var subjectChoice: some View {
         GlassSurface(radius: 34, padding: 20, interactive: true) {
             VStack(spacing: 16) {
@@ -189,22 +189,19 @@ private struct SetupFlowView: View {
                     .foregroundStyle(NotebookTheme.ink)
 
                 HStack(spacing: 10) {
-                    TextField("", text: $subjectDraft)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .font(.system(.body, design: .rounded))
-                        .foregroundStyle(NotebookTheme.ink)
-                        .tint(NotebookTheme.ink)
-                        .padding(14)
-                        .background(.white.opacity(0.66), in: Capsule())
-                        .onSubmit(addSubject)
+                    GooeyInput(
+                        label: "subject",
+                        systemName: "magnifyingglass",
+                        text: $subjectDraft,
+                        onSubmit: addSubject
+                    )
 
                     Button(action: addSubject) {
                         Image(systemName: "plus")
                             .font(.system(size: 18, weight: .bold))
                             .frame(width: 50, height: 50)
                     }
-                    .buttonStyle(CircleButtonStyle())
+                    .buttonStyle(FloatingCircleButtonStyle())
                     .disabled(bestSubjectMatch == nil)
                 }
 
@@ -315,17 +312,64 @@ private struct VoiceProgress: View {
     }
 }
 
+private struct VoiceRecognitionStatus: View {
+    var sentenceIndex: Int
+    var totalSentences: Int
+    var heardWords: Int
+    var totalWords: Int
+    var isRecording: Bool
+    var voiceActive: Bool
+    var recognitionAvailable: Bool
+    var level: Double
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text("sentence \(sentenceIndex) of \(totalSentences)")
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+            Capsule()
+                .fill(NotebookTheme.muted.opacity(0.16))
+                .frame(width: 1, height: 18)
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(isRecording && voiceActive ? NotebookTheme.accent(.green) : NotebookTheme.muted.opacity(0.35))
+                    .frame(width: 7, height: 7)
+                    .scaleEffect(isRecording && voiceActive ? 1.35 : 1)
+                Text(statusText)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+            }
+        }
+        .foregroundStyle(NotebookTheme.muted)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.white.opacity(0.52), in: Capsule())
+        .animation(.spring(response: 0.28, dampingFraction: 0.74), value: heardWords)
+        .animation(.spring(response: 0.22, dampingFraction: 0.7), value: voiceActive)
+    }
+
+    private var statusText: String {
+        if isRecording && !recognitionAvailable {
+            return "waiting for voice"
+        }
+        guard isRecording else { return "\(min(heardWords, totalWords)) of \(totalWords) words" }
+        if voiceActive {
+            return "\(min(heardWords, totalWords)) of \(totalWords) heard"
+        }
+        return "waiting for voice"
+    }
+}
+
 private struct VoicePromptText: View {
     var prompt: String
-    var elapsed: TimeInterval
+    var progress: Int
     var recording: Bool
+    var recognitionAvailable: Bool
 
     private var words: [String] {
         prompt.split(separator: " ").map(String.init)
     }
 
     var body: some View {
-        let activeIndex = recording ? min(words.count - 1, Int(elapsed / 0.48)) : -1
+        let activeIndex = recording && recognitionAvailable ? min(words.count - 1, progress - 1) : -1
         highlightedSentence(activeIndex: activeIndex)
             .font(.system(.title3, design: .rounded, weight: .semibold))
             .lineSpacing(6)
@@ -338,7 +382,7 @@ private struct VoicePromptText: View {
         var text = Text("")
         for (index, word) in words.enumerated() {
             let rawPiece = Text(word + (index == words.count - 1 ? "" : " "))
-                .foregroundStyle(index <= activeIndex ? NotebookTheme.ink : NotebookTheme.muted)
+                .foregroundStyle(index <= activeIndex ? NotebookTheme.ink : NotebookTheme.muted.opacity(recording ? 0.42 : 0.82))
             let piece = index == activeIndex ? rawPiece.fontWeight(.semibold) : rawPiece.fontWeight(.regular)
             text = text + piece
         }

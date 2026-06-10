@@ -16,9 +16,12 @@ struct ScanView: View {
                 )
                 .ignoresSafeArea()
 
-                TimelineView(.animation) { timeline in
+                TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { timeline in
                     let t = timeline.date.timeIntervalSinceReferenceDate
-                    scannerStage(seconds: t)
+                    ZStack {
+                        ScanAtmosphere(seconds: t, phase: store.scanPhase)
+                        scannerStage(seconds: t)
+                    }
                 }
 
                 VStack(spacing: 18) {
@@ -89,21 +92,38 @@ struct ScanView: View {
     private var phasePanel: some View {
         GlassSurface(radius: 24, padding: 18, interactive: true) {
             VStack(spacing: 12) {
-                HStack {
-                    Label(store.scanPhase.caption, systemImage: icon(for: store.scanPhase))
-                        .font(.system(.headline, design: .rounded, weight: .semibold))
-                    Spacer()
+                HStack(spacing: 11) {
+                    ZStack {
+                        Circle()
+                            .fill(.white.opacity(0.18))
+                        Image(systemName: icon(for: store.scanPhase))
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                    .frame(width: 40, height: 40)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(store.scanPhase.caption)
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                        Text(phaseDetail)
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    Spacer(minLength: 0)
                 }
                 .foregroundStyle(.white)
 
-                HStack(spacing: 8) {
-                    ForEach(ScanPhase.allCases) { phase in
-                        Capsule()
-                            .fill(stepIsActive(phase) ? .white : .white.opacity(0.2))
-                            .frame(height: 5)
-                    }
-                }
+                ScannerPhaseRail(activePhase: store.scanPhase)
             }
+        }
+    }
+
+    private var phaseDetail: String {
+        switch store.scanPhase {
+        case .framing: "line up the page and keep scanning until you save."
+        case .capturing: "holding the sheet and preserving the page shape."
+        case .processing: "surya reads handwriting while models are isolated."
+        case .organizing: "the page is filed into the right journal."
+        case .sorted: "the notebook is ready."
         }
     }
 
@@ -119,11 +139,9 @@ struct ScanView: View {
             Haptics.open()
             showingScanner = true
         } label: {
-            Image(systemName: isRunning ? "arrow.counterclockwise" : "camera.viewfinder")
-                .font(.system(size: 24, weight: .bold))
-                .frame(width: 74, height: 74)
+            FloatingScanButton(isRunning: isRunning, phase: store.scanPhase)
         }
-        .buttonStyle(CircleButtonStyle(tint: .white, foreground: NotebookTheme.ink))
+        .buttonStyle(.plain)
         .accessibilityLabel(isRunning ? "reset scan" : "capture page")
     }
 
@@ -137,10 +155,128 @@ struct ScanView: View {
         }
     }
 
+}
+
+private struct ScannerPhaseRail: View {
+    var activePhase: ScanPhase
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(ScanPhase.allCases) { phase in
+                let active = stepIsActive(phase)
+                Capsule()
+                    .fill(active ? .white : .white.opacity(0.18))
+                    .frame(width: activePhase == phase ? 34 : 8, height: 6)
+                    .overlay {
+                        if activePhase == phase {
+                            Capsule()
+                                .fill(.white.opacity(0.36))
+                                .blur(radius: 4)
+                        }
+                    }
+                    .animation(.spring(response: 0.42, dampingFraction: 0.76), value: activePhase)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func stepIsActive(_ phase: ScanPhase) -> Bool {
-        guard let current = ScanPhase.allCases.firstIndex(of: store.scanPhase),
+        guard let current = ScanPhase.allCases.firstIndex(of: activePhase),
               let target = ScanPhase.allCases.firstIndex(of: phase) else { return false }
         return target <= current
+    }
+}
+
+private struct FloatingScanButton: View {
+    var isRunning: Bool
+    var phase: ScanPhase
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .stroke(.white.opacity(isRunning ? 0.18 : 0.08), lineWidth: 1)
+                    .frame(width: 86 + CGFloat(index * 18), height: 86 + CGFloat(index * 18))
+                    .scaleEffect(isRunning ? 1.08 + CGFloat(index) * 0.04 : 0.92)
+                    .opacity(isRunning ? 1 - Double(index) * 0.24 : 0.45)
+            }
+
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .white,
+                            Color(red: 0.92, green: 0.94, blue: 0.98),
+                            Color(red: 0.78, green: 0.82, blue: 0.9)
+                        ],
+                        center: .topLeading,
+                        startRadius: 4,
+                        endRadius: 86
+                    )
+                )
+                .frame(width: 80, height: 80)
+                .overlay {
+                    Circle().stroke(.white.opacity(0.86), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
+
+            Image(systemName: isRunning ? "arrow.counterclockwise" : icon)
+                .font(.system(size: 25, weight: .bold))
+                .foregroundStyle(NotebookTheme.ink)
+                .rotationEffect(.degrees(isRunning ? 180 : 0))
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .frame(width: 124, height: 124)
+        .scaleEffect(isRunning ? 0.94 : 1)
+        .rotation3DEffect(.degrees(isRunning ? -7 : 0), axis: (x: 0.4, y: 1, z: 0), perspective: 0.72)
+        .animation(.spring(response: 0.42, dampingFraction: 0.72), value: isRunning)
+        .animation(.spring(response: 0.44, dampingFraction: 0.78), value: phase)
+    }
+
+    private var icon: String {
+        switch phase {
+        case .framing: "camera.viewfinder"
+        case .capturing: "sparkles"
+        case .processing: "wand.and.rays"
+        case .organizing: "tray.and.arrow.down.fill"
+        case .sorted: "checkmark"
+        }
+    }
+}
+
+private struct ScanAtmosphere: View {
+    var seconds: TimeInterval
+    var phase: ScanPhase
+
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<12 {
+                let y = size.height * CGFloat(index) / 11
+                let drift = CGFloat(sin(seconds * 0.42 + Double(index))) * 18
+                var path = Path()
+                path.move(to: CGPoint(x: -40, y: y + drift))
+                path.addCurve(
+                    to: CGPoint(x: size.width + 40, y: y - drift * 0.4),
+                    control1: CGPoint(x: size.width * 0.25, y: y - 38),
+                    control2: CGPoint(x: size.width * 0.7, y: y + 38)
+                )
+                context.stroke(
+                    path,
+                    with: .color(.white.opacity(phase == .framing ? 0.045 : 0.075)),
+                    style: StrokeStyle(lineWidth: index.isMultiple(of: 3) ? 1.2 : 0.7, lineCap: .round)
+                )
+            }
+
+            for index in 0..<20 {
+                let x = size.width * CGFloat((index * 37) % 101) / 100
+                let y = size.height * CGFloat((index * 53) % 97) / 100
+                let pulse = CGFloat((sin(seconds * 0.9 + Double(index)) + 1) / 2)
+                let rect = CGRect(x: x, y: y, width: 2 + pulse * 3, height: 2 + pulse * 3)
+                context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(0.06 + Double(pulse) * 0.05)))
+            }
+        }
+        .blur(radius: phase == .processing ? 0 : 0.3)
+        .allowsHitTesting(false)
     }
 }
 

@@ -55,7 +55,7 @@ struct SuryaOCRClient {
 
     func recognize(in image: UIImage) async -> OCRScanResult? {
         guard let endpoint, let imageData = image.jpegData(compressionQuality: 0.88) else { return nil }
-        let boundary = "marbled-surya-\(UUID().uuidString)"
+        let boundary = "margins-surya-\(UUID().uuidString)"
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 60

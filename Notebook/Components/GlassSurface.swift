@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct GlassSurface<Content: View>: View {
     var radius: CGFloat = 18
@@ -112,6 +113,40 @@ struct CircleButtonStyle: ButtonStyle {
     }
 }
 
+struct FloatingCircleButtonStyle: ButtonStyle {
+    var tint: Color = NotebookTheme.ink
+    var foreground: Color = .white
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(foreground)
+            .background {
+                ZStack {
+                    Circle()
+                        .fill(tint)
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [.white.opacity(configuration.isPressed ? 0.42 : 0.22), .clear],
+                                center: configuration.isPressed ? .bottomTrailing : .topLeading,
+                                startRadius: 2,
+                                endRadius: configuration.isPressed ? 46 : 34
+                            )
+                        )
+                        .scaleEffect(configuration.isPressed ? 1.12 : 0.86)
+                    Circle()
+                        .stroke(.white.opacity(configuration.isPressed ? 0.5 : 0.24), lineWidth: 0.9)
+                }
+            }
+            .scaleEffect(configuration.isPressed ? 0.9 : 1)
+            .rotationEffect(.degrees(configuration.isPressed ? 10 : 0))
+            .rotation3DEffect(.degrees(configuration.isPressed ? -10 : 0), axis: (x: 0.2, y: 1, z: 0), perspective: 0.7)
+            .shadow(color: tint.opacity(configuration.isPressed ? 0.1 : 0.22), radius: configuration.isPressed ? 4 : 12, y: configuration.isPressed ? 3 : 8)
+            .animation(.spring(response: 0.3, dampingFraction: 0.62), value: configuration.isPressed)
+            .modifier(HapticPressFeedback(isPressed: configuration.isPressed))
+    }
+}
+
 private struct HapticPressFeedback: ViewModifier {
     var isPressed: Bool
     @State private var wasPressed = false
@@ -124,6 +159,143 @@ private struct HapticPressFeedback: ViewModifier {
                 }
                 wasPressed = newValue
             }
+    }
+}
+
+struct GooeyInput: View {
+    var label: String?
+    var systemName: String?
+    @Binding var text: String
+    var isSecure = false
+    var keyboardType: UIKeyboardType = .default
+    var textContentType: UITextContentType?
+    var onSubmit: (() -> Void)?
+
+    @FocusState private var focused: Bool
+    @State private var breath = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if let label {
+                Text(label)
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.muted)
+            }
+
+            HStack(spacing: 10) {
+                if let systemName {
+                    Image(systemName: systemName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.muted)
+                }
+
+                Group {
+                    if isSecure {
+                        SecureField("", text: $text)
+                            .textContentType(textContentType)
+                    } else {
+                        TextField("", text: $text)
+                            .keyboardType(keyboardType)
+                            .textContentType(textContentType)
+                    }
+                }
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .focused($focused)
+                .foregroundStyle(NotebookTheme.ink)
+                .tint(NotebookTheme.ink)
+                .onSubmit {
+                    Haptics.selection()
+                    onSubmit?()
+                }
+            }
+            .font(.system(.body, design: typingDesign, weight: .regular))
+            .padding(.horizontal, 15)
+            .padding(.vertical, 14)
+            .background {
+                GooeyInputBackground(active: focused || !text.isEmpty, breath: breath)
+            }
+            .overlay {
+                Capsule()
+                    .stroke(.white.opacity(focused ? 0.8 : 0.42), lineWidth: focused ? 1.1 : 0.8)
+            }
+            .scaleEffect(focused ? 1.012 : 1)
+            .animation(.spring(response: 0.38, dampingFraction: 0.8), value: focused)
+            .animation(.spring(response: 0.32, dampingFraction: 0.84), value: text.count)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+                breath = true
+            }
+        }
+    }
+
+    private var typingDesign: Font.Design {
+        let designs: [Font.Design] = [.rounded, .serif, .rounded, .monospaced, .default, .serif]
+        return designs[max(0, text.count) % designs.count]
+    }
+}
+
+private struct GooeyInputBackground: View {
+    var active: Bool
+    var breath: Bool
+
+    var body: some View {
+        Capsule()
+            .fill(.white.opacity(active ? 0.74 : 0.62))
+            .overlay {
+                GeometryReader { proxy in
+                    let width = proxy.size.width
+                    let height = proxy.size.height
+                    ZStack {
+                        Circle()
+                            .fill(NotebookTheme.ink.opacity(active ? 0.12 : 0.06))
+                            .frame(width: active ? 82 : 54, height: active ? 82 : 54)
+                            .blur(radius: 18)
+                            .offset(x: breath ? width * 0.32 : -width * 0.3, y: breath ? -height * 0.08 : height * 0.1)
+                        Circle()
+                            .fill(Color(red: 1.0, green: 0.48, blue: 0.18).opacity(active ? 0.13 : 0.05))
+                            .frame(width: active ? 70 : 46, height: active ? 70 : 46)
+                            .blur(radius: 16)
+                            .offset(x: breath ? -width * 0.28 : width * 0.28, y: breath ? height * 0.1 : -height * 0.08)
+                    }
+                    .frame(width: width, height: height)
+                    .clipShape(Capsule())
+                }
+            }
+    }
+}
+
+struct DirectionAwareTouchHighlight: View {
+    var offset: CGSize
+    var isActive: Bool
+    var cornerRadius: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = max(proxy.size.width, 1)
+            let height = max(proxy.size.height, 1)
+            let x = min(max(0.5 + offset.width / max(width, 1), 0.08), 0.92)
+            let y = min(max(0.5 + offset.height / max(height, 1), 0.08), 0.92)
+            ZStack {
+                RadialGradient(
+                    colors: [.white.opacity(isActive ? 0.36 : 0.16), .clear],
+                    center: UnitPoint(x: x, y: y),
+                    startRadius: 4,
+                    endRadius: isActive ? 180 : 120
+                )
+                LinearGradient(
+                    colors: [.clear, .white.opacity(isActive ? 0.16 : 0.07), .clear],
+                    startPoint: UnitPoint(x: 1 - x, y: 0),
+                    endPoint: UnitPoint(x: x, y: 1)
+                )
+                .rotationEffect(.degrees(isActive ? Double(offset.width / 3) : 0))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .animation(.spring(response: 0.34, dampingFraction: 0.76), value: offset)
+            .animation(.spring(response: 0.26, dampingFraction: 0.82), value: isActive)
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -163,9 +335,9 @@ enum LegalDocument: String, Identifiable {
     var summary: String {
         switch self {
         case .terms:
-            "clear rules for using marbled as a study notebook."
+            "clear rules for using margins as a study notebook."
         case .privacy:
-            "how marbled handles notes, account data, scans, and voice setup."
+            "how margins handles notes, account data, scans, and voice setup."
         }
     }
 
@@ -174,18 +346,18 @@ enum LegalDocument: String, Identifiable {
         case .terms:
             [
                 ("your account", "use accurate sign up information, keep your password private, and only use accounts you are allowed to access."),
-                ("your notes", "you keep ownership of notes you scan or type. marbled organizes them so you can study, search, listen, and review."),
+                ("your notes", "you keep ownership of notes you scan or type. margins organizes them so you can study, search, listen, and review."),
                 ("ai study tools", "ai explanations, flashcards, and only what matters are study aids. check important answers against your class materials."),
                 ("acceptable use", "do not upload content you do not have the right to use, try to break the app, or use another person's account."),
                 ("changes", "features may improve over time. when terms change, the app should make the updated version easy to review.")
             ]
         case .privacy:
             [
-                ("data we save", "marbled stores your account session, subjects, notebooks, scanned pages, typed notes, study state, and optional voice samples on device for this demo build."),
+                ("data we save", "margins stores your account session, subjects, notebooks, scanned pages, typed notes, study state, and optional voice samples on device for this demo build."),
                 ("scans and text", "scanned notes are processed to extract readable text, tables, diagrams, and subject labels so pages can be filed into notebooks."),
                 ("voice setup", "voice recording is optional. if you use it, the app stores short samples and transcripts so reading features can personalize playback."),
                 ("sign in", "email sign in is local in this build. apple and google require production secrets before they can connect."),
-                ("control", "you can skip voice setup, edit notes, add subjects, and review saved account information from settings.")
+                ("control", "you can skip voice setup, edit notes, add subjects, and review saved account information from account center.")
             ]
         }
     }
@@ -295,6 +467,8 @@ struct LegalDocumentView: View {
 
 struct ContainerTextFlip: View {
     var words: [String]
+    private let designs: [Font.Design] = [.serif, .rounded, .monospaced, .default, .rounded, .serif, .default]
+    private let weights: [Font.Weight] = [.semibold, .medium, .regular, .semibold, .bold, .light, .medium]
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1.8)) { timeline in
@@ -302,7 +476,7 @@ struct ContainerTextFlip: View {
             let word = words.isEmpty ? "" : words[wordIndex]
             Text(word)
                 .id(wordIndex)
-                .font(.system(.callout, design: wordIndex.isMultiple(of: 2) ? .serif : .rounded, weight: .semibold))
+                .font(.system(.callout, design: designs[wordIndex % designs.count], weight: weights[wordIndex % weights.count]))
                 .foregroundStyle(NotebookTheme.ink)
                 .padding(.horizontal, 2)
                 .overlay(alignment: .bottom) {
@@ -317,7 +491,7 @@ struct ContainerTextFlip: View {
                 ))
                 .animation(.spring(response: 0.48, dampingFraction: 0.78), value: wordIndex)
         }
-        .frame(minWidth: 106, minHeight: 34)
+        .frame(minWidth: 126, minHeight: 34)
         .clipped()
     }
 }

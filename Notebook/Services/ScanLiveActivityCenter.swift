@@ -1,7 +1,7 @@
 import Foundation
 
 #if canImport(ActivityKit)
-import ActivityKit
+@preconcurrency import ActivityKit
 
 struct ScanActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
@@ -16,7 +16,7 @@ struct ScanActivityAttributes: ActivityAttributes {
 @MainActor
 final class ScanLiveActivityCenter {
     static let shared = ScanLiveActivityCenter()
-    private var activity: Activity<ScanActivityAttributes>?
+    nonisolated(unsafe) private var activity: Activity<ScanActivityAttributes>?
 
     private init() {}
 

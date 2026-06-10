@@ -27,6 +27,10 @@
 		100000000000000000000113 /* DocumentScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* DocumentScannerView.swift */; };
 		100000000000000000000114 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* Haptics.swift */; };
 		100000000000000000000115 /* AtmosphereViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000015 /* AtmosphereViews.swift */; };
+		100000000000000000000116 /* OCRServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* OCRServices.swift */; };
+		100000000000000000000117 /* ReconstructionServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000017 /* ReconstructionServices.swift */; };
+		100000000000000000000118 /* ScanLiveActivityCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000018 /* ScanLiveActivityCenter.swift */; };
+		100000000000000000000119 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000021 /* LaunchScreen.storyboard */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,7 +54,12 @@
 		100000000000000000000013 /* DocumentScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentScannerView.swift; sourceTree = "<group>"; };
 		100000000000000000000014 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		100000000000000000000015 /* AtmosphereViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtmosphereViews.swift; sourceTree = "<group>"; };
-		100000000000000000000020 /* notebook.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = notebook.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000016 /* OCRServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRServices.swift; sourceTree = "<group>"; };
+		100000000000000000000017 /* ReconstructionServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconstructionServices.swift; sourceTree = "<group>"; };
+		100000000000000000000018 /* ScanLiveActivityCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanLiveActivityCenter.swift; sourceTree = "<group>"; };
+		100000000000000000000019 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		100000000000000000000020 /* margins.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = margins.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000021 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,6 +91,8 @@
 				100000000000000000000046 /* Components */,
 				100000000000000000000047 /* Screens */,
 				100000000000000000000010 /* Assets.xcassets */,
+				100000000000000000000019 /* Info.plist */,
+				100000000000000000000021 /* LaunchScreen.storyboard */,
 			);
 			path = Notebook;
 			sourceTree = "<group>";
@@ -107,6 +118,9 @@
 			isa = PBXGroup;
 			children = (
 				100000000000000000000004 /* StudyServices.swift */,
+				100000000000000000000016 /* OCRServices.swift */,
+				100000000000000000000017 /* ReconstructionServices.swift */,
+				100000000000000000000018 /* ScanLiveActivityCenter.swift */,
 				100000000000000000000012 /* AppPersistence.swift */,
 				100000000000000000000014 /* Haptics.swift */,
 			);
@@ -150,7 +164,7 @@
 		100000000000000000000050 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				100000000000000000000020 /* notebook.app */,
+				100000000000000000000020 /* margins.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -172,7 +186,7 @@
 			);
 			name = notebook;
 			productName = notebook;
-			productReference = 100000000000000000000020 /* notebook.app */;
+			productReference = 100000000000000000000020 /* margins.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -214,6 +228,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				100000000000000000000110 /* Assets.xcassets in Resources */,
+				100000000000000000000119 /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -243,6 +258,9 @@
 				100000000000000000000113 /* DocumentScannerView.swift in Sources */,
 				100000000000000000000114 /* Haptics.swift in Sources */,
 				100000000000000000000115 /* AtmosphereViews.swift in Sources */,
+				100000000000000000000116 /* OCRServices.swift in Sources */,
+				100000000000000000000117 /* ReconstructionServices.swift in Sources */,
+				100000000000000000000118 /* ScanLiveActivityCenter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -375,19 +393,20 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = K9QT25YK23;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = marbled;
-				INFOPLIST_KEY_NSCameraUsageDescription = "notebook uses the camera to scan study pages.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "notebook uses face id to verify password reset requests.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "notebook uses the microphone for optional voice personalization.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "notebook can import a note photo when the simulator has no camera.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "notebook transcribes your optional voice setup recording.";
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Notebook/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = margins;
+				INFOPLIST_KEY_NSCameraUsageDescription = "margins uses the camera to scan study pages.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "margins uses face id to verify password reset requests.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "margins uses the microphone for optional voice personalization.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "margins can import a note photo when the simulator has no camera.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "margins transcribes your optional voice setup recording.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswajitacharya.notebook;
-				PRODUCT_NAME = marbled;
+				PRODUCT_NAME = margins;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -407,19 +426,20 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = K9QT25YK23;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = marbled;
-				INFOPLIST_KEY_NSCameraUsageDescription = "notebook uses the camera to scan study pages.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "notebook uses face id to verify password reset requests.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "notebook uses the microphone for optional voice personalization.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "notebook can import a note photo when the simulator has no camera.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "notebook transcribes your optional voice setup recording.";
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Notebook/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = margins;
+				INFOPLIST_KEY_NSCameraUsageDescription = "margins uses the camera to scan study pages.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "margins uses face id to verify password reset requests.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "margins uses the microphone for optional voice personalization.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "margins can import a note photo when the simulator has no camera.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "margins transcribes your optional voice setup recording.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswajitacharya.notebook;
-				PRODUCT_NAME = marbled;
+				PRODUCT_NAME = margins;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;

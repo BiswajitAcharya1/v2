@@ -107,15 +107,16 @@ struct VoicePlayback: Hashable, Codable {
     var summary: String
     var engine: VoiceReplicationBackend
     var referenceSampleCount: Int
+    var audioURL: URL? = nil
 }
 
 enum VoiceReplicationBackend: String, Hashable, Codable {
-    case mossTTSV15 = "moss-tts v1.5"
+    case mossTTSV15 = "moss-tts"
     case kokoro = "kokoro"
 
     var modelID: String {
         switch self {
-        case .mossTTSV15: "OpenMOSS-Team/MOSS-TTS-v1.5"
+        case .mossTTSV15: "OpenMOSS/MOSS-TTS"
         case .kokoro: "hexgrad/kokoro"
         }
     }
@@ -123,7 +124,7 @@ enum VoiceReplicationBackend: String, Hashable, Codable {
     var sourceURL: URL {
         switch self {
         case .mossTTSV15:
-            URL(string: "https://huggingface.co/spaces/OpenMOSS-Team/MOSS-TTS-v1.5/tree/main")!
+            URL(string: "https://github.com/OpenMOSS/MOSS-TTS")!
         case .kokoro:
             URL(string: "https://github.com/hexgrad/kokoro")!
         }
@@ -275,69 +276,4 @@ enum ColorToken: String, CaseIterable, Hashable, Codable {
     case green
     case plum
     case amber
-}
-
-enum NotebookFixtures {
-    static let calculus = ExtractedContent(
-        cleanedText: "limits describe the value a function approaches. use factorization to remove removable discontinuities before substituting. derivatives measure instantaneous rate of change.",
-        rawText: "limits -> value f(x) approaches. factor, cancel, substitute. derivative = instant rate.",
-        keywords: ["limits", "continuity", "derivative", "rate"],
-        formulas: ["lim x -> a f(x)", "f'(x) = dy / dx"],
-        sections: [
-            StudySection(title: "limits", body: "a limit focuses on approach, not only the value at the point."),
-            StudySection(title: "derivatives", body: "the derivative is the slope of the tangent line at one instant.")
-        ],
-        confidence: 0.94
-    )
-
-    static let photosynthesis = ExtractedContent(
-        cleanedText: "photosynthesis converts light, carbon dioxide, and water into glucose and oxygen. chlorophyll absorbs light inside chloroplasts.",
-        rawText: "photo synthesis: light + co2 + h2o -> glucose + o2. chlorophyll absorbs light.",
-        keywords: ["photosynthesis", "chlorophyll", "glucose", "chloroplast"],
-        formulas: ["6co2 + 6h2o -> c6h12o6 + 6o2"],
-        sections: [
-            StudySection(title: "inputs", body: "plants need carbon dioxide, water, and light energy."),
-            StudySection(title: "outputs", body: "the reaction produces glucose for stored energy and oxygen.")
-        ],
-        confidence: 0.91
-    )
-
-    static let notebooks: [SubjectNotebook] = [
-        SubjectNotebook(
-            subject: "math",
-            pages: [
-                NotebookPage(title: "calculus warmup", createdAt: .now.addingTimeInterval(-9000), rawScanLabel: "scan 01", content: calculus, studyState: ReviewState(dueLabel: "due today", stability: 0.72, difficulty: 0.42))
-            ],
-            progress: 0.68,
-            lastActivity: "reviewed 12 cards",
-            isPinned: true,
-            accent: .blue
-        ),
-        SubjectNotebook(
-            subject: "science",
-            pages: [
-                NotebookPage(title: "plants and energy", createdAt: .now.addingTimeInterval(-18000), rawScanLabel: "scan 04", content: photosynthesis, studyState: ReviewState(dueLabel: "due tomorrow", stability: 0.54, difficulty: 0.48))
-            ],
-            progress: 0.52,
-            lastActivity: "2 questions ready",
-            isPinned: false,
-            accent: .green
-        ),
-        SubjectNotebook(
-            subject: "history",
-            pages: [],
-            progress: 0.31,
-            lastActivity: "timeline queued",
-            isPinned: false,
-            accent: .amber
-        ),
-        SubjectNotebook(
-            subject: "english",
-            pages: [],
-            progress: 0.44,
-            lastActivity: "essay terms saved",
-            isPinned: false,
-            accent: .plum
-        )
-    ]
 }

@@ -85,14 +85,9 @@ struct HomeView: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(NotebookTheme.ink)
                         .frame(width: 48, height: 48)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay {
-                            Circle().stroke(.white.opacity(0.68), lineWidth: 0.8)
-                        }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(FloatingCircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
                 .accessibilityLabel("add course")
 
                 Spacer()
@@ -211,22 +206,19 @@ struct HomeView: View {
                     }
 
                     HStack(spacing: 10) {
-                        TextField("", text: $courseDraft)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .font(.system(.body, design: .rounded))
-                            .foregroundStyle(NotebookTheme.ink)
-                            .tint(NotebookTheme.ink)
-                            .padding(14)
-                            .background(.white.opacity(0.66), in: Capsule())
-                            .onSubmit(addCourse)
+                        GooeyInput(
+                            label: "course",
+                            systemName: "magnifyingglass",
+                            text: $courseDraft,
+                            onSubmit: addCourse
+                        )
 
                         Button(action: addCourse) {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 18, weight: .bold))
                                 .frame(width: 50, height: 50)
                         }
-                        .buttonStyle(CircleButtonStyle())
+                        .buttonStyle(FloatingCircleButtonStyle())
                         .disabled(bestCourseMatch == nil)
                     }
 
@@ -436,7 +428,7 @@ private struct AccountCenterView: View {
                         accountRow(systemName: "mic.fill", title: "personal voice", detail: store.voiceProfile.isPersonalized ? "ready" : "not set")
                     }
 
-                    accountSection("settings") {
+                    accountSection("preferences") {
                         Toggle("personal voice", isOn: Bindable(store).voiceProfile.wantsPersonalVoice)
                             .tint(NotebookTheme.ink)
                     }

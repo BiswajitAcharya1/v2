@@ -9,7 +9,7 @@ import Speech
 @Observable
 final class NotebookStore {
     var user = NotebookUser(name: "maya", gradeLevel: "11")
-    var notebooks: [SubjectNotebook] = NotebookFixtures.notebooks
+    var notebooks: [SubjectNotebook] = []
     var isAuthenticated = false
     var authSession: AuthSession?
     var authMessage: String?
@@ -25,6 +25,9 @@ final class NotebookStore {
     var isVoicePaused = false
     var voiceRecordingElapsed: TimeInterval = 0
     var voiceRecordingLevel: Double = 0
+    var voiceSignalActive = false
+    var voiceRecognitionAvailable = false
+    var voicePromptWordProgress = 0
     var latestVoiceTranscript: String?
 
     private let authService: LocalAuthServing = LocalAuthService()
@@ -33,10 +36,16 @@ final class NotebookStore {
     private let reviewService: SpacedRepetitionServing = LocalSpacedRepetitionService()
     private let voiceService: VoiceServing = MossTTSVoiceService()
     @ObservationIgnored private let persistence = AppPersistence()
-    @ObservationIgnored private var audioRecorder: AVAudioRecorder?
+    @ObservationIgnored private var audioEngine: AVAudioEngine?
+    @ObservationIgnored private var voiceAudioFile: AVAudioFile?
+    @ObservationIgnored private var liveRecognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    @ObservationIgnored private var liveRecognitionTask: SFSpeechRecognitionTask?
+    @ObservationIgnored private var pendingVoiceFinishTask: Task<Void, Never>?
     @ObservationIgnored private var recordingURL: URL?
     @ObservationIgnored private var recordingPrompt: String?
-    @ObservationIgnored private var voiceMeterTask: Task<Void, Never>?
+    @ObservationIgnored private var voiceRecordingStartedAt: Date?
+    @ObservationIgnored private var lastVoiceHeardAt: Date?
+    @ObservationIgnored private var lastFallbackWordAdvanceAt: Date?
 
     var pinnedNotebooks: [SubjectNotebook] {
         notebooks.filter(\.isPinned)
@@ -143,13 +152,13 @@ final class NotebookStore {
 
     func pauseVoiceRecording() {
         guard isRecordingVoice, !isVoicePaused else { return }
-        audioRecorder?.pause()
+        audioEngine?.pause()
         isVoicePaused = true
     }
 
     func resumeVoiceRecording() {
         guard isRecordingVoice, isVoicePaused else { return }
-        audioRecorder?.record()
+        try? audioEngine?.start()
         isVoicePaused = false
     }
 
@@ -161,12 +170,15 @@ final class NotebookStore {
         isVoicePaused = false
         voiceRecordingElapsed = 0
         voiceRecordingLevel = 0
-        voiceMeterTask?.cancel()
-        voiceMeterTask = nil
-        audioRecorder?.stop()
-        audioRecorder = nil
+        voiceSignalActive = false
+        voiceRecognitionAvailable = false
+        voicePromptWordProgress = 0
+        stopLiveVoiceCapture(cancelRecognition: true)
         recordingURL = nil
         recordingPrompt = nil
+        voiceRecordingStartedAt = nil
+        lastVoiceHeardAt = nil
+        lastFallbackWordAdvanceAt = nil
         withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
             setupStep = .subjects
         }
@@ -249,45 +261,104 @@ final class NotebookStore {
             authMessage = "microphone access is needed to record voice."
             return
         }
+        let speechAllowed = await requestSpeechPermission()
+        let recognizer = speechAllowed ? SFSpeechRecognizer(locale: Locale(identifier: "en-US")) : nil
         let session = AVAudioSession.sharedInstance()
-        let fileName = "notebook-voice-\(UUID().uuidString).m4a"
+        let fileName = "margins-voice-\(UUID().uuidString).caf"
         let url = voiceSamplesDirectory().appendingPathComponent(fileName)
-        let settings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 44_100,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
-        ]
 
         do {
-            try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
+            try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker, .allowBluetoothHFP])
             try session.setActive(true)
-            let recorder = try AVAudioRecorder(url: url, settings: settings)
-            recorder.isMeteringEnabled = true
-            recorder.prepareToRecord()
-            guard recorder.record() else {
-                throw VoiceRecordingError.failedToStart
+
+            let engine = AVAudioEngine()
+            let input = engine.inputNode
+            let format = input.outputFormat(forBus: 0)
+            let audioFile = try AVAudioFile(forWriting: url, settings: format.settings)
+            var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+            var recognitionTask: SFSpeechRecognitionTask?
+            if let recognizer, recognizer.isAvailable {
+                let request = SFSpeechAudioBufferRecognitionRequest()
+                request.shouldReportPartialResults = true
+                request.addsPunctuation = false
+                request.taskHint = .dictation
+                request.contextualStrings = prompt.normalizedSpeechWords + ["margins", "study", "tutor", "remember"]
+                recognitionRequest = request
+                recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+                    guard let self else { return }
+                    if let result {
+                        let transcript = result.bestTranscription.formattedString.lowercased()
+                        Task { @MainActor in
+                            self.applyLiveVoiceTranscript(transcript, prompt: prompt)
+                        }
+                    } else if error != nil {
+                        Task { @MainActor in
+                            self.liveRecognitionTask = nil
+                            self.liveRecognitionRequest = nil
+                        }
+                    }
+                }
             }
-            audioRecorder = recorder
+
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+                do {
+                    try audioFile.write(from: buffer)
+                } catch {
+                    return
+                }
+                recognitionRequest?.append(buffer)
+                let level = Self.normalizedVoiceLevel(buffer)
+                Task { @MainActor in
+                    guard let self, self.isRecordingVoice else { return }
+                    let activeLevel = self.isVoicePaused ? 0 : level
+                    let now = Date()
+                    if activeLevel > 0.055 {
+                        self.lastVoiceHeardAt = now
+                        if self.liveRecognitionRequest == nil {
+                            self.advanceFallbackVoiceProgress(prompt: prompt, now: now)
+                        }
+                    }
+                    self.voiceSignalActive = self.lastVoiceHeardAt.map { now.timeIntervalSince($0) < 0.85 } ?? false
+                    self.voiceRecordingLevel = activeLevel
+                    if let startedAt = self.voiceRecordingStartedAt {
+                        self.voiceRecordingElapsed = now.timeIntervalSince(startedAt)
+                    }
+                }
+            }
+
+            liveRecognitionRequest = recognitionRequest
+            liveRecognitionTask = recognitionTask
+            audioEngine = engine
+            voiceAudioFile = audioFile
+            engine.prepare()
+            try engine.start()
             recordingURL = url
             recordingPrompt = prompt
+            voiceRecordingStartedAt = Date()
             voiceProfile.wantsPersonalVoice = true
             isRecordingVoice = true
             isVoicePaused = false
             voiceRecordingElapsed = 0
             voiceRecordingLevel = 0
+            voiceSignalActive = false
+            voiceRecognitionAvailable = true
+            voicePromptWordProgress = 0
             latestVoiceTranscript = nil
-            beginVoiceMetering()
+            lastVoiceHeardAt = nil
+            lastFallbackWordAdvanceAt = nil
         } catch {
-            audioRecorder?.stop()
-            audioRecorder = nil
+            stopLiveVoiceCapture(cancelRecognition: true)
             recordingURL = nil
             recordingPrompt = nil
             isVoicePaused = false
             voiceRecordingElapsed = 0
             voiceRecordingLevel = 0
-            voiceMeterTask?.cancel()
-            voiceMeterTask = nil
+            voiceSignalActive = false
+            voiceRecognitionAvailable = false
+            voicePromptWordProgress = 0
+            voiceRecordingStartedAt = nil
+            lastVoiceHeardAt = nil
+            lastFallbackWordAdvanceAt = nil
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
             authMessage = "voice recording could not start."
         }
@@ -295,22 +366,31 @@ final class NotebookStore {
 
     private func finishVoicePrompt() {
         guard let url = recordingURL else { return }
-        voiceMeterTask?.cancel()
-        voiceMeterTask = nil
-        audioRecorder?.stop()
-        audioRecorder = nil
+        stopLiveVoiceCapture(cancelRecognition: false)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         isRecordingVoice = false
         isVoicePaused = false
 
         let prompt = recordingPrompt ?? ""
         let duration = voiceRecordingElapsed
+        let completedProgress = voicePromptWordProgress
         voiceRecordingElapsed = 0
         voiceRecordingLevel = 0
+        voiceSignalActive = false
+        voiceRecognitionAvailable = false
+        voicePromptWordProgress = 0
+        voiceRecordingStartedAt = nil
+        lastVoiceHeardAt = nil
+        lastFallbackWordAdvanceAt = nil
         recordingURL = nil
         recordingPrompt = nil
         guard duration >= 0.5 else {
             authMessage = "record a little longer so voice can be saved."
+            try? FileManager.default.removeItem(at: url)
+            return
+        }
+        guard completedProgress >= max(1, prompt.normalizedSpeechWords.count - 1) else {
+            authMessage = "read the sentence once so the voice sample can match it."
             try? FileManager.default.removeItem(at: url)
             return
         }
@@ -328,25 +408,102 @@ final class NotebookStore {
             let transcript = await transcribeVoiceSample(at: url)
             guard let sampleIndex = voiceProfile.samples.firstIndex(where: { $0.id == sampleID }) else { return }
             voiceProfile.samples[sampleIndex].transcript = transcript.isEmpty ? nil : transcript
-            latestVoiceTranscript = transcript.isEmpty ? "no clear speech was detected." : transcript
+            latestVoiceTranscript = transcript.isEmpty ? nil : transcript
             persist()
         }
     }
 
-    private func beginVoiceMetering() {
-        voiceMeterTask?.cancel()
-        voiceMeterTask = Task { @MainActor in
-            while !Task.isCancelled {
-                if let recorder = audioRecorder {
-                    recorder.updateMeters()
-                    voiceRecordingElapsed = recorder.currentTime
-                    let power = recorder.averagePower(forChannel: 0)
-                    let normalized = max(0, min(1, (Double(power) + 55) / 55))
-                    voiceRecordingLevel = isVoicePaused ? 0 : normalized
-                }
-                try? await Task.sleep(for: .milliseconds(120))
+    private func advanceFallbackVoiceProgress(prompt: String, now: Date) {
+        let targetCount = prompt.normalizedSpeechWords.count
+        guard targetCount > 0, voicePromptWordProgress < targetCount else { return }
+        if let lastFallbackWordAdvanceAt, now.timeIntervalSince(lastFallbackWordAdvanceAt) < 0.36 {
+            return
+        }
+        lastFallbackWordAdvanceAt = now
+        voicePromptWordProgress += 1
+        Haptics.selection()
+        if voicePromptWordProgress >= targetCount, voiceRecordingElapsed > 0.9 {
+            scheduleVoicePromptFinish(expectedProgress: targetCount)
+        }
+    }
+
+    private func applyLiveVoiceTranscript(_ transcript: String, prompt: String) {
+        guard isRecordingVoice else { return }
+        let heardRecently = lastVoiceHeardAt.map { Date().timeIntervalSince($0) < 1.1 } ?? false
+        guard heardRecently else {
+            latestVoiceTranscript = nil
+            return
+        }
+        latestVoiceTranscript = transcript.isEmpty ? nil : transcript
+        let matchedWords = matchedPromptWordCount(prompt: prompt, transcript: transcript)
+        if matchedWords > voicePromptWordProgress {
+            Haptics.selection()
+        }
+        voicePromptWordProgress = max(voicePromptWordProgress, matchedWords)
+        let targetCount = prompt.normalizedSpeechWords.count
+        if targetCount > 0, voicePromptWordProgress >= targetCount, voiceRecordingElapsed > 0.9 {
+            scheduleVoicePromptFinish(expectedProgress: targetCount)
+        }
+    }
+
+    private func matchedPromptWordCount(prompt: String, transcript: String) -> Int {
+        let promptWords = prompt.normalizedSpeechWords
+        let transcriptWords = transcript.normalizedSpeechWords
+        guard !promptWords.isEmpty, !transcriptWords.isEmpty else { return 0 }
+
+        var matched = 0
+        for spoken in transcriptWords {
+            guard matched < promptWords.count else { break }
+            let expected = promptWords[matched]
+            if speechWord(spoken, matches: expected) {
+                matched += 1
+            } else if matched + 1 < promptWords.count, speechWord(spoken, matches: promptWords[matched + 1]) {
+                matched += 2
             }
         }
+        return min(matched, promptWords.count)
+    }
+
+    private func speechWord(_ spoken: String, matches expected: String) -> Bool {
+        let spoken = spoken.speechAlias
+        let expected = expected.speechAlias
+        guard !spoken.isEmpty, !expected.isEmpty else { return false }
+        if spoken == expected || spoken.hasPrefix(expected) || expected.hasPrefix(spoken) {
+            return true
+        }
+        guard min(spoken.count, expected.count) >= 5 else { return false }
+        return spoken.levenshteinDistance(to: expected) <= 1
+    }
+
+    private func scheduleVoicePromptFinish(expectedProgress: Int) {
+        guard pendingVoiceFinishTask == nil else { return }
+        pendingVoiceFinishTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(520))
+            guard isRecordingVoice, voicePromptWordProgress >= expectedProgress else {
+                pendingVoiceFinishTask = nil
+                return
+            }
+            pendingVoiceFinishTask = nil
+            finishVoicePrompt()
+        }
+    }
+
+    private func stopLiveVoiceCapture(cancelRecognition: Bool) {
+        pendingVoiceFinishTask?.cancel()
+        pendingVoiceFinishTask = nil
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
+        voiceAudioFile = nil
+        voiceSignalActive = false
+        voiceRecognitionAvailable = false
+        lastFallbackWordAdvanceAt = nil
+        liveRecognitionRequest?.endAudio()
+        liveRecognitionRequest = nil
+        if cancelRecognition {
+            liveRecognitionTask?.cancel()
+        }
+        liveRecognitionTask = nil
     }
 
     private func requestMicrophonePermission() async -> Bool {
@@ -451,10 +608,12 @@ final class NotebookStore {
         guard !images.isEmpty else { return }
         scanPhase = .capturing
         activeScanJob = ScanJob(targetSubject: notebook.subject, phase: .capturing)
+        await ScanLiveActivityCenter.shared.start(notebookID: notebook.id, subject: notebook.subject, pageCount: images.count)
         try? await Task.sleep(for: .milliseconds(180))
 
         scanPhase = .processing
         activeScanJob?.phase = .processing
+        await ScanLiveActivityCenter.shared.update(phase: .processing, subject: notebook.subject, pageCount: images.count)
         var processedPages: [(ExtractedContent, String)] = []
         for image in images {
             let extracted = await scanProcessor.process(image: image)
@@ -465,17 +624,22 @@ final class NotebookStore {
         scanPhase = .organizing
         activeScanJob?.phase = .organizing
         activeScanJob?.targetSubject = processedPages.last?.1 ?? notebook.subject
+        await ScanLiveActivityCenter.shared.update(phase: .organizing, subject: activeScanJob?.targetSubject ?? notebook.subject, pageCount: images.count)
         try? await Task.sleep(for: .milliseconds(220))
 
         scanPhase = .sorted
         activeScanJob?.phase = .sorted
+        await ScanLiveActivityCenter.shared.update(phase: .sorted, subject: activeScanJob?.targetSubject ?? notebook.subject, pageCount: images.count)
         for (offset, page) in processedPages.enumerated().reversed() {
             insertScannedPage(page.0, intoNotebookID: notebookID, classifiedSubject: page.1, pageNumber: offset + 1)
         }
+        await ScanLiveActivityCenter.shared.end(subject: activeScanJob?.targetSubject ?? notebook.subject, pageCount: images.count)
         try? await Task.sleep(for: .milliseconds(760))
     }
 
     func resetScan() {
+        let subject = activeScanJob?.targetSubject ?? "notes"
+        Task { await ScanLiveActivityCenter.shared.end(phase: .framing, subject: subject, pageCount: 0) }
         withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
             scanPhase = .framing
             activeScanJob = nil
@@ -550,7 +714,7 @@ final class NotebookStore {
 
     private func voiceSamplesDirectory() -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
-        let directory = base.appendingPathComponent("notebook-voice-samples", isDirectory: true)
+        let directory = base.appendingPathComponent("margins-voice-samples", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
@@ -587,6 +751,65 @@ final class NotebookStore {
                 continuation.resume(returning: status == .authorized)
             }
         }
+    }
+
+    nonisolated private static func normalizedVoiceLevel(_ buffer: AVAudioPCMBuffer) -> Double {
+        guard let channel = buffer.floatChannelData?[0] else { return 0 }
+        let frameCount = Int(buffer.frameLength)
+        guard frameCount > 0 else { return 0 }
+        var sum: Float = 0
+        for index in 0..<frameCount {
+            let sample = channel[index]
+            sum += sample * sample
+        }
+        let rms = sqrt(sum / Float(frameCount))
+        return max(0, min(1, Double(rms) * 18))
+    }
+}
+
+private extension String {
+    var normalizedSpeechWords: [String] {
+        lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    var speechAlias: String {
+        switch self {
+        case "eye": "i"
+        case "ill", "i'll": "will"
+        case "im", "i'm": "i"
+        case "calmly": "calm"
+        case "patients": "patient"
+        case "matter": "matters"
+        default: self
+        }
+    }
+
+    func levenshteinDistance(to other: String) -> Int {
+        let source = Array(self)
+        let target = Array(other)
+        if source.isEmpty { return target.count }
+        if target.isEmpty { return source.count }
+
+        var previous = Array(0...target.count)
+        var current = Array(repeating: 0, count: target.count + 1)
+
+        for sourceIndex in 1...source.count {
+            current[0] = sourceIndex
+            for targetIndex in 1...target.count {
+                let substitution = previous[targetIndex - 1] + (source[sourceIndex - 1] == target[targetIndex - 1] ? 0 : 1)
+                current[targetIndex] = Swift.min(
+                    previous[targetIndex] + 1,
+                    current[targetIndex - 1] + 1,
+                    substitution
+                )
+            }
+            swap(&previous, &current)
+        }
+
+        return previous[target.count]
     }
 }
 
