@@ -12,11 +12,12 @@ struct HomeView: View {
     @State private var selectedJournalIndex = 0
     @State private var doodleDrift = false
     private let allowedSubjects = [
-        "math", "algebra", "geometry", "calculus", "statistics",
-        "science", "biology", "chemistry", "physics", "earth science",
-        "history", "world history", "us history", "government",
-        "english", "literature", "writing", "spanish", "french",
-        "computer science", "economics", "psychology", "art", "music"
+        "math", "pre algebra", "algebra", "geometry", "trigonometry", "precalculus", "calculus", "statistics",
+        "science", "biology", "chemistry", "physics", "environmental science", "earth science", "anatomy",
+        "history", "world history", "us history", "european history", "government", "civics",
+        "english", "literature", "writing", "creative writing", "spanish", "french", "latin",
+        "computer science", "coding", "data science", "robotics", "economics", "psychology", "sociology",
+        "art", "music", "theater", "health", "business", "engineering"
     ]
 
     var body: some View {
@@ -197,9 +198,17 @@ struct HomeView: View {
             LivingPaperBackground().ignoresSafeArea()
             GlassSurface(radius: 30, padding: 20, interactive: true) {
                 VStack(spacing: 16) {
-                    Text("add course")
-                        .font(.system(.title2, design: .serif, weight: .semibold))
-                        .foregroundStyle(NotebookTheme.ink)
+                    HStack(spacing: 12) {
+                        Image(systemName: "book.closed.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 38, height: 38)
+                            .background(NotebookTheme.ink, in: Circle())
+                        Text("add course")
+                            .font(.system(.title2, design: .serif, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.ink)
+                        Spacer()
+                    }
 
                     HStack(spacing: 10) {
                         TextField("", text: $courseDraft)
@@ -241,7 +250,7 @@ struct HomeView: View {
                                     Spacer()
                                 }
                                 .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
+                                .padding(.vertical, 9)
                                 .background(.white.opacity(0.58), in: Capsule())
                             }
                             .buttonStyle(.plain)
@@ -261,7 +270,10 @@ struct HomeView: View {
         let availableSubjects = allowedSubjects.filter { subject in
             !store.notebooks.contains(where: { $0.subject == subject })
         }
-        guard !draft.isEmpty else { return Array(availableSubjects.prefix(4)) }
+        guard !draft.isEmpty else {
+            let featured = ["biology", "math", "computer science", "chemistry", "history", "english"]
+            return featured.filter { availableSubjects.contains($0) } + Array(availableSubjects.filter { !featured.contains($0) }.prefix(2))
+        }
         let matches = availableSubjects.filter { subject in
             subject.hasPrefix(draft) || subject.localizedCaseInsensitiveContains(draft)
         }
