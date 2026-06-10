@@ -23,6 +23,10 @@
 		10000000000000000000010E /* StudyFocusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000E /* StudyFocusView.swift */; };
 		10000000000000000000010F /* VoiceOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000F /* VoiceOnboardingView.swift */; };
 		100000000000000000000110 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000010 /* Assets.xcassets */; };
+		100000000000000000000112 /* AppPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000012 /* AppPersistence.swift */; };
+		100000000000000000000113 /* DocumentScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* DocumentScannerView.swift */; };
+		100000000000000000000114 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* Haptics.swift */; };
+		100000000000000000000115 /* AtmosphereViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000015 /* AtmosphereViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +46,10 @@
 		10000000000000000000000E /* StudyFocusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyFocusView.swift; sourceTree = "<group>"; };
 		10000000000000000000000F /* VoiceOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceOnboardingView.swift; sourceTree = "<group>"; };
 		100000000000000000000010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		100000000000000000000012 /* AppPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPersistence.swift; sourceTree = "<group>"; };
+		100000000000000000000013 /* DocumentScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentScannerView.swift; sourceTree = "<group>"; };
+		100000000000000000000014 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
+		100000000000000000000015 /* AtmosphereViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AtmosphereViews.swift; sourceTree = "<group>"; };
 		100000000000000000000020 /* notebook.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = notebook.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -99,6 +107,8 @@
 			isa = PBXGroup;
 			children = (
 				100000000000000000000004 /* StudyServices.swift */,
+				100000000000000000000012 /* AppPersistence.swift */,
+				100000000000000000000014 /* Haptics.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -117,6 +127,8 @@
 				100000000000000000000006 /* GlassSurface.swift */,
 				100000000000000000000007 /* CompositionNotebookCard.swift */,
 				100000000000000000000008 /* NotebookPaperView.swift */,
+				100000000000000000000013 /* DocumentScannerView.swift */,
+				100000000000000000000015 /* AtmosphereViews.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -227,6 +239,10 @@
 				10000000000000000000010D /* NotebookDetailView.swift in Sources */,
 				10000000000000000000010E /* StudyFocusView.swift in Sources */,
 				10000000000000000000010F /* VoiceOnboardingView.swift in Sources */,
+				100000000000000000000112 /* AppPersistence.swift in Sources */,
+				100000000000000000000113 /* DocumentScannerView.swift in Sources */,
+				100000000000000000000114 /* Haptics.swift in Sources */,
+				100000000000000000000115 /* AtmosphereViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -360,16 +376,18 @@
 				DEVELOPMENT_TEAM = K9QT25YK23;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = notebook;
+				INFOPLIST_KEY_CFBundleDisplayName = marbled;
 				INFOPLIST_KEY_NSCameraUsageDescription = "notebook uses the camera to scan study pages.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "notebook uses face id to verify password reset requests.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "notebook uses the microphone for optional voice personalization.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "notebook can import a note photo when the simulator has no camera.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "notebook transcribes your optional voice setup recording.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswajitacharya.notebook;
-				PRODUCT_NAME = notebook;
+				PRODUCT_NAME = marbled;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -390,16 +408,18 @@
 				DEVELOPMENT_TEAM = K9QT25YK23;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = notebook;
+				INFOPLIST_KEY_CFBundleDisplayName = marbled;
 				INFOPLIST_KEY_NSCameraUsageDescription = "notebook uses the camera to scan study pages.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "notebook uses face id to verify password reset requests.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "notebook uses the microphone for optional voice personalization.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "notebook can import a note photo when the simulator has no camera.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "notebook transcribes your optional voice setup recording.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswajitacharya.notebook;
-				PRODUCT_NAME = notebook;
+				PRODUCT_NAME = marbled;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;

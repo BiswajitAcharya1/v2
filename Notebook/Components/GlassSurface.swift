@@ -14,15 +14,40 @@ struct GlassSurface<Content: View>: View {
                     interactive ? .regular.interactive() : .regular,
                     in: .rect(cornerRadius: radius)
                 )
+                .overlay {
+                    GlassEdgeLight(radius: radius)
+                }
         } else {
             content
                 .padding(padding)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .stroke(.white.opacity(0.28), lineWidth: 0.7)
+                    GlassEdgeLight(radius: radius)
                 }
         }
+    }
+}
+
+private struct GlassEdgeLight: View {
+    var radius: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .stroke(
+                LinearGradient(
+                    colors: [.white.opacity(0.72), .white.opacity(0.18), .black.opacity(0.06)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 0.8
+            )
+            .overlay(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(.white.opacity(0.18))
+                    .frame(height: 1)
+                    .padding(.horizontal, radius * 0.42)
+                    .blur(radius: 0.5)
+            }
     }
 }
 
@@ -76,21 +101,62 @@ struct IconGlassButton: View {
 }
 
 struct StudyAgentBubble: View {
+    @Environment(NotebookStore.self) private var store
     var mode: AgentMode
     @State private var open = false
     @State private var pulse = false
+    @State private var question = ""
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 10) {
             if open {
-                Text(mode.message)
-                    .font(.system(.footnote, design: .rounded, weight: .semibold))
-                    .foregroundStyle(NotebookTheme.ink)
-                    .multilineTextAlignment(.trailing)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 11)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .transition(.move(edge: .trailing).combined(with: .opacity).combined(with: .scale(scale: 0.94)))
+                VStack(alignment: .trailing, spacing: 10) {
+                    Text(store.latestVoiceQuestion ?? mode.message)
+                        .font(.system(.footnote, design: .rounded, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .multilineTextAlignment(.trailing)
+                    HStack(spacing: 8) {
+                        TextField("", text: $question)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .font(.system(.footnote, design: .rounded))
+                            .foregroundStyle(NotebookTheme.ink)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(.white.opacity(0.58), in: Capsule())
+                        Button {
+                            let prompt = question
+                            question = ""
+                            Task { await store.askGemma(prompt) }
+                        } label: {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 36, height: 36)
+                                .background(NotebookTheme.ink, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Button {
+                        Task { await store.askGemma("how do i set this up?") }
+                    } label: {
+                        Label("suggest", systemImage: "lightbulb.fill")
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(NotebookTheme.ink, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(.white.opacity(0.58), lineWidth: 1)
+                }
+                .transition(.move(edge: .trailing).combined(with: .opacity).combined(with: .scale(scale: 0.94)))
             }
 
             Button {
@@ -99,15 +165,18 @@ struct StudyAgentBubble: View {
                 }
             } label: {
                 ZStack {
-                    Circle()
+                    Capsule()
                         .fill(.ultraThinMaterial)
                         .overlay {
-                            Circle().stroke(.white.opacity(0.75), lineWidth: 1)
+                            Capsule().stroke(.white.opacity(0.75), lineWidth: 1)
                         }
-                    Image(systemName: open ? "xmark" : "sparkles")
-                        .font(.system(size: 20, weight: .bold))
-                        .rotationEffect(.degrees(open ? 90 : 0))
-                        .foregroundStyle(NotebookTheme.ink)
+                    HStack(spacing: 8) {
+                        Image(systemName: open ? "xmark" : "questionmark.bubble.fill")
+                            .font(.system(size: open ? 16 : 17, weight: .bold))
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                    }
+                    .foregroundStyle(NotebookTheme.ink)
+                    .padding(.horizontal, 15)
                 }
                 .frame(width: 58, height: 58)
                 .scaleEffect(pulse ? 1.04 : 0.98)
@@ -157,9 +226,13 @@ struct ContainerTextFlip: View {
                 .id(wordIndex)
                 .font(.system(.callout, design: wordIndex.isMultiple(of: 2) ? .serif : .rounded, weight: .semibold))
                 .foregroundStyle(NotebookTheme.ink)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(.ultraThinMaterial, in: Capsule())
+                .padding(.horizontal, 2)
+                .overlay(alignment: .bottom) {
+                    Capsule()
+                        .fill(NotebookTheme.ink.opacity(0.18))
+                        .frame(height: 3)
+                        .offset(y: 4)
+                }
                 .transition(.asymmetric(
                     insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.92)),
                     removal: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 1.04))

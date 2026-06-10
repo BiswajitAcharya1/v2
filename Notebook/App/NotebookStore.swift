@@ -2,6 +2,8 @@ import Foundation
 import Observation
 import SwiftUI
 import AVFoundation
+import UIKit
+import Speech
 
 @MainActor
 @Observable
@@ -25,12 +27,14 @@ final class NotebookStore {
     var isVoicePaused = false
     var voiceRecordingElapsed: TimeInterval = 0
     var voiceRecordingLevel: Double = 0
+    var latestVoiceTranscript: String?
 
     private let authService: LocalAuthServing = LocalAuthService()
     private let scanProcessor: ScanProcessingServing = LocalScanProcessingService()
     private let aiService: NoteUnderstandingServing = LocalNoteUnderstandingService()
     private let reviewService: SpacedRepetitionServing = LocalSpacedRepetitionService()
     private let voiceService: VoiceServing = MossTTSVoiceService()
+    @ObservationIgnored private let persistence = AppPersistence()
     @ObservationIgnored private var audioRecorder: AVAudioRecorder?
     @ObservationIgnored private var recordingURL: URL?
     @ObservationIgnored private var recordingPrompt: String?
@@ -44,7 +48,35 @@ final class NotebookStore {
         .light
     }
 
+    init() {
+        if let saved = persistence.load() {
+            user = saved.user
+            notebooks = saved.notebooks
+            authSession = saved.authSession
+            isAuthenticated = saved.authSession != nil
+            hasCompletedOnboarding = saved.hasCompletedOnboarding
+            setupStep = saved.setupStep
+            appTheme = saved.appTheme
+            selectedStudyMode = saved.selectedStudyMode
+            voiceProfile = saved.voiceProfile
+            onboardingSubjects = saved.onboardingSubjects
+        }
+    }
+
     func signIn(provider: AuthProvider) async {
+        if provider == .apple || provider == .google {
+            let message = "\(provider.rawValue) secrets are not added yet."
+            authMessage = message
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2.4))
+                if authMessage == message {
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+                        authMessage = nil
+                    }
+                }
+            }
+            return
+        }
         let session = await authService.signIn(provider: provider)
         completeAuth(session)
     }
@@ -80,6 +112,7 @@ final class NotebookStore {
             hasCompletedOnboarding = true
             setupStep = .voiceRecording
         }
+        persist()
     }
 
     func choosePersonalVoice(_ wantsPersonalVoice: Bool) {
@@ -87,6 +120,7 @@ final class NotebookStore {
         withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) {
             setupStep = wantsPersonalVoice ? .voiceRecording : .subjects
         }
+        persist()
     }
 
     func recordVoicePrompt(_ prompt: String) async {
@@ -127,24 +161,28 @@ final class NotebookStore {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
             setupStep = .subjects
         }
+        persist()
     }
 
     func retakeVoicePrompt() {
         guard !voiceProfile.samples.isEmpty else { return }
         voiceProfile.samples.removeLast()
         voiceProfile.isPersonalized = false
+        persist()
     }
 
     func chooseTheme(_ theme: AppTheme) {
         withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
             appTheme = theme
         }
+        persist()
     }
 
     func continueToSubjects() {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
             setupStep = .subjects
         }
+        persist()
     }
 
     func setSubjects(_ subjects: [String]) {
@@ -166,6 +204,25 @@ final class NotebookStore {
         finishOnboarding()
     }
 
+    func addCourse(_ subject: String) {
+        let cleaned = subject.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleaned.isEmpty, !notebooks.contains(where: { $0.subject == cleaned }) else { return }
+        withAnimation(.spring(response: 0.62, dampingFraction: 0.82)) {
+            notebooks.append(
+                SubjectNotebook(
+                    subject: cleaned,
+                    pages: [],
+                    progress: 0,
+                    lastActivity: "ready to scan",
+                    isPinned: notebooks.isEmpty,
+                    accent: ColorToken.allCases[notebooks.count % ColorToken.allCases.count]
+                )
+            )
+            onboardingSubjects.append(cleaned)
+        }
+        persist()
+    }
+
     private func completeAuth(_ session: AuthSession) {
         authSession = session
         authMessage = "\(session.provider.rawValue) ready"
@@ -175,6 +232,7 @@ final class NotebookStore {
             hasCompletedOnboarding = false
             setupStep = .voiceRecording
         }
+        persist()
     }
 
     private func startVoicePrompt(_ prompt: String) async {
@@ -184,7 +242,7 @@ final class NotebookStore {
         }
         let session = AVAudioSession.sharedInstance()
         let fileName = "notebook-voice-\(UUID().uuidString).m4a"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        let url = voiceSamplesDirectory().appendingPathComponent(fileName)
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
             AVSampleRateKey: 44_100,
@@ -238,12 +296,22 @@ final class NotebookStore {
         voiceRecordingLevel = 0
         recordingURL = nil
         recordingPrompt = nil
-        voiceProfile.samples.append(VoiceSample(prompt: prompt, isRecorded: true, audioURL: url, duration: duration))
+        let sampleID = UUID()
+        voiceProfile.samples.append(VoiceSample(id: sampleID, prompt: prompt, isRecorded: true, audioURL: url, duration: duration))
         voiceProfile.isPersonalized = voiceProfile.samples.count == 3
         if voiceProfile.isPersonalized {
             withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
                 setupStep = .subjects
             }
+        }
+        persist()
+
+        Task { @MainActor in
+            let transcript = await transcribeVoiceSample(at: url)
+            guard let sampleIndex = voiceProfile.samples.firstIndex(where: { $0.id == sampleID }) else { return }
+            voiceProfile.samples[sampleIndex].transcript = transcript.isEmpty ? nil : transcript
+            latestVoiceTranscript = transcript.isEmpty ? "no clear speech was detected." : transcript
+            persist()
         }
     }
 
@@ -284,11 +352,13 @@ final class NotebookStore {
     func pin(_ notebook: SubjectNotebook) {
         guard let index = notebooks.firstIndex(where: { $0.id == notebook.id }) else { return }
         notebooks[index].isPinned.toggle()
+        persist()
     }
 
     func rename(_ notebook: SubjectNotebook, to name: String) {
         guard let index = notebooks.firstIndex(where: { $0.id == notebook.id }) else { return }
         notebooks[index].subject = name.lowercased()
+        persist()
     }
 
     func move(_ notebook: SubjectNotebook, direction: MoveDirection) {
@@ -298,6 +368,7 @@ final class NotebookStore {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) {
             notebooks.swapAt(index, target)
         }
+        persist()
     }
 
     func updatePageText(pageID: NotebookPage.ID, text: String) {
@@ -305,6 +376,7 @@ final class NotebookStore {
             guard let pageIndex = notebooks[notebookIndex].pages.firstIndex(where: { $0.id == pageID }) else { continue }
             notebooks[notebookIndex].pages[pageIndex].content.cleanedText = text.lowercased()
             notebooks[notebookIndex].lastActivity = "edited notes"
+            persist()
             return
         }
     }
@@ -343,49 +415,41 @@ final class NotebookStore {
             notebooks[notebookIndex].pages.insert(page, at: 0)
             notebooks[notebookIndex].lastActivity = "typed page added"
         }
+        persist()
     }
 
     @MainActor
-    func scanPage(into notebookID: SubjectNotebook.ID) async {
+    func scanCapturedImage(_ image: UIImage, into notebookID: SubjectNotebook.ID) async {
+        await scanCapturedImages([image], into: notebookID)
+    }
+
+    @MainActor
+    func scanCapturedImages(_ images: [UIImage], into notebookID: SubjectNotebook.ID) async {
         guard let notebook = notebooks.first(where: { $0.id == notebookID }) else { return }
+        guard !images.isEmpty else { return }
         scanPhase = .capturing
         activeScanJob = ScanJob(targetSubject: notebook.subject, phase: .capturing)
-        try? await Task.sleep(for: .seconds(0.55))
+        try? await Task.sleep(for: .milliseconds(180))
 
         scanPhase = .processing
         activeScanJob?.phase = .processing
-        let extracted = await scanProcessor.processDemoCapture()
-        try? await Task.sleep(for: .seconds(0.55))
+        var processedPages: [(ExtractedContent, String)] = []
+        for image in images {
+            let extracted = await scanProcessor.process(image: image)
+            let classifiedSubject = await aiService.classify(extracted)
+            processedPages.append((extracted, classifiedSubject))
+        }
 
         scanPhase = .organizing
         activeScanJob?.phase = .organizing
-        try? await Task.sleep(for: .seconds(0.45))
+        activeScanJob?.targetSubject = processedPages.last?.1 ?? notebook.subject
+        try? await Task.sleep(for: .milliseconds(220))
 
         scanPhase = .sorted
         activeScanJob?.phase = .sorted
-        insertScannedPage(extracted, intoNotebookID: notebookID)
-    }
-
-    @MainActor
-    func runDemoScan() async {
-        scanPhase = .capturing
-        activeScanJob = ScanJob(targetSubject: nil, phase: .capturing)
-        try? await Task.sleep(for: .seconds(0.8))
-
-        scanPhase = .processing
-        activeScanJob?.phase = .processing
-        let extracted = await scanProcessor.processDemoCapture()
-        try? await Task.sleep(for: .seconds(0.8))
-
-        scanPhase = .organizing
-        activeScanJob?.phase = .organizing
-        let subject = await aiService.classify(extracted)
-        try? await Task.sleep(for: .seconds(0.7))
-
-        scanPhase = .sorted
-        activeScanJob?.targetSubject = subject
-        activeScanJob?.phase = .sorted
-        insertScannedPage(extracted, into: subject)
+        for (offset, page) in processedPages.enumerated().reversed() {
+            insertScannedPage(page.0, intoNotebookID: notebookID, classifiedSubject: page.1, pageNumber: offset + 1)
+        }
     }
 
     func resetScan() {
@@ -416,6 +480,10 @@ final class NotebookStore {
         latestVoiceQuestion = await voiceService.transcribeQuestion()
     }
 
+    func askGemma(_ question: String) async {
+        latestVoiceQuestion = aiService.supportAnswer(question)
+    }
+
     private func insertScannedPage(_ content: ExtractedContent, into subject: String) {
         guard let index = notebooks.firstIndex(where: { $0.subject == subject }) else { return }
         insertScannedPage(content, at: index)
@@ -426,9 +494,19 @@ final class NotebookStore {
         insertScannedPage(content, at: index)
     }
 
-    private func insertScannedPage(_ content: ExtractedContent, at index: Int) {
+    private func insertScannedPage(_ content: ExtractedContent, intoNotebookID notebookID: SubjectNotebook.ID, classifiedSubject: String) {
+        insertScannedPage(content, intoNotebookID: notebookID, classifiedSubject: classifiedSubject, pageNumber: nil)
+    }
+
+    private func insertScannedPage(_ content: ExtractedContent, intoNotebookID notebookID: SubjectNotebook.ID, classifiedSubject: String, pageNumber: Int?) {
+        guard let index = notebooks.firstIndex(where: { $0.id == notebookID }) else { return }
+        let suffix = pageNumber.map { " page \($0)" } ?? ""
+        insertScannedPage(content, at: index, title: "\(classifiedSubject)\(suffix)")
+    }
+
+    private func insertScannedPage(_ content: ExtractedContent, at index: Int, title: String = "scanned notes") {
         let page = NotebookPage(
-            title: "limits review",
+            title: title,
             createdAt: .now,
             rawScanLabel: "captured page",
             content: content,
@@ -438,6 +516,62 @@ final class NotebookStore {
             notebooks[index].pages.insert(page, at: 0)
             notebooks[index].lastActivity = "new scan sorted"
             notebooks[index].progress = min(notebooks[index].progress + 0.08, 1)
+        }
+        persist()
+    }
+
+    private func persist() {
+        persistence.save(PersistedNotebookState(
+            user: user,
+            notebooks: notebooks,
+            authSession: authSession,
+            hasCompletedOnboarding: hasCompletedOnboarding,
+            setupStep: setupStep,
+            appTheme: appTheme,
+            selectedStudyMode: selectedStudyMode,
+            voiceProfile: voiceProfile,
+            onboardingSubjects: onboardingSubjects
+        ))
+    }
+
+    private func voiceSamplesDirectory() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
+        let directory = base.appendingPathComponent("notebook-voice-samples", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private func transcribeVoiceSample(at url: URL) async -> String {
+        guard await requestSpeechPermission() else {
+            authMessage = "speech recognition access is needed to transcribe voice."
+            return ""
+        }
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US")), recognizer.isAvailable else {
+            authMessage = "speech recognition is not available right now."
+            return ""
+        }
+
+        return await withCheckedContinuation { continuation in
+            let request = SFSpeechURLRecognitionRequest(url: url)
+            request.shouldReportPartialResults = false
+            var didResume = false
+            recognizer.recognitionTask(with: request) { result, error in
+                if let result, result.isFinal, !didResume {
+                    didResume = true
+                    continuation.resume(returning: result.bestTranscription.formattedString.lowercased())
+                } else if error != nil, !didResume {
+                    didResume = true
+                    continuation.resume(returning: "")
+                }
+            }
+        }
+    }
+
+    private func requestSpeechPermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { status in
+                continuation.resume(returning: status == .authorized)
+            }
         }
     }
 }

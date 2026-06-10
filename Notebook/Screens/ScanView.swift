@@ -4,6 +4,7 @@ struct ScanView: View {
     @Environment(NotebookStore.self) private var store
     @State private var isRunning = false
     @State private var pageFlying = false
+    @State private var showingScanner = false
 
     var body: some View {
         NavigationStack {
@@ -32,6 +33,24 @@ struct ScanView: View {
             .toolbarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showingScanner) {
+                DocumentScannerView { images in
+                    guard let notebook = store.notebooks.first else { return }
+                    Task {
+                        isRunning = true
+                        pageFlying = false
+                        await store.scanCapturedImages(images, into: notebook.id)
+                        Haptics.success()
+                        pageFlying = true
+                        try? await Task.sleep(for: .seconds(0.8))
+                        isRunning = false
+                    }
+                } onCancel: {
+                    Haptics.softTap()
+                    isRunning = false
+                }
+                .ignoresSafeArea()
+            }
         }
     }
 
@@ -91,19 +110,14 @@ struct ScanView: View {
     private var captureButton: some View {
         Button {
             guard !isRunning else {
+                Haptics.softTap()
                 store.resetScan()
                 pageFlying = false
                 isRunning = false
                 return
             }
-            isRunning = true
-            pageFlying = false
-            Task { @MainActor in
-                await store.runDemoScan()
-                pageFlying = true
-                try? await Task.sleep(for: .seconds(1.2))
-                isRunning = false
-            }
+            Haptics.open()
+            showingScanner = true
         } label: {
             Image(systemName: isRunning ? "arrow.counterclockwise" : "camera.viewfinder")
                 .font(.system(size: 24, weight: .bold))

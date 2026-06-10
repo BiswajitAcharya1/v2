@@ -15,6 +15,12 @@ struct RootShellView: View {
                 AuthView()
             }
         }
+        .transition(.asymmetric(
+            insertion: .opacity.combined(with: .scale(scale: 0.985)),
+            removal: .opacity.combined(with: .scale(scale: 1.015))
+        ))
+        .animation(.spring(response: 0.72, dampingFraction: 0.84), value: store.isAuthenticated)
+        .animation(.spring(response: 0.72, dampingFraction: 0.84), value: store.hasCompletedOnboarding)
         .preferredColorScheme(.light)
     }
 
@@ -45,7 +51,31 @@ private struct SetupFlowView: View {
 
     var body: some View {
         ZStack {
-            NotebookTheme.field.ignoresSafeArea()
+            LivingPaperBackground().ignoresSafeArea()
+            if store.setupStep == .voiceRecording {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button {
+                            Haptics.softTap()
+                            withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
+                                store.skipVoiceSetup()
+                            }
+                        } label: {
+                            Image(systemName: "forward.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(NotebookTheme.ink)
+                                .frame(width: 52, height: 52)
+                                .background(.ultraThinMaterial, in: Circle())
+                                .rotationEffect(.degrees(store.setupStep == .voiceRecording ? 0 : 90))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.trailing, 20)
+                        .padding(.top, 18)
+                    }
+                    Spacer()
+                }
+            }
             VStack(spacing: 24) {
                 Spacer()
                 NotebookLogo()
@@ -53,14 +83,21 @@ private struct SetupFlowView: View {
                     .rotationEffect(.degrees(store.setupStep == .theme ? -4 : 3))
                     .animation(.spring(response: 0.55, dampingFraction: 0.75), value: store.setupStep)
 
-                switch store.setupStep {
-                case .voiceRecording:
-                    voiceRecording
-                case .theme:
-                    subjectChoice
-                case .subjects:
-                    subjectChoice
+                Group {
+                    switch store.setupStep {
+                    case .voiceRecording:
+                        voiceRecording
+                    case .theme:
+                        subjectChoice
+                    case .subjects:
+                        subjectChoice
+                    }
                 }
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity).combined(with: .scale(scale: 0.98)),
+                    removal: .move(edge: .leading).combined(with: .opacity).combined(with: .scale(scale: 1.02))
+                ))
+                .animation(.spring(response: 0.62, dampingFraction: 0.84), value: store.setupStep)
 
                 Spacer()
             }
@@ -74,16 +111,26 @@ private struct SetupFlowView: View {
                 Text("voice")
                     .font(.system(.title2, design: .serif, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
-                Text(prompts[min(store.voiceProfile.samples.count, prompts.count - 1)])
-                    .font(.system(.headline, design: .rounded, weight: .semibold))
-                    .foregroundStyle(NotebookTheme.ink)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(5)
+                VoicePromptText(
+                    prompt: prompts[min(store.voiceProfile.samples.count, prompts.count - 1)],
+                    elapsed: store.voiceRecordingElapsed,
+                    recording: store.isRecordingVoice
+                )
 
-                Text(store.isRecordingVoice ? "tap again to save this sentence." : "tap once, read the sentence, then tap again.")
+                Text(store.isRecordingVoice ? "keep reading as the words glow." : "tap once and read the sentence.")
                     .font(.system(.footnote, design: .rounded, weight: .medium))
                     .foregroundStyle(NotebookTheme.muted)
                     .multilineTextAlignment(.center)
+                if let transcript = store.latestVoiceTranscript, !transcript.isEmpty {
+                    Text(transcript)
+                        .font(.system(.footnote, design: .serif, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink.opacity(0.82))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(.white.opacity(0.52), in: Capsule())
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
 
                 VoiceProgress(count: store.voiceProfile.samples.count, total: prompts.count, recording: store.isRecordingVoice)
                 VoiceRecordingReadout(
@@ -95,6 +142,7 @@ private struct SetupFlowView: View {
 
                 HStack(spacing: 14) {
                     Button {
+                        Haptics.softTap()
                         store.retakeVoicePrompt()
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
@@ -103,41 +151,23 @@ private struct SetupFlowView: View {
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.muted.opacity(0.6), foreground: NotebookTheme.ink))
 
-                    if store.isRecordingVoice {
-                        Button {
-                            if store.isVoicePaused {
-                                store.resumeVoiceRecording()
-                            } else {
-                                store.pauseVoiceRecording()
-                            }
-                        } label: {
-                            Image(systemName: store.isVoicePaused ? "play.fill" : "pause.fill")
-                                .font(.system(size: 18, weight: .bold))
-                                .frame(width: 56, height: 56)
-                        }
-                        .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.76), foreground: NotebookTheme.ink))
-                        .transition(.scale.combined(with: .opacity))
-                    }
-
                     Button {
+                        Haptics.open()
                         Task {
-                            await store.recordVoicePrompt(prompts[min(store.voiceProfile.samples.count, prompts.count - 1)])
+                            let prompt = prompts[min(store.voiceProfile.samples.count, prompts.count - 1)]
+                            await store.recordVoicePrompt(prompt)
+                            let seconds = min(6.0, max(3.2, Double(prompt.split(separator: " ").count) * 0.48))
+                            try? await Task.sleep(for: .milliseconds(Int(seconds * 1000)))
+                            if store.isRecordingVoice {
+                                await store.recordVoicePrompt(prompt)
+                            }
                         }
                     } label: {
-                        Image(systemName: store.isRecordingVoice ? "stop.fill" : "mic.fill")
+                        Image(systemName: store.isRecordingVoice ? "waveform" : "mic.fill")
                             .font(.system(size: 22, weight: .bold))
                             .frame(width: 72, height: 72)
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
-
-                    Button {
-                        store.skipVoiceSetup()
-                    } label: {
-                        Image(systemName: "forward.fill")
-                            .font(.system(size: 17, weight: .bold))
-                            .frame(width: 56, height: 56)
-                    }
-                    .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
                 }
             }
         }
@@ -192,6 +222,7 @@ private struct SetupFlowView: View {
                         }
                     }
                     .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.spring(response: 0.72, dampingFraction: 0.86), value: subjectSuggestions)
                 }
 
                 if !subjects.isEmpty {
@@ -226,6 +257,7 @@ private struct SetupFlowView: View {
 
     private func addSubject(_ subject: String) {
         guard !subject.isEmpty, !subjects.contains(subject) else { return }
+        Haptics.selection()
         withAnimation(.spring(response: 0.4, dampingFraction: 0.82)) {
             subjects.append(subject)
             subjectDraft = ""
@@ -270,6 +302,37 @@ private struct VoiceProgress: View {
     }
 }
 
+private struct VoicePromptText: View {
+    var prompt: String
+    var elapsed: TimeInterval
+    var recording: Bool
+
+    private var words: [String] {
+        prompt.split(separator: " ").map(String.init)
+    }
+
+    var body: some View {
+        let activeIndex = recording ? min(words.count - 1, Int(elapsed / 0.48)) : -1
+        highlightedSentence(activeIndex: activeIndex)
+            .font(.system(.title3, design: .rounded, weight: .semibold))
+            .lineSpacing(6)
+            .multilineTextAlignment(.center)
+            .animation(.spring(response: 0.32, dampingFraction: 0.78), value: activeIndex)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func highlightedSentence(activeIndex: Int) -> Text {
+        var text = Text("")
+        for (index, word) in words.enumerated() {
+            let rawPiece = Text(word + (index == words.count - 1 ? "" : " "))
+                .foregroundStyle(index <= activeIndex ? NotebookTheme.ink : NotebookTheme.muted)
+            let piece = index == activeIndex ? rawPiece.fontWeight(.semibold) : rawPiece.fontWeight(.regular)
+            text = text + piece
+        }
+        return text
+    }
+}
+
 private struct VoiceRecordingReadout: View {
     var elapsed: TimeInterval
     var level: Double
@@ -303,12 +366,20 @@ private struct VoiceRecordingReadout: View {
             if !samples.isEmpty {
                 HStack(spacing: 6) {
                     ForEach(samples) { sample in
-                        Text(durationText(sample.duration))
-                            .font(.system(.caption2, design: .monospaced, weight: .semibold))
-                            .foregroundStyle(NotebookTheme.muted)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
-                            .background(.white.opacity(0.58), in: Capsule())
+                        VStack(spacing: 4) {
+                            Text(durationText(sample.duration))
+                                .font(.system(.caption2, design: .monospaced, weight: .semibold))
+                            if let transcript = sample.transcript {
+                                Text(transcript)
+                                    .font(.system(size: 8, weight: .semibold, design: .rounded))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                            }
+                        }
+                        .foregroundStyle(NotebookTheme.muted)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(.white.opacity(0.58), in: Capsule())
                     }
                 }
             }
@@ -390,7 +461,6 @@ private struct SettingsView: View {
                     }
 
                     settingSection("voice") {
-                        Toggle("gemma voice mode", isOn: Bindable(store).gemmaVoiceModeEnabled)
                         Toggle("personal voice", isOn: Bindable(store).voiceProfile.wantsPersonalVoice)
                     }
 

@@ -1,5 +1,7 @@
 import Foundation
 import LocalAuthentication
+import UIKit
+@preconcurrency import Vision
 
 @MainActor
 protocol LocalAuthServing {
@@ -12,7 +14,7 @@ protocol LocalAuthServing {
 
 @MainActor
 protocol ScanProcessingServing {
-    func processDemoCapture() async -> ExtractedContent
+    func process(image: UIImage) async -> ExtractedContent
 }
 
 @MainActor
@@ -20,6 +22,7 @@ protocol NoteUnderstandingServing {
     func classify(_ content: ExtractedContent) async -> String
     func makeFlashcards(from content: ExtractedContent) -> [Flashcard]
     func explain(_ term: String) -> String
+    func supportAnswer(_ question: String) -> String
 }
 
 @MainActor
@@ -54,7 +57,8 @@ struct LocalAuthService: LocalAuthServing {
     func signIn(email: String, password: String) async throws -> AuthSession {
         guard email.contains("@"), email.contains(".") else { throw AuthError.invalidEmail }
         guard password.count >= 6 else { throw AuthError.weakPassword }
-        return AuthSession(provider: .email, email: email.lowercased(), username: email.split(separator: "@").first.map(String.init) ?? "student", createdAt: .now)
+        let username = try CredentialVault.verify(email: email, password: password)
+        return AuthSession(provider: .email, email: email.lowercased(), username: username, createdAt: .now)
     }
 
     func signUp(username: String, email: String, password: String, confirmPassword: String) async throws -> AuthSession {
@@ -62,15 +66,22 @@ struct LocalAuthService: LocalAuthServing {
         guard email.lowercased().hasSuffix("@gmail.com") else { throw AuthError.invalidEmail }
         guard password == confirmPassword else { throw AuthError.passwordMismatch }
         guard passwordStrength(password) != .weak else { throw AuthError.weakPassword }
+        let faceIDLinked = await verifyWithFaceID()
+        try CredentialVault.save(email: email, password: password, username: username, faceIDLinked: faceIDLinked)
         return AuthSession(provider: .email, email: email.lowercased(), username: username.lowercased(), createdAt: .now)
     }
 
     func sendReset(email: String) async throws -> String {
         guard email.contains("@"), email.contains(".") else { throw AuthError.invalidEmail }
-        if await verifyWithFaceID() {
-            return "identity verified. reset link sent to \(email.lowercased())."
+        guard CredentialVault.accountExists(email: email) else { throw AuthError.accountNotFound }
+        let needsFaceID = (try? CredentialVault.requiresFaceID(email: email)) == true
+        if !needsFaceID {
+            return "reset link sent to \(email.lowercased())."
         }
-        return "reset link sent to \(email.lowercased())."
+        if await verifyWithFaceID() {
+            return "face id verified. reset link sent to \(email.lowercased())."
+        }
+        return "face id was not verified."
     }
 
     func verifyWithFaceID() async -> Bool {
@@ -93,24 +104,219 @@ func passwordStrength(_ password: String) -> PasswordStrength {
 }
 
 struct LocalScanProcessingService: ScanProcessingServing {
-    func processDemoCapture() async -> ExtractedContent {
-        ExtractedContent(
-            cleanedText: "limits describe what a graph approaches. factor first, cancel matching terms, then substitute. if both sides approach the same value, the limit exists.",
-            rawText: "limit notes: graph approaches. factor/cancel/sub. both sides same = exists.",
-            keywords: ["limits", "factor", "substitute", "approach"],
-            formulas: ["lim x -> a f(x)", "(x^2 - 4) / (x - 2)"],
-            sections: [
-                StudySection(title: "method", body: "simplify the expression before substituting the target value."),
-                StudySection(title: "check", body: "compare the left and right side behavior before trusting an answer.")
-            ],
-            confidence: 0.96
+    func process(image: UIImage) async -> ExtractedContent {
+        let recognizedText = await OCRTextScanner.recognizeText(in: image)
+        let lines = recognizedText
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        let cleaned = NoteLayoutAnalyzer.clean(lines: lines)
+        let usableText = cleaned.isEmpty ? "no readable handwriting or printed text was detected in this capture." : cleaned
+        let words = usableText
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "=" })
+            .map(String.init)
+        var seen = Set<String>()
+        let filteredKeywords = words
+            .filter { $0.count > 3 }
+            .filter { seen.insert($0).inserted }
+        let keywords = Array(filteredKeywords.prefix(8))
+        let formulas = usableText
+            .components(separatedBy: .newlines)
+            .filter { $0.contains("=") || $0.contains("lim") || $0.contains("->") }
+        let tables = NoteLayoutAnalyzer.tables(from: lines)
+        let models = NoteLayoutAnalyzer.models(from: lines, keywords: keywords)
+        let sections = NoteLayoutAnalyzer.sections(from: lines, fallback: usableText)
+
+        return ExtractedContent(
+            cleanedText: usableText,
+            rawText: recognizedText.isEmpty ? usableText : recognizedText.lowercased(),
+            keywords: keywords.isEmpty ? ["scan"] : keywords,
+            formulas: formulas,
+            sections: sections,
+            tables: tables,
+            models: models,
+            confidence: cleaned.isEmpty ? 0.18 : 0.82
         )
+    }
+}
+
+private enum NoteLayoutAnalyzer {
+    static func clean(lines: [String]) -> String {
+        lines
+            .map { line in
+                line
+                    .replacingOccurrences(of: "  ", with: " ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+            }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+    }
+
+    static func sections(from lines: [String], fallback: String) -> [StudySection] {
+        let cleanedLines = lines.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
+        guard !cleanedLines.isEmpty else {
+            return [StudySection(title: "captured notes", body: fallback)]
+        }
+
+        var sections: [StudySection] = []
+        var activeTitle = "captured notes"
+        var activeBody: [String] = []
+
+        func flush() {
+            let body = activeBody.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !body.isEmpty {
+                sections.append(StudySection(title: activeTitle, body: body))
+            }
+            activeBody.removeAll()
+        }
+
+        for line in cleanedLines {
+            let looksLikeHeading = line.count <= 32 && (line.hasSuffix(":") || line.uppercased() == line || line.split(separator: " ").count <= 3)
+            if looksLikeHeading && !activeBody.isEmpty {
+                flush()
+                activeTitle = line.replacingOccurrences(of: ":", with: "")
+            } else if looksLikeHeading && sections.isEmpty && activeBody.isEmpty {
+                activeTitle = line.replacingOccurrences(of: ":", with: "")
+            } else {
+                activeBody.append(line)
+            }
+        }
+        flush()
+
+        return sections.isEmpty ? [StudySection(title: "captured notes", body: fallback)] : sections
+    }
+
+    static func tables(from lines: [String]) -> [DetectedTable] {
+        let candidateRows = lines
+            .map { splitColumns($0) }
+            .filter { $0.count >= 2 }
+        guard candidateRows.count >= 2 else { return [] }
+
+        let headers = candidateRows.first ?? []
+        let rows = Array(candidateRows.dropFirst()).filter { !$0.allSatisfy(\.isEmpty) }
+        guard !rows.isEmpty else { return [] }
+        return [DetectedTable(title: "detected table", headers: headers, rows: rows)]
+    }
+
+    static func models(from lines: [String], keywords: [String]) -> [DetectedModel] {
+        let joined = lines.joined(separator: " ").lowercased()
+        let modelTriggers = ["diagram", "model", "graph", "figure", "chart", "axis", "cycle", "flow", "structure"]
+        guard modelTriggers.contains(where: joined.contains) else { return [] }
+
+        let title = modelTriggers.first(where: joined.contains) ?? "visual model"
+        let terms = Array(keywords.prefix(5))
+        return [
+            DetectedModel(
+                title: "\(title) found",
+                summary: "the scan contains visual structure that should stay connected to the surrounding notes.",
+                terms: terms,
+                nodes: terms.isEmpty ? ["idea", "link", "result"] : terms
+            )
+        ]
+    }
+
+    private static func splitColumns(_ line: String) -> [String] {
+        if line.contains("|") {
+            return line
+                .split(separator: "|")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+        }
+
+        let pieces = line
+            .components(separatedBy: RegexSeparator.multipleSpaces)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        if pieces.count >= 2 { return pieces }
+
+        let tabPieces = line
+            .components(separatedBy: "\t")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        return tabPieces
+    }
+}
+
+private enum RegexSeparator {
+    static let multipleSpaces = try! NSRegularExpression(pattern: #" {2,}"#)
+}
+
+private extension String {
+    func components(separatedBy regex: NSRegularExpression) -> [String] {
+        let range = NSRange(startIndex..<endIndex, in: self)
+        var components: [String] = []
+        var last = startIndex
+        for match in regex.matches(in: self, range: range) {
+            guard let matchRange = Range(match.range, in: self) else { continue }
+            components.append(String(self[last..<matchRange.lowerBound]))
+            last = matchRange.upperBound
+        }
+        components.append(String(self[last...]))
+        return components
+    }
+}
+
+private enum OCRTextScanner {
+    static func recognizeText(in image: UIImage) async -> String {
+        guard let cgImage = image.cgImage else { return "" }
+
+        return await withCheckedContinuation { continuation in
+            let request = VNRecognizeTextRequest { request, _ in
+                let observations = request.results as? [VNRecognizedTextObservation] ?? []
+                let text = observations
+                    .compactMap { $0.topCandidates(1).first?.string }
+                    .joined(separator: "\n")
+                continuation.resume(returning: text)
+            }
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+            request.recognitionLanguages = ["en-US"]
+
+            let handler = VNImageRequestHandler(cgImage: cgImage, orientation: CGImagePropertyOrientation(image.imageOrientation), options: [:])
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try handler.perform([request])
+                } catch {
+                    continuation.resume(returning: "")
+                }
+            }
+        }
+    }
+}
+
+private extension CGImagePropertyOrientation {
+    init(_ orientation: UIImage.Orientation) {
+        switch orientation {
+        case .up: self = .up
+        case .down: self = .down
+        case .left: self = .left
+        case .right: self = .right
+        case .upMirrored: self = .upMirrored
+        case .downMirrored: self = .downMirrored
+        case .leftMirrored: self = .leftMirrored
+        case .rightMirrored: self = .rightMirrored
+        @unknown default: self = .up
+        }
     }
 }
 
 struct LocalNoteUnderstandingService: NoteUnderstandingServing {
     func classify(_ content: ExtractedContent) async -> String {
-        content.keywords.contains("limits") ? "math" : "science"
+        let text = (content.cleanedText + " " + content.keywords.joined(separator: " ")).lowercased()
+        if ["equation", "function", "limit", "derivative", "integral", "algebra", "geometry", "formula"].contains(where: text.contains) {
+            return "math"
+        }
+        if ["cell", "atom", "force", "energy", "biology", "chemistry", "physics", "experiment"].contains(where: text.contains) {
+            return "science"
+        }
+        if ["war", "empire", "revolution", "president", "government", "treaty", "century"].contains(where: text.contains) {
+            return "history"
+        }
+        if ["theme", "essay", "poem", "novel", "author", "character", "paragraph"].contains(where: text.contains) {
+            return "english"
+        }
+        return content.keywords.first ?? "notes"
     }
 
     func makeFlashcards(from content: ExtractedContent) -> [Flashcard] {
@@ -123,6 +329,26 @@ struct LocalNoteUnderstandingService: NoteUnderstandingServing {
 
     func explain(_ term: String) -> String {
         "\(term) is the smallest piece to understand first. connect it to the example on the page, then test it with one recall question."
+    }
+
+    func supportAnswer(_ question: String) -> String {
+        let cleaned = question.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleaned.isEmpty else {
+            return "ask me about sign up, voice setup, scanning, or finding your notes."
+        }
+        if cleaned.contains("google") || cleaned.contains("apple") {
+            return "google and apple sign in need app secrets before they can connect. email sign up works now."
+        }
+        if cleaned.contains("voice") || cleaned.contains("record") {
+            return "tap the mic, read the sentence naturally, and marbled saves the audio plus a transcript for voice setup."
+        }
+        if cleaned.contains("scan") || cleaned.contains("camera") {
+            return "open a notebook and tap the viewfinder. the native scanner keeps taking pages until you finish."
+        }
+        if cleaned.contains("course") || cleaned.contains("subject") {
+            return "add subjects during setup or use the plus button on the shelf later."
+        }
+        return "i can help with setup, scanning, voice, subjects, and account access. try asking one specific thing."
     }
 }
 

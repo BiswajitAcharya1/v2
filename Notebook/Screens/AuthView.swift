@@ -13,6 +13,7 @@ struct AuthView: View {
     @State private var closeRotation = 0.0
     @State private var leatherDrift = false
     @State private var notebookOpen = false
+    @State private var coverDrag: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -24,12 +25,12 @@ struct AuthView: View {
                 heroStack
                     .scaleEffect(appeared ? 1 : 0.92)
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: notebookOpen ? -20 : 0)
+                    .offset(y: notebookOpen ? -42 : 0)
 
                 if notebookOpen {
                     authPanel
                         .padding(.horizontal, 22)
-                        .offset(y: appeared ? -16 : 18)
+                        .offset(y: appeared ? 48 : 74)
                         .opacity(appeared ? 1 : 0)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -41,12 +42,12 @@ struct AuthView: View {
             if showingEmail {
                 emailSheet
                     .transition(.asymmetric(
-                        insertion: .scale(scale: 0.92).combined(with: .opacity),
-                        removal: .scale(scale: 0.96).combined(with: .opacity)
+                        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
+                        removal: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.96))
                     ))
             }
 
-            if notebookOpen {
+            if notebookOpen && !showingEmail {
                 VStack {
                     Spacer()
                     HStack {
@@ -71,44 +72,107 @@ struct AuthView: View {
 
     private var heroStack: some View {
         VStack(spacing: 14) {
-            if notebookOpen {
+            if openProgress > 0.18 {
                 VStack(spacing: 8) {
                     BrandSignUpTitle()
                     ContainerTextFlip(words: ["scan", "organize", "study", "remember"])
                 }
+                .opacity(Double(min(1, openProgress * 1.35)))
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
-            ZStack {
-                Button {
-                    withAnimation(.spring(response: 0.78, dampingFraction: 0.76)) {
-                        notebookOpen = true
-                    }
-                } label: {
-                    NotebookLogo(isOpen: notebookOpen)
-                        .frame(width: 174, height: 226)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("open sign up notebook")
-                .accessibilityHint("reveals sign up options")
-                .scaleEffect(notebookOpen ? 0.96 : 1)
-                .offset(y: notebookOpen ? 6 : 0)
-                .animation(.spring(response: 0.58, dampingFraction: 0.8), value: notebookOpen)
-                    .rotation3DEffect(.degrees(leatherDrift ? 4 : -4), axis: (x: 0.2, y: 1, z: 0), perspective: 0.65)
-                    .shadow(color: .black.opacity(0.2), radius: 18, y: 14)
-
-                if notebookOpen {
-                    orbitingAuthButtons
-                        .transition(.scale(scale: 0.74).combined(with: .opacity))
-                }
+            draggableAuthBook
+                .frame(width: 350, height: 330)
+            if notebookOpen, let message = store.authMessage, !showingEmail {
+                Text(message)
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.muted)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .frame(width: 330, height: 248)
         }
-        .frame(height: 320)
+        .frame(height: notebookOpen ? 420 : 330)
+    }
+
+    private var openProgress: CGFloat {
+        if notebookOpen {
+            return max(0, min(1, 1 + coverDrag / 180))
+        }
+        return max(0, min(1, -coverDrag / 128))
+    }
+
+    private var draggableAuthBook: some View {
+        ZStack {
+            AuthPaperInterior(openProgress: openProgress)
+                .overlay {
+                    if openProgress > 0.54 {
+                        VStack(spacing: 12) {
+                            ForEach(Array(AuthProvider.allCases.enumerated()), id: \.element.id) { index, provider in
+                                AuthProviderPageButton(provider: provider) {
+                                    if provider == .email {
+                                        Haptics.open()
+                                        withAnimation(.spring(response: 0.92, dampingFraction: 0.82)) {
+                                            isSignIn = false
+                                            showingEmail = true
+                                        }
+                                    } else {
+                                        Task { await store.signIn(provider: provider) }
+                                    }
+                                }
+                                .offset(x: openProgress >= 1 ? 0 : 16, y: openProgress >= 1 ? 0 : 10)
+                                .animation(.spring(response: 0.62, dampingFraction: 0.82).delay(Double(index) * 0.05), value: notebookOpen)
+                            }
+                        }
+                        .padding(.leading, 62)
+                        .padding(.trailing, 18)
+                        .opacity(Double((openProgress - 0.54) / 0.46))
+                        .scaleEffect(0.86 + openProgress * 0.14)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
+                }
+                .frame(width: 224 + openProgress * 136, height: 282 + openProgress * 92)
+                .offset(x: openProgress * 68, y: openProgress * 10)
+                .shadow(color: .black.opacity(0.12), radius: 14, y: 9)
+
+            NotebookLogo(isOpen: false)
+                .frame(width: 190, height: 248)
+                .rotation3DEffect(.degrees(-118 * openProgress + (leatherDrift ? 3 : -3)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
+                .offset(x: -82 * openProgress, y: 2 * openProgress)
+                .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
+                .gesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { value in
+                            if !notebookOpen && value.translation.width < -42 {
+                                Haptics.selection()
+                            }
+                            coverDrag = min(18, max(-170, value.translation.width))
+                        }
+                        .onEnded { value in
+                            let shouldOpen = notebookOpen ? value.translation.width > -70 : value.translation.width < -88
+                            if shouldOpen != notebookOpen {
+                                Haptics.open()
+                            } else {
+                                Haptics.softTap()
+                            }
+                            withAnimation(.spring(response: 0.78, dampingFraction: 0.76)) {
+                                notebookOpen = shouldOpen
+                                coverDrag = 0
+                            }
+                        }
+                )
+                .accessibilityLabel("drag notebook cover")
+                .accessibilityHint("drag left to open sign up")
+        }
+        .scaleEffect(notebookOpen ? 1.04 : 1)
+        .animation(.spring(response: 0.56, dampingFraction: 0.82), value: notebookOpen)
+        .animation(.spring(response: 0.28, dampingFraction: 0.74), value: coverDrag)
     }
 
     private var authPanel: some View {
         Button {
-            withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) {
+            Haptics.press()
+            withAnimation(.spring(response: 0.92, dampingFraction: 0.82)) {
                 isSignIn = true
                 showingEmail = true
             }
@@ -126,35 +190,11 @@ struct AuthView: View {
         .buttonStyle(.plain)
     }
 
-    private var orbitingAuthButtons: some View {
-        TimelineView(.animation) { timeline in
-            let phase = timeline.date.timeIntervalSinceReferenceDate * 0.42
-            ForEach(Array(AuthProvider.allCases.enumerated()), id: \.element.id) { index, provider in
-                AuthProviderCircle(provider: provider) {
-                    if provider == .email {
-                        isSignIn = false
-                        showingEmail = true
-                    } else {
-                        Task { await store.signIn(provider: provider) }
-                    }
-                }
-                .offset(orbitOffset(index: index, phase: phase))
-                .zIndex(sin(phase + Double(index) * 2.094) > 0 ? 2 : 0)
-                .scaleEffect(sin(phase + Double(index) * 2.094) > 0 ? 1.04 : 0.92)
-            }
-        }
-    }
-
-    private func orbitOffset(index: Int, phase: Double) -> CGSize {
-        let angle = phase + Double(index) * 2.094
-        return CGSize(width: cos(angle) * 142, height: sin(angle) * 78)
-    }
-
     private struct BrandSignUpTitle: View {
         var body: some View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("sign")
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
+                    .font(.system(size: 38, weight: .semibold, design: .rounded))
                 FontFlipText("up")
             }
             .foregroundStyle(NotebookTheme.ink)
@@ -164,7 +204,8 @@ struct AuthView: View {
     private struct FontFlipText: View {
         let text: String
         @State private var index = 0
-        private let designs: [Font.Design] = [.serif, .rounded, .monospaced, .default]
+        private let designs: [Font.Design] = [.serif, .rounded, .monospaced, .default, .serif, .rounded, .default, .monospaced, .serif]
+        private let weights: [Font.Weight] = [.semibold, .regular, .bold, .medium, .light, .semibold, .thin, .bold, .regular]
 
         init(_ text: String) {
             self.text = text
@@ -179,12 +220,12 @@ struct AuthView: View {
                         .blur(radius: index == designIndex ? 0 : 3)
                 }
             }
-            .frame(width: 48, height: 46, alignment: .leading)
+            .frame(width: 62, height: 52, alignment: .leading)
             .clipped()
             .animation(.spring(response: 0.42, dampingFraction: 0.76), value: index)
             .task {
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .milliseconds(820))
+                    try? await Task.sleep(for: .milliseconds(620))
                     index = (index + 1) % designs.count
                 }
             }
@@ -193,7 +234,7 @@ struct AuthView: View {
         @ViewBuilder
         private func fontText(for designIndex: Int) -> some View {
             let base = Text(text)
-                .font(.system(size: 38, weight: .semibold, design: designs[designIndex]))
+                .font(.system(size: 43, weight: weights[designIndex], design: designs[designIndex]))
                 .baselineOffset(designIndex == 2 ? -1 : 0)
 
             if designIndex.isMultiple(of: 2) {
@@ -204,26 +245,49 @@ struct AuthView: View {
         }
     }
 
-    private struct AuthProviderCircle: View {
+    private struct AuthProviderPageButton: View {
         let provider: AuthProvider
         var action: () -> Void
+        @State private var shimmer = false
 
         var body: some View {
             Button(action: action) {
-                ZStack {
+                HStack(spacing: 10) {
                     Circle()
                         .fill(.ultraThinMaterial)
                         .overlay {
                             Circle().stroke(.white.opacity(0.74), lineWidth: 1)
                         }
-                        .shadow(color: .black.opacity(0.12), radius: 12, y: 8)
-                    providerMark
+                        .frame(width: 36, height: 36)
+                        .overlay { providerMark }
+                    Text(provider.title)
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                    Spacer(minLength: 0)
                 }
-                .frame(width: 64, height: 64)
-                .contentShape(Circle())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(.white.opacity(0.68), in: Capsule())
+                .overlay {
+                    InteractiveSheen(progress: shimmer ? 1 : 0, cornerRadius: 28)
+                        .opacity(0.48)
+                }
+                .overlay {
+                    Capsule().stroke(.black.opacity(0.06), lineWidth: 1)
+                }
+                .contentShape(Capsule())
                 .accessibilityLabel(provider.title)
             }
             .buttonStyle(.plain)
+            .simultaneousGesture(TapGesture().onEnded { Haptics.press() })
+            .onAppear {
+                withAnimation(.easeInOut(duration: 3.8).repeatForever(autoreverses: false)) {
+                    shimmer = true
+                }
+            }
         }
 
         @ViewBuilder
@@ -231,14 +295,14 @@ struct AuthView: View {
             switch provider {
             case .apple:
                 Image(systemName: "apple.logo")
-                    .font(.system(size: 25, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
             case .google:
                 GoogleLogo()
-                    .frame(width: 28, height: 28)
+                    .frame(width: 18, height: 18)
             case .email:
                 Image(systemName: "envelope.fill")
-                    .font(.system(size: 23, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
             }
         }
@@ -296,6 +360,7 @@ struct AuthView: View {
                 }
 
                 Button {
+                    Haptics.open()
                     Task {
                         if isSignIn {
                             await store.signIn(email: email, password: password)
@@ -312,6 +377,7 @@ struct AuthView: View {
 
                 if isSignIn {
                     Button {
+                        Haptics.rigid()
                         Task { await store.resetPassword(email: email) }
                     } label: {
                         Label("forgot password", systemImage: "faceid")
@@ -388,13 +454,20 @@ struct AuthView: View {
                     .foregroundStyle(NotebookTheme.ink)
                     .tint(NotebookTheme.ink)
             }
-            .font(.system(.body, design: .rounded))
+            .font(.system(.body, design: typingDesign(for: text.wrappedValue), weight: .regular))
+            .animation(.spring(response: 0.28, dampingFraction: 0.8), value: text.wrappedValue.count)
             .padding(14)
             .background(.white.opacity(0.68), in: Capsule())
         }
     }
 
+    private func typingDesign(for text: String) -> Font.Design {
+        let designs: [Font.Design] = [.rounded, .serif, .monospaced, .default]
+        return designs[max(0, text.count) % designs.count]
+    }
+
     private func closeEmail() {
+        Haptics.softTap()
         withAnimation(.spring(response: 0.34, dampingFraction: 0.7)) {
             closeRotation += 90
         }
@@ -427,10 +500,59 @@ private struct AuthField: View {
                     .foregroundStyle(NotebookTheme.ink)
                     .tint(NotebookTheme.ink)
             }
-            .font(.system(.body, design: .rounded))
+            .font(.system(.body, design: typingDesign, weight: .regular))
+            .animation(.spring(response: 0.28, dampingFraction: 0.8), value: text.count)
             .padding(14)
             .background(.white.opacity(0.68), in: Capsule())
         }
+    }
+
+    private var typingDesign: Font.Design {
+        let designs: [Font.Design] = [.rounded, .serif, .monospaced, .default]
+        return designs[max(0, text.count) % designs.count]
+    }
+}
+
+private struct AuthPaperInterior: View {
+    var openProgress: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 28, style: .continuous)
+            .fill(NotebookTheme.paper)
+            .overlay {
+                PaperGrain(density: 300)
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .opacity(0.42)
+            }
+            .overlay(alignment: .leading) {
+                LinearGradient(
+                    colors: [.black.opacity(0.16), .clear, .white.opacity(0.16)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: 42)
+                .opacity(Double(openProgress))
+            }
+            .overlay(alignment: .leading) {
+                Capsule()
+                    .fill(.black.opacity(0.14))
+                    .frame(width: 2)
+                    .padding(.vertical, 24)
+                    .offset(x: 44)
+                    .blur(radius: 0.4)
+                    .opacity(Double(openProgress))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [.white.opacity(0.78), .black.opacity(0.08)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.9
+                    )
+            }
     }
 }
 
@@ -465,10 +587,6 @@ private struct GoogleLogo: View {
 
 private struct AmbientNotebookBackground: View {
     var body: some View {
-        LinearGradient(
-            colors: [NotebookTheme.field, Color(red: 0.91, green: 0.89, blue: 0.83)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        LivingPaperBackground()
     }
 }
