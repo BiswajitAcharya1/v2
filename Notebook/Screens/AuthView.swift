@@ -14,6 +14,7 @@ struct AuthView: View {
     @State private var leatherDrift = false
     @State private var notebookOpen = false
     @State private var coverDrag: CGFloat = 0
+    @State private var legalDocument: LegalDocument?
 
     var body: some View {
         ZStack {
@@ -47,18 +48,6 @@ struct AuthView: View {
                     ))
             }
 
-            if notebookOpen && !showingEmail {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        StudyAgentBubble(mode: .auth)
-                            .padding(.trailing, 18)
-                            .padding(.bottom, 22)
-                    }
-                }
-                .transition(.opacity.combined(with: .scale(scale: 0.94)))
-            }
         }
         .onAppear {
             withAnimation(.spring(response: 0.85, dampingFraction: 0.82).delay(0.08)) {
@@ -67,6 +56,11 @@ struct AuthView: View {
             withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true)) {
                 leatherDrift = true
             }
+        }
+        .sheet(item: $legalDocument) { document in
+            LegalDocumentView(document: document)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -170,22 +164,44 @@ struct AuthView: View {
     }
 
     private var authPanel: some View {
+        VStack(spacing: 12) {
+            Button {
+                Haptics.press()
+                withAnimation(.spring(response: 0.92, dampingFraction: 0.82)) {
+                    isSignIn = true
+                    showingEmail = true
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle")
+                    Text("have an account? sign in")
+                }
+                .font(.system(.footnote, design: .rounded, weight: .semibold))
+                .foregroundStyle(NotebookTheme.ink)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial, in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            HStack(spacing: 16) {
+                legalLink(.terms)
+                legalLink(.privacy)
+            }
+        }
+    }
+
+    private func legalLink(_ document: LegalDocument) -> some View {
         Button {
-            Haptics.press()
-            withAnimation(.spring(response: 0.92, dampingFraction: 0.82)) {
-                isSignIn = true
-                showingEmail = true
-            }
+            Haptics.softTap()
+            legalDocument = document
         } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "person.crop.circle")
-                Text("have an account? sign in")
-            }
-            .font(.system(.footnote, design: .rounded, weight: .semibold))
-            .foregroundStyle(NotebookTheme.ink)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial, in: Capsule())
+            Text(document.title)
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(NotebookTheme.muted)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(.ultraThinMaterial, in: Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -559,11 +575,11 @@ private struct AuthPaperInterior: View {
 private struct GoogleLogo: View {
     var body: some View {
         Canvas { context, size in
-            let lineWidth = min(size.width, size.height) * 0.16
+            let lineWidth = min(size.width, size.height) * 0.18
             let inset = lineWidth / 2
             let rect = CGRect(x: inset, y: inset, width: size.width - lineWidth, height: size.height - lineWidth)
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let radius = rect.width / 2
+            let radius = min(rect.width, rect.height) / 2
 
             func arc(_ start: Angle, _ end: Angle, _ color: Color) {
                 var path = Path()
@@ -571,15 +587,20 @@ private struct GoogleLogo: View {
                 context.stroke(path, with: .color(color), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
             }
 
-            arc(.degrees(-38), .degrees(42), Color(red: 0.26, green: 0.52, blue: 0.96))
-            arc(.degrees(42), .degrees(142), Color(red: 0.20, green: 0.65, blue: 0.32))
+            arc(.degrees(-38), .degrees(36), Color(red: 0.26, green: 0.52, blue: 0.96))
+            arc(.degrees(36), .degrees(142), Color(red: 0.20, green: 0.65, blue: 0.32))
             arc(.degrees(142), .degrees(214), Color(red: 0.98, green: 0.75, blue: 0.18))
             arc(.degrees(214), .degrees(322), Color(red: 0.92, green: 0.25, blue: 0.21))
 
             var crossbar = Path()
-            crossbar.move(to: CGPoint(x: center.x, y: center.y))
-            crossbar.addLine(to: CGPoint(x: size.width * 0.88, y: center.y))
+            crossbar.move(to: CGPoint(x: center.x + radius * 0.08, y: center.y))
+            crossbar.addLine(to: CGPoint(x: center.x + radius * 0.86, y: center.y))
             context.stroke(crossbar, with: .color(Color(red: 0.26, green: 0.52, blue: 0.96)), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+
+            var notch = Path()
+            notch.move(to: CGPoint(x: center.x + radius * 0.48, y: center.y + lineWidth * 0.48))
+            notch.addLine(to: CGPoint(x: center.x + radius * 0.82, y: center.y + lineWidth * 0.48))
+            context.stroke(notch, with: .color(Color(red: 0.26, green: 0.52, blue: 0.96)), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
         }
         .accessibilityHidden(true)
     }

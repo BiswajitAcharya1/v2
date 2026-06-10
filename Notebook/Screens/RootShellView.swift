@@ -436,6 +436,7 @@ private struct SubjectToken: View {
 private struct SettingsView: View {
     @Environment(NotebookStore.self) private var store
     @State private var spinning = false
+    @State private var legalDocument: LegalDocument?
 
     var body: some View {
         NavigationStack {
@@ -470,12 +471,22 @@ private struct SettingsView: View {
                         Text("\(store.notebooks.reduce(0) { $0 + $1.pages.count }) scanned pages")
                             .foregroundStyle(NotebookTheme.muted)
                     }
+
+                    settingSection("legal") {
+                        legalButton(.terms)
+                        legalButton(.privacy)
+                    }
                 }
                 .padding(20)
             }
             .background(NotebookTheme.field.ignoresSafeArea())
             .navigationTitle("settings")
             .toolbarTitleDisplayMode(.inline)
+            .sheet(item: $legalDocument) { document in
+                LegalDocumentView(document: document)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
             .onAppear { spinning = true }
         }
     }
@@ -491,5 +502,35 @@ private struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func legalButton(_ document: LegalDocument) -> some View {
+        Button {
+            Haptics.open()
+            legalDocument = document
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: document == .terms ? "doc.text.fill" : "hand.raised.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(NotebookTheme.ink, in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(document.title)
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    Text(document.summary)
+                        .font(.system(.caption, design: .rounded))
+                        .foregroundStyle(NotebookTheme.muted)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(NotebookTheme.muted)
+            }
+            .foregroundStyle(NotebookTheme.ink)
+            .padding(.vertical, 3)
+        }
+        .buttonStyle(.plain)
     }
 }

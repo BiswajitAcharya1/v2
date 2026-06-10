@@ -22,7 +22,6 @@ protocol NoteUnderstandingServing {
     func classify(_ content: ExtractedContent) async -> String
     func makeFlashcards(from content: ExtractedContent) -> [Flashcard]
     func explain(_ term: String) -> String
-    func supportAnswer(_ question: String) -> String
 }
 
 @MainActor
@@ -329,26 +328,6 @@ struct LocalNoteUnderstandingService: NoteUnderstandingServing {
 
     func explain(_ term: String) -> String {
         "\(term) is the smallest piece to understand first. connect it to the example on the page, then test it with one recall question."
-    }
-
-    func supportAnswer(_ question: String) -> String {
-        let cleaned = question.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !cleaned.isEmpty else {
-            return "ask me about sign up, voice setup, scanning, or finding your notes."
-        }
-        if cleaned.contains("google") || cleaned.contains("apple") {
-            return "google and apple sign in need app secrets before they can connect. email sign up works now."
-        }
-        if cleaned.contains("voice") || cleaned.contains("record") {
-            return "tap the mic, read the sentence naturally, and marbled saves the audio plus a transcript for voice setup."
-        }
-        if cleaned.contains("scan") || cleaned.contains("camera") {
-            return "open a notebook and tap the viewfinder. the native scanner keeps taking pages until you finish."
-        }
-        if cleaned.contains("course") || cleaned.contains("subject") {
-            return "add subjects during setup or use the plus button on the shelf later."
-        }
-        return "i can help with setup, scanning, voice, subjects, and account access. try asking one specific thing."
     }
 }
 

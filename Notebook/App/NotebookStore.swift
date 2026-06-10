@@ -20,8 +20,6 @@ final class NotebookStore {
     var selectedStudyMode: MemorizationMode = .longTerm
     var voiceProfile = VoiceProfile()
     var scanPhase: ScanPhase = .framing
-    var gemmaVoiceModeEnabled = false
-    var latestVoiceQuestion: String?
     var onboardingSubjects: [String] = ["math", "science", "history", "english"]
     var isRecordingVoice = false
     var isVoicePaused = false
@@ -105,6 +103,17 @@ final class NotebookStore {
         } catch {
             authMessage = error.localizedDescription.lowercased()
         }
+    }
+
+    func signOut() {
+        withAnimation(.spring(response: 0.62, dampingFraction: 0.84)) {
+            authSession = nil
+            isAuthenticated = false
+            hasCompletedOnboarding = false
+            setupStep = .voiceRecording
+            authMessage = nil
+        }
+        persist()
     }
 
     func finishOnboarding() {
@@ -450,6 +459,7 @@ final class NotebookStore {
         for (offset, page) in processedPages.enumerated().reversed() {
             insertScannedPage(page.0, intoNotebookID: notebookID, classifiedSubject: page.1, pageNumber: offset + 1)
         }
+        try? await Task.sleep(for: .milliseconds(760))
     }
 
     func resetScan() {
@@ -473,15 +483,6 @@ final class NotebookStore {
 
     func readAloud(_ page: NotebookPage, style: PlaybackStyle) async -> VoicePlayback {
         await voiceService.makePlayback(page.content.cleanedText, style: style, profile: voiceProfile)
-    }
-
-    func askGemmaByVoice() async {
-        gemmaVoiceModeEnabled = true
-        latestVoiceQuestion = await voiceService.transcribeQuestion()
-    }
-
-    func askGemma(_ question: String) async {
-        latestVoiceQuestion = aiService.supportAnswer(question)
     }
 
     private func insertScannedPage(_ content: ExtractedContent, into subject: String) {

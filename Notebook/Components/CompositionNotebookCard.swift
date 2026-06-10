@@ -16,13 +16,29 @@ struct CompositionNotebookCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ZStack {
+                pageBlockDepth
+
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(NotebookTheme.graphite)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.08, green: 0.08, blue: 0.075),
+                                NotebookTheme.graphite,
+                                Color(red: 0.12, green: 0.12, blue: 0.11)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .shadow(color: .black.opacity(isPressed ? 0.12 : 0.28), radius: isPressed ? 5 : 16, y: isPressed ? 4 : 16)
 
                 SpeckledCompositionTexture()
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .opacity(0.94)
+                    .opacity(0.88)
+
+                CoverFiberTexture()
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .blendMode(.softLight)
 
                 PaperGrain(density: 360)
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -35,11 +51,13 @@ struct CompositionNotebookCard: View {
 
                 VStack(spacing: 10) {
                     labelPlate
+                    SubjectTape(subject: notebook.subject, accent: NotebookTheme.accent(notebook.accent))
+                        .padding(.top, 18)
                     Spacer()
-                    Image(systemName: "arrow.up.forward.circle.fill")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(.white.opacity(isPressed ? 0.95 : 0.56))
-                        .padding(.bottom, 16)
+                    OpenCornerCue(isPressed: isPressed)
+                        .padding(.trailing, 14)
+                        .padding(.bottom, 14)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 .padding(.top, 16)
                 .offset(x: dragOffset.width / 22, y: dragOffset.height / 22)
@@ -89,24 +107,67 @@ struct CompositionNotebookCard: View {
     private var notebookSpine: some View {
         HStack {
             UnevenRoundedRectangle(cornerRadii: .init(topLeading: 22, bottomLeading: 22), style: .continuous)
-                .fill(.black.opacity(0.68))
-                .frame(width: 28)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .black.opacity(0.94),
+                            .black.opacity(0.72),
+                            .black.opacity(0.9)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 36)
                 .overlay(alignment: .trailing) {
-                    Capsule()
-                        .fill(.white.opacity(0.2))
-                        .frame(width: 1)
+                    LinearGradient(
+                        colors: [.white.opacity(0.24), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: 5)
                 }
                 .overlay {
-                    VStack(spacing: 14) {
-                        ForEach(0..<7, id: \.self) { _ in
-                            Capsule()
-                                .fill(.white.opacity(0.18))
-                                .frame(width: 6, height: 18)
+                    Canvas { context, size in
+                        for index in 0..<42 {
+                            let y = size.height * CGFloat(index) / 41
+                            var line = Path()
+                            line.move(to: CGPoint(x: 7, y: y))
+                            line.addLine(to: CGPoint(x: size.width - 7, y: y + CGFloat((index % 3) - 1)))
+                            context.stroke(line, with: .color(.white.opacity(index.isMultiple(of: 4) ? 0.08 : 0.035)), lineWidth: 0.45)
                         }
                     }
-                    .padding(.vertical, 22)
+                }
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(.white.opacity(0.07))
+                        .frame(width: 3)
+                        .padding(.vertical, 18)
+                }
+                .overlay(alignment: .trailing) {
+                    Capsule()
+                        .fill(.black.opacity(0.46))
+                        .frame(width: 2)
+                        .padding(.vertical, 14)
+                        .offset(x: -2)
                 }
             Spacer()
+        }
+    }
+
+    private var pageBlockDepth: some View {
+        ZStack(alignment: .trailing) {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color(red: 0.82, green: 0.79, blue: 0.71))
+                .offset(x: 6, y: 4)
+            VStack(spacing: 4) {
+                ForEach(0..<9, id: \.self) { index in
+                    Capsule()
+                        .fill(.black.opacity(index.isMultiple(of: 2) ? 0.11 : 0.06))
+                        .frame(width: 8, height: 1)
+                }
+            }
+            .padding(.trailing, -4)
         }
     }
 
@@ -132,16 +193,11 @@ struct CompositionNotebookCard: View {
                         .frame(height: 1)
                 }
             }
-            Text(notebook.subject)
-                .font(.system(.callout, design: .serif, weight: .semibold))
-                .foregroundStyle(.black)
-                .minimumScaleFactor(0.72)
-                .lineLimit(1)
         }
         .foregroundStyle(.black.opacity(0.76))
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .frame(width: 142)
+        .frame(width: 148)
         .background(.white, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -184,6 +240,86 @@ struct CompositionNotebookCard: View {
                 lineWidth: 1.2
             )
             .padding(0.5)
+    }
+}
+
+private struct SubjectTape: View {
+    var subject: String
+    var accent: Color
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(NotebookTheme.paper.opacity(0.96))
+                .overlay {
+                    PaperGrain(density: 80)
+                        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        .opacity(0.36)
+                }
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(accent.opacity(0.86))
+                    .frame(width: 9, height: 9)
+                Text(subject)
+                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.64)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 13)
+        }
+        .frame(width: 160, height: 42)
+        .rotationEffect(.degrees(-4))
+        .shadow(color: .black.opacity(0.16), radius: 7, y: 4)
+        .overlay {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .stroke(.black.opacity(0.13), lineWidth: 0.8)
+        }
+    }
+}
+
+private struct OpenCornerCue: View {
+    var isPressed: Bool
+
+    var body: some View {
+        ZStack {
+            UnevenRoundedRectangle(
+                cornerRadii: .init(topLeading: 18, bottomTrailing: 20),
+                style: .continuous
+            )
+            .fill(.white.opacity(isPressed ? 0.78 : 0.58))
+            .frame(width: 54, height: 54)
+            .rotationEffect(.degrees(isPressed ? -8 : 0))
+
+            Image(systemName: "arrow.up.forward")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(NotebookTheme.ink.opacity(0.78))
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.72), value: isPressed)
+    }
+}
+
+private struct CoverFiberTexture: View {
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<180 {
+                let y = size.height * CGFloat((index * 29) % 101) / 100
+                let x = size.width * CGFloat((index * 17) % 103) / 102
+                var path = Path()
+                path.move(to: CGPoint(x: x, y: y))
+                path.addCurve(
+                    to: CGPoint(x: x + CGFloat(26 + index % 22), y: y + CGFloat((index % 5) - 2)),
+                    control1: CGPoint(x: x + 8, y: y - 2),
+                    control2: CGPoint(x: x + 18, y: y + 2)
+                )
+                context.stroke(
+                    path,
+                    with: .color(.white.opacity(index.isMultiple(of: 3) ? 0.08 : 0.035)),
+                    style: StrokeStyle(lineWidth: 0.45, lineCap: .round)
+                )
+            }
+        }
     }
 }
 

@@ -86,11 +86,6 @@ struct NotebookDetailView: View {
         .navigationDestination(item: $selectedPage) { page in
             StudyFocusView(page: page)
         }
-        .sheet(isPresented: $showingComposer) {
-            typedPageComposer
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
         .sheet(isPresented: $showingCamera) {
             DocumentScannerView { images in
                 Task {
@@ -247,27 +242,22 @@ struct NotebookDetailView: View {
     }
 
     private var circularDock: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Button {
                 Haptics.open()
                 showingCamera = true
             } label: {
-                Image(systemName: isScanning ? "sparkles" : "viewfinder")
-                    .font(.system(size: 17, weight: .bold))
-                    .frame(width: 46, height: 46)
+                HStack(spacing: 10) {
+                    Image(systemName: isScanning ? "sparkles" : "viewfinder")
+                        .font(.system(size: 17, weight: .bold))
+                    Text("scan more")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                }
+                .padding(.horizontal, 18)
+                .frame(height: 52)
             }
-            .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
+            .buttonStyle(PillButtonStyle(tint: NotebookTheme.ink, foreground: .white))
             .disabled(isScanning)
-
-            Button {
-                Haptics.press()
-                showingComposer = true
-            } label: {
-                Image(systemName: "keyboard")
-                    .font(.system(size: 17, weight: .bold))
-                    .frame(width: 46, height: 46)
-            }
-            .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
 
             Button {
                 Haptics.selection()
@@ -287,19 +277,6 @@ struct NotebookDetailView: View {
                     .frame(width: 52, height: 52)
             }
             .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
-            .disabled(currentPage == nil)
-
-            Button {
-                Haptics.open()
-                if let page = currentPage {
-                    selectedPage = page
-                }
-            } label: {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 18, weight: .bold))
-                    .frame(width: 46, height: 46)
-            }
-            .buttonStyle(CircleButtonStyle(tint: NotebookTheme.accent(liveNotebook.accent), foreground: .white))
             .disabled(currentPage == nil)
         }
         .padding(8)
@@ -450,102 +427,516 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
         GeometryReader { proxy in
             let isWide = proxy.size.width > 560
 
-            HStack(spacing: isWide ? 12 : 8) {
-                NotebookPaperView(cornerRadius: 26) {
+            ZStack {
+                OpenCompositionSpreadBackground()
+
+                HStack(spacing: isWide ? 42 : 22) {
                     leftContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
-                .overlay(alignment: .trailing) {
-                    pageFoldShadow
-                }
-                .onTapGesture {
-                    onSelect(left)
-                }
+                        .padding(.leading, isWide ? 42 : 24)
+                        .padding(.trailing, isWide ? 18 : 10)
+                        .padding(.top, 54)
+                        .padding(.bottom, 28)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            onSelect(left)
+                        }
 
-                NotebookPaperView(cornerRadius: 26) {
                     rightContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(.leading, isWide ? 18 : 10)
+                        .padding(.trailing, isWide ? 42 : 24)
+                        .padding(.top, 54)
+                        .padding(.bottom, 28)
+                        .opacity(right == nil ? 0.42 : 1)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if let right {
+                                onSelect(right)
+                            }
+                        }
                 }
-                .opacity(right == nil ? 0.52 : 1)
-                .overlay(alignment: .leading) {
-                    pageFoldShadow
-                        .scaleEffect(x: -1)
-                }
-                .onTapGesture {
-                    if let right {
-                        onSelect(right)
-                    }
-                }
+                .padding(.horizontal, isWide ? 8 : 0)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            .padding(.horizontal, isWide ? 6 : 0)
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 32, style: .continuous)
+                    .stroke(.white.opacity(0.55), lineWidth: 0.8)
+            }
+            .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 2)
         .padding(.vertical, 8)
     }
+}
 
-    private var pageFoldShadow: some View {
-        Capsule()
-            .fill(
-                LinearGradient(
-                    colors: [.black.opacity(0.08), .clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
+private struct OpenCompositionSpreadBackground: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            ZStack {
+                pageStack(size: size, offset: CGSize(width: -10, height: 8), opacity: 0.34)
+                pageStack(size: size, offset: CGSize(width: 10, height: 8), opacity: 0.34)
+
+                RoundedRectangle(cornerRadius: 32, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.91, green: 0.91, blue: 0.94),
+                                NotebookTheme.paper,
+                                Color(red: 0.9, green: 0.9, blue: 0.93)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .overlay(OpenCompositionRules())
+                    .overlay(PaperGrain(density: 620).opacity(0.2))
+
+                centerFold
+
+                VStack {
+                    topFoldNotch
+                    Spacer()
+                }
+
+                HStack {
+                    sidePageEdges()
+                    Spacer()
+                    sidePageEdges()
+                }
+            }
+        }
+    }
+
+    private func pageStack(size: CGSize, offset: CGSize, opacity: Double) -> some View {
+        RoundedRectangle(cornerRadius: 30, style: .continuous)
+            .fill(Color(red: 0.72, green: 0.73, blue: 0.77).opacity(opacity))
+            .frame(width: max(0, size.width - 8), height: max(0, size.height - 4))
+            .offset(offset)
+    }
+
+    private var centerFold: some View {
+        ZStack {
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [.black.opacity(0.12), .clear, .black.opacity(0.08)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
                 )
+                .frame(width: 34)
+                .blur(radius: 3)
+            Capsule()
+                .fill(.black.opacity(0.12))
+                .frame(width: 1.3)
+            Capsule()
+                .stroke(.white.opacity(0.35), lineWidth: 0.8)
+                .frame(width: 8)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var topFoldNotch: some View {
+        Canvas { context, size in
+            let mid = size.width / 2
+            var path = Path()
+            path.move(to: CGPoint(x: mid - 14, y: 28))
+            path.addCurve(
+                to: CGPoint(x: mid, y: 52),
+                control1: CGPoint(x: mid - 8, y: 38),
+                control2: CGPoint(x: mid - 3, y: 42)
             )
-            .frame(width: 18)
-            .padding(.vertical, 20)
-            .allowsHitTesting(false)
+            path.addCurve(
+                to: CGPoint(x: mid + 14, y: 28),
+                control1: CGPoint(x: mid + 3, y: 42),
+                control2: CGPoint(x: mid + 8, y: 38)
+            )
+            context.stroke(path, with: .color(NotebookTheme.ink.opacity(0.16)), style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
+        }
+        .frame(height: 60)
+        .allowsHitTesting(false)
+    }
+
+    private func sidePageEdges() -> some View {
+        VStack(spacing: 4) {
+            ForEach(0..<26, id: \.self) { index in
+                Capsule()
+                    .fill(Color(red: 0.58, green: 0.62, blue: 0.68).opacity(index.isMultiple(of: 2) ? 0.34 : 0.2))
+                    .frame(width: 8 + CGFloat(index % 3), height: 1)
+            }
+        }
+        .frame(width: 16)
+        .padding(.vertical, 30)
+        .frame(maxHeight: .infinity)
+    }
+}
+
+private struct OpenCompositionRules: View {
+    var body: some View {
+        Canvas { context, size in
+            let middle = size.width / 2
+            let leftMargin = size.width * 0.085
+            let rightMargin = middle + size.width * 0.085
+            let farRightMargin = size.width * 0.92
+
+            for x in [leftMargin, rightMargin, farRightMargin] {
+                var vertical = Path()
+                vertical.move(to: CGPoint(x: x, y: 0))
+                vertical.addLine(to: CGPoint(x: x, y: size.height))
+                context.stroke(vertical, with: .color(NotebookTheme.redRule.opacity(0.3)), lineWidth: 0.8)
+            }
+
+            var y: CGFloat = 68
+            while y < size.height - 22 {
+                var line = Path()
+                line.move(to: CGPoint(x: 0, y: y))
+                line.addCurve(
+                    to: CGPoint(x: size.width, y: y),
+                    control1: CGPoint(x: middle * 0.62, y: y - 4),
+                    control2: CGPoint(x: middle * 1.42, y: y + 4)
+                )
+                context.stroke(line, with: .color(NotebookTheme.blueLine.opacity(0.42)), lineWidth: 0.75)
+                y += 22
+            }
+
+            let top = Path(CGRect(x: 0, y: 54, width: size.width, height: 1))
+            context.stroke(top, with: .color(NotebookTheme.blueLine.opacity(0.35)), lineWidth: 0.8)
+        }
     }
 }
 
 private struct ScanProcessingOverlay: View {
     let phase: ScanPhase
+    @State private var entered = false
+    @State private var sweep = false
+    @State private var fold = false
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.22)
+            Color.black.opacity(0.28)
                 .ignoresSafeArea()
-
-            VStack(spacing: 18) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(.white.opacity(0.58), lineWidth: 1.2)
-                        .frame(width: 178, height: 238)
-                    ScannerGlow()
-                        .frame(width: 178, height: 238)
-                        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay {
+                    ScanAtmosphere(phase: phase, active: sweep)
                 }
 
-                Text(phase.rawValue)
-                    .font(.system(.title3, design: .serif, weight: .semibold))
-                    .foregroundStyle(.white)
+            VStack(spacing: 20) {
+                ZStack(alignment: .bottom) {
+                    ProcessingNotebookPocket(phase: phase, active: fold)
+                        .offset(y: phase == .sorted ? 34 : 58)
+                        .opacity(phase == .capturing ? 0.48 : 1)
+
+                    ProcessingPage(phase: phase, sweep: sweep)
+                        .frame(width: 178, height: 238)
+                        .rotationEffect(.degrees(pageRotation))
+                        .scaleEffect(pageScale)
+                        .offset(x: pageOffset.width, y: pageOffset.height)
+                        .shadow(color: .black.opacity(0.18), radius: 12, y: 8)
+                        .animation(.spring(response: 0.7, dampingFraction: 0.78), value: phase)
+                        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: sweep)
+                }
+                .frame(width: 242, height: 292)
+
+                VStack(spacing: 9) {
+                    Text(phase.caption)
+                        .font(.system(.title3, design: .serif, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .contentTransition(.opacity)
+                    Text(phaseDetail)
+                        .font(.system(.footnote, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                        .frame(width: 230)
+                }
+
+                ScanPhaseRail(current: phase)
             }
-            .padding(26)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 26)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 34, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                    .stroke(.white.opacity(0.55), lineWidth: 0.8)
+            }
             .shadow(color: .black.opacity(0.2), radius: 24, y: 16)
+            .scaleEffect(entered ? 1 : 0.94)
+            .opacity(entered ? 1 : 0)
         }
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        .animation(.spring(response: 0.58, dampingFraction: 0.84), value: entered)
+        .animation(.spring(response: 0.62, dampingFraction: 0.82), value: phase)
+        .onAppear {
+            entered = true
+            sweep = true
+            fold = true
+        }
+    }
+
+    private var pageScale: CGFloat {
+        switch phase {
+        case .framing: 1
+        case .capturing: 1.02
+        case .processing: 0.96
+        case .organizing: 0.86
+        case .sorted: 0.42
+        }
+    }
+
+    private var pageRotation: Double {
+        switch phase {
+        case .framing: 0
+        case .capturing: -1.4
+        case .processing: 1.8
+        case .organizing: -7
+        case .sorted: -14
+        }
+    }
+
+    private var pageOffset: CGSize {
+        switch phase {
+        case .framing: .zero
+        case .capturing: CGSize(width: 0, height: -5)
+        case .processing: CGSize(width: 0, height: -12)
+        case .organizing: CGSize(width: 18, height: 0)
+        case .sorted: CGSize(width: 36, height: 66)
+        }
+    }
+
+    private var phaseDetail: String {
+        switch phase {
+        case .framing:
+            "lining up the page"
+        case .capturing:
+            "locking the page edges"
+        case .processing:
+            "cleaning ink, tables, and diagrams"
+        case .organizing:
+            "reading the subject and structure"
+        case .sorted:
+            "sliding it into your notebook"
+        }
+    }
+}
+
+private struct ProcessingPage: View {
+    let phase: ScanPhase
+    let sweep: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(NotebookTheme.paper)
+                .overlay {
+                    PaperRules()
+                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                }
+                .overlay {
+                    PaperGrain(density: 180)
+                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                }
+
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(0..<5, id: \.self) { index in
+                    Capsule()
+                        .fill(NotebookTheme.ink.opacity(index == 0 ? 0.34 : 0.18))
+                        .frame(width: CGFloat(64 + (index * 17) % 76), height: index == 0 ? 5 : 4)
+                }
+                HStack(spacing: 8) {
+                    ForEach(0..<3, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(NotebookTheme.ink.opacity(0.1 + Double(index) * 0.03))
+                            .frame(width: 34, height: 28)
+                    }
+                }
+                Spacer()
+            }
+            .padding(24)
+            .opacity(phase == .capturing ? 0.5 : 1)
+
+            EdgeLockCorners()
+                .stroke(.white.opacity(phase == .capturing ? 0.96 : 0.58), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+                .padding(10)
+                .scaleEffect(phase == .capturing && sweep ? 1.04 : 1)
+
+            if phase == .processing || phase == .capturing {
+                ScannerGlow()
+                    .offset(y: sweep ? 92 : -92)
+                    .opacity(phase == .processing ? 0.9 : 0.72)
+            }
+
+            if phase == .organizing || phase == .sorted {
+                ProcessingParticles(active: sweep)
+                    .padding(18)
+            }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [.white.opacity(0.82), .black.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        }
     }
 }
 
 private struct ScannerGlow: View {
     var body: some View {
-        TimelineView(.animation) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            Canvas { context, size in
-                let y = size.height * (0.15 + 0.7 * ((sin(t * 2.1) + 1) / 2))
-                let rect = CGRect(x: 0, y: y - 9, width: size.width, height: 18)
-                context.fill(
-                    Path(roundedRect: rect, cornerRadius: 12),
-                    with: .linearGradient(
-                        Gradient(colors: [.clear, .white.opacity(0.82), .clear]),
-                        startPoint: CGPoint(x: 0, y: y),
-                        endPoint: CGPoint(x: size.width, y: y)
-                    )
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [.clear, .white.opacity(0.86), .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
                 )
+            )
+            .frame(height: 18)
+            .blur(radius: 0.4)
+            .blendMode(.screen)
+    }
+}
+
+private struct EdgeLockCorners: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let length: CGFloat = 28
+
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + length))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX + length, y: rect.minY))
+
+        path.move(to: CGPoint(x: rect.maxX - length, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + length))
+
+        path.move(to: CGPoint(x: rect.maxX, y: rect.maxY - length))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX - length, y: rect.maxY))
+
+        path.move(to: CGPoint(x: rect.minX + length, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - length))
+
+        return path
+    }
+}
+
+private struct ProcessingParticles: View {
+    let active: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                ForEach(0..<11, id: \.self) { index in
+                    Circle()
+                        .fill(.white.opacity(index.isMultiple(of: 2) ? 0.74 : 0.42))
+                        .frame(width: CGFloat(4 + index % 4), height: CGFloat(4 + index % 4))
+                        .position(
+                            x: proxy.size.width * CGFloat((index * 23) % 91) / 100,
+                            y: proxy.size.height * CGFloat((index * 41) % 87) / 100
+                        )
+                        .offset(y: active ? CGFloat(-10 + index % 5) : CGFloat(8 - index % 4))
+                        .blur(radius: index.isMultiple(of: 3) ? 0.6 : 0)
+                }
             }
+        }
+    }
+}
+
+private struct ProcessingNotebookPocket: View {
+    let phase: ScanPhase
+    let active: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color(red: 0.12, green: 0.12, blue: 0.11))
+                .frame(width: 168, height: 112)
+                .overlay {
+                    SpeckledCompositionTexture()
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .opacity(0.5)
+                }
+                .overlay(alignment: .leading) {
+                    UnevenRoundedRectangle(cornerRadii: .init(topLeading: 22, bottomLeading: 22), style: .continuous)
+                        .fill(.black.opacity(0.82))
+                        .frame(width: 24)
+                }
+                .overlay(alignment: .top) {
+                    Capsule()
+                        .fill(.white.opacity(phase == .sorted ? 0.48 : 0.2))
+                        .frame(width: active ? 116 : 86, height: 2)
+                        .offset(y: 12)
+                }
+                .rotation3DEffect(.degrees(phase == .sorted ? -8 : -2), axis: (x: 1, y: 0, z: 0), perspective: 0.8)
+                .scaleEffect(phase == .sorted ? 1.08 : 1)
+        }
+        .animation(.spring(response: 0.62, dampingFraction: 0.78), value: phase)
+        .allowsHitTesting(false)
+    }
+}
+
+private struct ScanPhaseRail: View {
+    let current: ScanPhase
+    private let phases: [ScanPhase] = [.capturing, .processing, .organizing, .sorted]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(phases) { phase in
+                Capsule()
+                    .fill(isActive(phase) ? .white.opacity(0.86) : .white.opacity(0.22))
+                    .frame(width: current == phase ? 34 : 8, height: 8)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.78), value: current)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.12), in: Capsule())
+    }
+
+    private func isActive(_ phase: ScanPhase) -> Bool {
+        guard let currentIndex = phases.firstIndex(of: current),
+              let phaseIndex = phases.firstIndex(of: phase) else {
+            return false
+        }
+        return phaseIndex <= currentIndex
+    }
+}
+
+private struct ScanAtmosphere: View {
+    let phase: ScanPhase
+    let active: Bool
+
+    var body: some View {
+        Canvas { context, size in
+            let center = CGPoint(x: size.width * 0.5, y: size.height * 0.42)
+            context.fill(
+                Path(ellipseIn: CGRect(x: center.x - 170, y: center.y - 170, width: 340, height: 340)),
+                with: .radialGradient(
+                    Gradient(colors: [phaseColor.opacity(0.26), .clear]),
+                    center: center,
+                    startRadius: 0,
+                    endRadius: active ? 210 : 150
+                )
+            )
+        }
+        .animation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true), value: active)
+    }
+
+    private var phaseColor: Color {
+        switch phase {
+        case .framing: .white
+        case .capturing: Color(red: 0.92, green: 0.82, blue: 0.56)
+        case .processing: Color(red: 0.62, green: 0.72, blue: 0.88)
+        case .organizing: Color(red: 0.72, green: 0.64, blue: 0.84)
+        case .sorted: Color(red: 0.62, green: 0.78, blue: 0.62)
         }
     }
 }
