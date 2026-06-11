@@ -16,6 +16,7 @@ struct AuthView: View {
     @State private var coverDrag: CGFloat = 0
     @State private var legalDocument: LegalDocument?
     @State private var ambientMotion = false
+    @State private var authControlsReady = false
 
     var body: some View {
         ZStack {
@@ -27,7 +28,7 @@ struct AuthView: View {
                 heroStack
                     .scaleEffect(appeared ? 1 : 0.92)
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: notebookOpen ? -74 : -188)
+                    .offset(y: notebookOpen ? -18 : -188)
 
                 if notebookOpen {
                     authPanel
@@ -104,6 +105,7 @@ struct AuthView: View {
                             VStack(spacing: 14) {
                             ForEach(Array(AuthProvider.allCases.enumerated()), id: \.element.id) { index, provider in
                                 AuthProviderPageButton(provider: provider) {
+                                    guard authControlsReady else { return }
                                     if provider == .email {
                                         Haptics.open()
                                         withAnimation(.spring(response: 1.02, dampingFraction: 0.88)) {
@@ -124,9 +126,10 @@ struct AuthView: View {
                         .opacity(Double((openProgress - 0.54) / 0.46))
                         .scaleEffect(0.9 + openProgress * 0.1)
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                        .allowsHitTesting(authControlsReady)
                     }
                 }
-                .frame(width: 252 + openProgress * 174, height: 324 + openProgress * 104)
+                .frame(width: 252 + openProgress * 188, height: 324 + openProgress * 112)
                 .rotation3DEffect(.degrees(-6 + openProgress * 13), axis: (x: 1, y: 0.18, z: 0), perspective: 0.72)
                 .offset(x: openProgress * 74, y: openProgress * 16)
                 .shadow(color: .black.opacity(0.12), radius: 16, y: 10)
@@ -134,7 +137,7 @@ struct AuthView: View {
             CompositionCoverFace(
                 subject: nil,
                 cornerRadius: 22,
-                spineWidth: 15,
+                spineWidth: 11,
                 labelWidth: 152,
                 labelHeight: 104,
                 labelOffsetY: 36,
@@ -143,7 +146,7 @@ struct AuthView: View {
                 .frame(width: 236, height: 306)
                 .rotation3DEffect(.degrees(-156 * openProgress + (leatherDrift ? 2.5 : -2.5)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
                 .offset(x: -132 * openProgress, y: 4 + 13 * openProgress)
-                .opacity(Double(1 - max(0, (openProgress - 0.74) / 0.26)))
+                .opacity(Double(1 - max(0, (openProgress - 0.58) / 0.26)))
                 .scaleEffect(1 - openProgress * 0.08)
                 .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
                 .gesture(
@@ -165,6 +168,7 @@ struct AuthView: View {
                                 notebookOpen = shouldOpen
                                 coverDrag = 0
                             }
+                            settleAuthControls(open: shouldOpen)
                         }
                 )
                 .onTapGesture {
@@ -174,6 +178,7 @@ struct AuthView: View {
                         notebookOpen = true
                         coverDrag = 0
                     }
+                    settleAuthControls(open: true)
                 }
                 .accessibilityLabel("drag notebook cover")
                 .accessibilityHint("tap or drag left to open sign up")
@@ -181,6 +186,19 @@ struct AuthView: View {
         .scaleEffect(notebookOpen ? 1.03 : 1)
         .animation(.spring(response: 0.78, dampingFraction: 0.88), value: notebookOpen)
         .animation(.spring(response: 0.46, dampingFraction: 0.86), value: coverDrag)
+    }
+
+    private func settleAuthControls(open: Bool) {
+        authControlsReady = false
+        guard open else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(620))
+            if notebookOpen {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                    authControlsReady = true
+                }
+            }
+        }
     }
 
     private var authPanel: some View {

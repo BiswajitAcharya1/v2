@@ -1572,6 +1572,7 @@ struct OpenCompositionSpreadBackground: View {
                     centerFold
                 }
                 pageCrown(size: size)
+                bottomPageCurl(size: size)
                 HStack {
                     sidePageEdges()
                     Spacer()
@@ -1646,19 +1647,19 @@ struct OpenCompositionSpreadBackground: View {
             Rectangle()
                 .fill(
                     LinearGradient(
-                        colors: [.black.opacity(0.16), .white.opacity(0.34), .black.opacity(0.11)],
+                        colors: [.black.opacity(0.13), .white.opacity(0.42), .black.opacity(0.1)],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 )
-                .frame(width: 36)
-                .blur(radius: 3)
+                .frame(width: 28)
+                .blur(radius: 2.4)
             Capsule()
-                .fill(.black.opacity(0.16))
-                .frame(width: 1.3)
+                .fill(.black.opacity(0.13))
+                .frame(width: 1.1)
             Capsule()
-                .stroke(.white.opacity(0.44), lineWidth: 0.8)
-                .frame(width: 10)
+                .stroke(.white.opacity(0.5), lineWidth: 0.7)
+                .frame(width: 8)
         }
         .allowsHitTesting(false)
     }
@@ -1682,6 +1683,42 @@ struct OpenCompositionSpreadBackground: View {
                 .offset(y: -2)
             }
             Spacer()
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func bottomPageCurl(size: CGSize) -> some View {
+        VStack {
+            Spacer()
+            ZStack(alignment: .top) {
+                UnevenRoundedRectangle(
+                    cornerRadii: .init(topLeading: 8, bottomLeading: 30, bottomTrailing: 30, topTrailing: 8),
+                    style: .continuous
+                )
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.78, green: 0.8, blue: 0.84).opacity(0.26),
+                            .white.opacity(0.28),
+                            Color(red: 0.55, green: 0.58, blue: 0.64).opacity(0.18)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: size.width - 10, height: 18)
+                .offset(y: 7)
+
+                HStack(spacing: 5) {
+                    ForEach(0..<38, id: \.self) { index in
+                        Capsule()
+                            .fill(Color(red: 0.54, green: 0.6, blue: 0.68).opacity(index.isMultiple(of: 2) ? 0.22 : 0.12))
+                            .frame(width: 1, height: 6 + CGFloat(index % 4))
+                    }
+                }
+                .frame(width: size.width - 44)
+                .offset(y: 7)
+            }
         }
         .allowsHitTesting(false)
     }
@@ -2062,6 +2099,12 @@ struct ProcessingPage: View {
             .padding(24)
             .opacity(phase == .capturing ? 0.5 : 1)
 
+            ScanExtractionPreview(phase: phase, active: sweep)
+                .padding(22)
+                .opacity(extractionOpacity)
+                .scaleEffect(phase == .sorted ? 0.92 : 1)
+                .animation(.spring(response: 0.52, dampingFraction: 0.82), value: phase)
+
             EdgeLockCorners()
                 .stroke(.white.opacity(phase == .capturing ? 0.96 : 0.58), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
                 .padding(10)
@@ -2092,6 +2135,122 @@ struct ProcessingPage: View {
                     lineWidth: 1
                 )
         }
+    }
+
+    private var extractionOpacity: Double {
+        switch phase {
+        case .framing:
+            return 0
+        case .capturing:
+            return 0.18
+        case .processing:
+            return 0.82
+        case .organizing, .sorted:
+            return 1
+        }
+    }
+}
+
+struct ScanExtractionPreview: View {
+    let phase: ScanPhase
+    let active: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                ForEach(0..<3, id: \.self) { index in
+                    Capsule()
+                        .fill(NotebookTheme.ink.opacity(isProcessing ? 0.34 : 0.18))
+                        .frame(width: active ? CGFloat(34 + index * 13) : CGFloat(24 + index * 9), height: 5)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(0..<4, id: \.self) { index in
+                    Capsule()
+                        .fill(NotebookTheme.ink.opacity(0.18 + Double(index) * 0.025))
+                        .frame(width: active ? CGFloat(96 - index * 8) : CGFloat(64 + index * 7), height: 4)
+                }
+            }
+
+            HStack(alignment: .top, spacing: 9) {
+                ScanTablePreview(active: active, visible: phaseIndex >= 3)
+                    .frame(width: 70, height: 58)
+                ScanDiagramPreview(active: active, visible: phaseIndex >= 2)
+                    .frame(width: 58, height: 58)
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .allowsHitTesting(false)
+    }
+
+    private var isProcessing: Bool {
+        phase == .processing || phase == .organizing
+    }
+
+    private var phaseIndex: Int {
+        ScanPhase.allCases.firstIndex(of: phase) ?? 0
+    }
+}
+
+private struct ScanTablePreview: View {
+    var active: Bool
+    var visible: Bool
+
+    var body: some View {
+        VStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { row in
+                HStack(spacing: 3) {
+                    ForEach(0..<3, id: \.self) { column in
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .stroke(NotebookTheme.ink.opacity(row == 0 ? 0.36 : 0.2), lineWidth: 0.8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                    .fill(row == 0 ? NotebookTheme.ink.opacity(0.06) : .white.opacity(0.08))
+                            )
+                            .frame(width: column == 0 ? 17 : 21, height: row == 0 ? 12 : 15)
+                    }
+                }
+            }
+        }
+        .padding(6)
+        .background(.white.opacity(0.32), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(.white.opacity(0.46), lineWidth: 0.7)
+        }
+        .opacity(visible ? 1 : 0)
+        .offset(y: visible ? 0 : 8)
+        .scaleEffect(active ? 1.02 : 0.98)
+        .animation(.spring(response: 0.46, dampingFraction: 0.8), value: visible)
+        .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: active)
+    }
+}
+
+private struct ScanDiagramPreview: View {
+    var active: Bool
+    var visible: Bool
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.white.opacity(0.3))
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .stroke(NotebookTheme.ink.opacity(0.12 + Double(index) * 0.05), lineWidth: 0.8)
+                    .frame(width: CGFloat(24 + index * 12), height: CGFloat(15 + index * 8))
+                    .rotationEffect(.degrees(active ? Double(index * 48 + 10) : Double(index * 48 - 10)))
+            }
+            Image(systemName: "cube.transparent")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(NotebookTheme.ink.opacity(0.74))
+        }
+        .opacity(visible ? 1 : 0)
+        .scaleEffect(visible ? 1 : 0.78)
+        .rotation3DEffect(.degrees(active ? 12 : -10), axis: (x: 0.2, y: 1, z: 0), perspective: 0.76)
+        .animation(.spring(response: 0.5, dampingFraction: 0.78), value: visible)
+        .animation(.easeInOut(duration: 1.9).repeatForever(autoreverses: true), value: active)
     }
 }
 
@@ -2576,6 +2735,10 @@ struct InteractiveModelMap: View {
                             .opacity(awake ? 1 : 0)
                     }
                     .overlay {
+                        ModelContourRings(shape: reconstruction.shape, active: orbit)
+                            .opacity(awake ? 1 : 0)
+                    }
+                    .overlay {
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
                             .stroke(.white.opacity(0.44), lineWidth: 0.8)
                     }
@@ -2602,6 +2765,7 @@ struct InteractiveModelMap: View {
                         )
                     }
                     .stroke(NotebookTheme.ink.opacity(selectedNode == node ? 0.34 : 0.12), lineWidth: selectedNode == node ? 2 : 1)
+                    .scaleEffect(1 + CGFloat(anchor.z) * 0.08, anchor: .center)
                     .opacity(awake ? 1 : 0)
                 }
 
@@ -2657,7 +2821,10 @@ struct InteractiveModelMap: View {
                     }
                     .buttonStyle(.plain)
                     .position(awake ? point : center)
+                    .scaleEffect(selectedNode == node ? 1.08 : 0.96 + CGFloat(anchor.z) * 0.12)
+                    .offset(y: CGFloat(anchor.z) * -10)
                     .opacity(awake ? 1 : 0)
+                    .zIndex(selectedNode == node ? 20 : 10 + anchor.z)
                 }
             }
             .animation(.spring(response: 0.62, dampingFraction: 0.78), value: awake)
@@ -2764,6 +2931,38 @@ enum ModelRenderMode: String, CaseIterable, Identifiable {
         case .mesh: 5
         case .stack: 4
         }
+    }
+}
+
+struct ModelContourRings: View {
+    var shape: ModelShape
+    var active: Bool
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            let center = CGPoint(x: size.width * 0.5, y: size.height * 0.5)
+            let smallest = min(size.width, size.height)
+            for index in 0..<5 {
+                let phase = CGFloat(index) / 5
+                let drift = active ? CGFloat(sin(Double(index) * 0.7)) * 2.8 : 0
+                let rect = CGRect(
+                    x: center.x - smallest * (0.14 + phase * 0.075),
+                    y: center.y - smallest * (0.08 + phase * 0.046) + drift,
+                    width: smallest * (0.28 + phase * 0.15),
+                    height: smallest * (0.16 + phase * 0.092)
+                )
+                var path = Path(ellipseIn: rect)
+                if shape == .stack {
+                    path = Path(roundedRect: rect, cornerRadius: 18)
+                }
+                context.stroke(
+                    path,
+                    with: .color(NotebookTheme.ink.opacity(0.045 + Double(index) * 0.012)),
+                    style: StrokeStyle(lineWidth: index == 0 ? 1.4 : 0.9, lineCap: .round)
+                )
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
 

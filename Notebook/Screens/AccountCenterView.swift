@@ -33,6 +33,12 @@ struct AccountCenterView: View {
                         accountRow(systemName: "sparkles", title: strongestSubject, detail: "strongest journal")
                     }
 
+                    accountSection("security") {
+                        accountRow(systemName: "key.fill", title: authProviderTitle, detail: authSecurityDetail)
+                        accountRow(systemName: "faceid", title: "face id reset", detail: faceIDDetail)
+                        accountRow(systemName: "icloud.fill", title: "synced keychain", detail: "credentials use secure keychain sync")
+                    }
+
                     accountSection("preferences") {
                         Toggle(
                             "personal voice",
@@ -274,6 +280,25 @@ struct AccountCenterView: View {
     private var voiceStatus: String {
         if store.voiceProfile.isPersonalized { return "ready" }
         return store.voiceProfile.wantsPersonalVoice ? "enabled" : "optional"
+    }
+
+    private var authProviderTitle: String {
+        guard let provider = store.authSession?.provider else { return "email access" }
+        return "\(provider.rawValue) access"
+    }
+
+    private var authSecurityDetail: String {
+        guard let email = store.authSession?.email, !email.isEmpty else {
+            return "local session protected"
+        }
+        return email.lowercased()
+    }
+
+    private var faceIDDetail: String {
+        guard let email = store.authSession?.email, !email.isEmpty else {
+            return "available after email sign up"
+        }
+        return CredentialVault.accountExists(email: email) ? "linked to this account" : "available after email sign up"
     }
 
     private var studyStreak: Int {

@@ -31,6 +31,7 @@ final class NotebookStore {
     var voiceRecognitionAvailable = false
     var voicePromptWordProgress = 0
     var latestVoiceTranscript: String?
+    var voiceSetupMessage: String?
 
     private let authService: LocalAuthServing = LocalAuthService()
     private let scanProcessor: ScanProcessingServing = LocalScanProcessingService()
@@ -79,7 +80,7 @@ final class NotebookStore {
 
     func signIn(provider: AuthProvider) async {
         if provider == .apple || provider == .google {
-            let message = "\(provider.rawValue) sign in is waiting for credentials."
+            let message = provider.credentialSetupMessage
             authMessage = message
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(2.4))
@@ -183,6 +184,7 @@ final class NotebookStore {
         voiceRecognitionAvailable = false
         voicePromptWordProgress = 0
         latestVoiceTranscript = nil
+        voiceSetupMessage = nil
         stopLiveVoiceCapture(cancelRecognition: true)
         recordingURL = nil
         recordingPrompt = nil
@@ -280,9 +282,11 @@ final class NotebookStore {
     private func startVoicePrompt(_ prompt: String) async {
         stopLiveVoiceCapture(cancelRecognition: true)
         isPreparingVoiceRecording = true
+        voiceSetupMessage = "opening microphone."
         defer { isPreparingVoiceRecording = false }
         guard await requestMicrophonePermission() else {
             authMessage = "microphone access is needed to record voice."
+            voiceSetupMessage = "microphone access is needed."
             return
         }
         let speechAllowed = await requestSpeechPermission()
@@ -303,7 +307,6 @@ final class NotebookStore {
             guard format.sampleRate > 0, format.channelCount > 0 else {
                 throw VoiceRecordingError.failedToStart
             }
-            input.removeTap(onBus: 0)
             audioEngine = engine
             let audioFile = try AVAudioFile(forWriting: url, settings: format.settings)
             var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -401,6 +404,7 @@ final class NotebookStore {
             voiceRecognitionAvailable = recognitionRequest != nil
             voicePromptWordProgress = 0
             latestVoiceTranscript = nil
+            voiceSetupMessage = recognitionRequest == nil ? "listening to your voice." : "listening for the sentence."
             lastVoiceHeardAt = nil
             voiceNoiseFloor = 0.025
             voiceSignalStartedAt = nil
@@ -427,6 +431,7 @@ final class NotebookStore {
             lastVoiceMeterUIUpdateAt = nil
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
             authMessage = "voice recording could not start."
+            voiceSetupMessage = "voice recording could not start."
         }
     }
 
@@ -458,12 +463,14 @@ final class NotebookStore {
         recordingPrompt = nil
         guard duration >= 0.5 else {
             authMessage = "record a little longer so voice can be saved."
+            voiceSetupMessage = "record a little longer."
             try? FileManager.default.removeItem(at: url)
             return
         }
         if hadWordRecognition {
             guard completedProgress >= max(1, prompt.normalizedSpeechWords.count - 1) else {
                 authMessage = "read the sentence once so the voice sample can match it."
+                voiceSetupMessage = "read the sentence once."
                 try? FileManager.default.removeItem(at: url)
                 return
             }
@@ -471,6 +478,7 @@ final class NotebookStore {
             let targetSpeechDuration = targetSpeechDuration(for: prompt)
             guard capturedSpeechDuration >= targetSpeechDuration else {
                 authMessage = "keep reading until the voice meter stays active."
+                voiceSetupMessage = "keep reading until the meter moves."
                 try? FileManager.default.removeItem(at: url)
                 return
             }
@@ -478,6 +486,7 @@ final class NotebookStore {
         let sampleID = UUID()
         voiceProfile.samples.append(VoiceSample(id: sampleID, prompt: prompt, isRecorded: true, audioURL: url, duration: duration))
         voiceProfile.isPersonalized = voiceProfile.samples.count == 3
+        voiceSetupMessage = voiceProfile.isPersonalized ? "voice ready." : "sample saved."
         if voiceProfile.isPersonalized {
             withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
                 setupStep = .subjects

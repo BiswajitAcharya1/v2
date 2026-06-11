@@ -135,6 +135,16 @@ private struct SetupFlowView: View {
                     samples: store.voiceProfile.samples
                 )
 
+                if let message = store.voiceSetupMessage {
+                    Text(message)
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.muted)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.white.opacity(0.52), in: Capsule())
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 HStack(spacing: 14) {
                     Button {
                         Haptics.softTap()
@@ -427,6 +437,7 @@ private struct SubjectToken: View {
 
     var body: some View {
         Button {
+            Haptics.softTap()
             withAnimation(.spring(response: 0.28, dampingFraction: 0.7)) {
                 rotation += 90
             }
@@ -449,5 +460,164 @@ private struct SubjectToken: View {
             .background(.ultraThinMaterial, in: Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("remove \(subject)")
+    }
+}
+
+private struct SubjectSuggestionRibbon: View {
+    var subjects: [String]
+    var selected: [String]
+    var draft: String
+    var add: (String) -> Void
+
+    var body: some View {
+        if !subjects.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 11) {
+                    ForEach(Array(subjects.enumerated()), id: \.element) { index, subject in
+                        SubjectSuggestionNotebook(subject: subject, active: isBest(subject), delay: Double(index) * 0.045) {
+                            add(subject)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 1)
+            }
+            .frame(height: 116)
+        }
+    }
+
+    private func isBest(_ subject: String) -> Bool {
+        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        return SubjectCatalog.bestMatch(for: draft, excluding: Set(selected)) == subject
+    }
+}
+
+private struct SubjectSuggestionNotebook: View {
+    var subject: String
+    var active: Bool
+    var delay: Double
+    var add: () -> Void
+    @State private var entered = false
+    @State private var shimmer = false
+
+    var body: some View {
+        Button {
+            Haptics.selection()
+            add()
+        } label: {
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(NotebookTheme.ink)
+                    .overlay {
+                        SpeckledCompositionTexture()
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .opacity(0.72)
+                    }
+                    .overlay(alignment: .leading) {
+                        UnevenRoundedRectangle(
+                            cornerRadii: .init(topLeading: 18, bottomLeading: 18),
+                            style: .continuous
+                        )
+                        .fill(.black.opacity(0.86))
+                        .frame(width: 8)
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(active ? .white.opacity(0.76) : .white.opacity(0.28), lineWidth: active ? 1.4 : 0.8)
+                    }
+                    .overlay {
+                        DirectionAwareTouchHighlight(
+                            offset: CGSize(width: shimmer ? 16 : -12, height: shimmer ? -10 : 8),
+                            isActive: active || shimmer,
+                            cornerRadius: 18
+                        )
+                        .blendMode(.screen)
+                        .opacity(active ? 0.34 : 0.2)
+                    }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: symbol)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(NotebookTheme.ink)
+                            .frame(width: 26, height: 26)
+                            .background(.white, in: Circle())
+                        Spacer(minLength: 0)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Text(subject)
+                        .font(.system(size: 12, weight: .semibold, design: .serif))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.72)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(9)
+                .background(.white, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .frame(width: 88, height: 74)
+                .offset(x: 18, y: 16)
+            }
+            .frame(width: 128, height: 104)
+            .rotationEffect(.degrees(entered ? (active ? -1.8 : 0.8) : 6))
+            .rotation3DEffect(.degrees(active ? 7 : -3), axis: (x: 0.18, y: 1, z: 0), perspective: 0.82)
+            .scaleEffect(active ? 1.03 : 1)
+            .opacity(entered ? 1 : 0)
+            .offset(y: entered ? 0 : 14)
+            .shadow(color: .black.opacity(active ? 0.16 : 0.09), radius: active ? 10 : 7, y: active ? 8 : 5)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("add \(subject)")
+        .onAppear {
+            withAnimation(.spring(response: 0.58, dampingFraction: 0.82).delay(delay)) {
+                entered = true
+            }
+            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true).delay(delay)) {
+                shimmer = true
+            }
+        }
+    }
+
+    private var symbol: String {
+        switch subject {
+        case let text where text.contains("math") || text.contains("calculus") || text.contains("algebra") || text.contains("geometry"):
+            "function"
+        case let text where text.contains("biology") || text.contains("anatomy"):
+            "leaf.fill"
+        case let text where text.contains("chemistry"):
+            "atom"
+        case let text where text.contains("physics"):
+            "scope"
+        case let text where text.contains("computer") || text.contains("coding"):
+            "chevron.left.forwardslash.chevron.right"
+        case let text where text.contains("history") || text.contains("government"):
+            "building.columns.fill"
+        case let text where text.contains("english") || text.contains("literature") || text.contains("writing"):
+            "text.book.closed.fill"
+        default:
+            "book.closed.fill"
+        }
+    }
+}
+
+private struct SelectedSubjectShelf: View {
+    var subjects: [String]
+    var remove: (String) -> Void
+
+    var body: some View {
+        if !subjects.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(subjects, id: \.self) { subject in
+                        SubjectToken(subject: subject) {
+                            remove(subject)
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
     }
 }

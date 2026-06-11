@@ -46,6 +46,15 @@ struct VoiceOnboardingView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .animation(.spring(response: 0.25, dampingFraction: 0.76), value: store.voiceSignalActive)
                             VoiceLevelStrip(level: store.voiceRecordingLevel, recording: store.isRecordingVoice)
+                            if let message = store.voiceSetupMessage {
+                                Text(message)
+                                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                                    .foregroundStyle(NotebookTheme.muted)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(.white.opacity(0.52), in: Capsule())
+                                    .transition(.move(edge: .top).combined(with: .opacity))
+                            }
                             Button {
                                 recordCurrentPrompt()
                             } label: {

@@ -19,6 +19,7 @@ struct HomeView: View {
     @State private var doodleDrift = false
     @State private var modelReadyPulse = false
     @State private var actionLensAwake = false
+    @State private var revealDetailSurfaces = false
     var body: some View {
         ScrollView {
             VStack(alignment: .center, spacing: 18) {
@@ -26,13 +27,15 @@ struct HomeView: View {
                 journalCarousel
                 shelfNotes
                 journalCommandSurface
-                memoryMapRibbon
-                dailyBriefStrip
-                presentationRunwayPanel
-                autopilotCapsule
-                modelReadinessCapsule
-                modelReadyToast
-                reviewPulseStrip
+                if revealDetailSurfaces {
+                    memoryMapRibbon
+                    dailyBriefStrip
+                    presentationRunwayPanel
+                    autopilotCapsule
+                    modelReadinessCapsule
+                    modelReadyToast
+                    reviewPulseStrip
+                }
             }
             .padding(.top, 18)
             .padding(.bottom, 32)
@@ -40,8 +43,11 @@ struct HomeView: View {
         .background {
             ZStack {
                 LivingPaperBackground().ignoresSafeArea()
-                HomeDoodleLayer(animated: doodleDrift)
-                    .ignoresSafeArea()
+                if revealDetailSurfaces {
+                    HomeDoodleLayer(animated: doodleDrift)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                }
             }
         }
         .navigationDestination(item: $selectedNotebook) { notebook in
@@ -97,17 +103,24 @@ struct HomeView: View {
             .presentationDragIndicator(.visible)
         }
         .onAppear {
+            revealDetailSurfaces = false
             withAnimation(.easeInOut(duration: 6.2).repeatForever(autoreverses: true)) {
                 sparkleSpin = true
             }
             withAnimation(.spring(response: 0.96, dampingFraction: 0.88).delay(0.12)) {
                 entered = true
             }
-            withAnimation(.easeInOut(duration: 8.0).repeatForever(autoreverses: true)) {
-                doodleDrift = true
-            }
-            withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true)) {
-                actionLensAwake = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(520))
+                withAnimation(.spring(response: 0.62, dampingFraction: 0.86)) {
+                    revealDetailSurfaces = true
+                }
+                withAnimation(.easeInOut(duration: 8.0).repeatForever(autoreverses: true)) {
+                    doodleDrift = true
+                }
+                withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true)) {
+                    actionLensAwake = true
+                }
             }
         }
     }
@@ -747,32 +760,13 @@ struct HomeView: View {
                         .opacity(bestCourseMatch == nil ? 0.42 : 1)
                     }
 
-                    VStack(spacing: 8) {
-                        ForEach(courseSuggestions, id: \.self) { subject in
-                            Button {
-                                addCourse(subject)
-                            } label: {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "book.closed.fill")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 28, height: 28)
-                                        .background(NotebookTheme.ink, in: Circle())
-                                    Text(subject)
-                                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                                        .foregroundStyle(NotebookTheme.ink)
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 9)
-                                .background(.white.opacity(0.58), in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .animation(.spring(response: 0.72, dampingFraction: 0.86), value: courseSuggestions)
+                    CourseSuggestionCarousel(
+                        subjects: courseSuggestions,
+                        activeSubject: bestCourseMatch,
+                        onSelect: addCourse
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.spring(response: 0.78, dampingFraction: 0.88), value: courseSuggestions)
                 }
             }
             .padding(20)
@@ -834,6 +828,115 @@ struct HomeView: View {
 
     private func journalOpacity(for distance: Int) -> Double {
         abs(distance) > 1 ? 0.42 : 1
+    }
+}
+
+private struct CourseSuggestionCarousel: View {
+    var subjects: [String]
+    var activeSubject: String?
+    var onSelect: (String) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(Array(subjects.enumerated()), id: \.element) { index, subject in
+                    CourseSuggestionBook(
+                        subject: subject,
+                        active: subject == activeSubject,
+                        delay: Double(index) * 0.055
+                    ) {
+                        onSelect(subject)
+                    }
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 8)
+        }
+        .frame(height: 142)
+    }
+}
+
+private struct CourseSuggestionBook: View {
+    var subject: String
+    var active: Bool
+    var delay: Double
+    var onSelect: () -> Void
+
+    @State private var entered = false
+    @State private var glow = false
+
+    var body: some View {
+        Button {
+            Haptics.open()
+            onSelect()
+        } label: {
+            ZStack(alignment: .topLeading) {
+                CompositionCoverFace(
+                    subject: subject,
+                    cornerRadius: 16,
+                    spineWidth: 6,
+                    labelWidth: 70,
+                    labelHeight: 56,
+                    labelOffsetY: 16,
+                    paperGrainDensity: 44
+                )
+                .overlay {
+                    DirectionAwareTouchHighlight(
+                        offset: CGSize(width: glow ? 18 : -14, height: glow ? -10 : 10),
+                        isActive: active || glow,
+                        cornerRadius: 16
+                    )
+                    .blendMode(.screen)
+                    .opacity(active ? 0.36 : 0.18)
+                }
+
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .frame(width: 30, height: 30)
+                    .background(.white, in: Circle())
+                    .offset(x: 64, y: 80)
+                    .shadow(color: .black.opacity(0.12), radius: 5, y: 3)
+            }
+            .frame(width: 98, height: 128)
+            .rotationEffect(.degrees(entered ? (active ? -2.4 : 1.4) : 7))
+            .rotation3DEffect(.degrees(active ? 8 : -3), axis: (x: 0.16, y: 1, z: 0), perspective: 0.74)
+            .scaleEffect(active ? 1.04 : 1)
+            .offset(y: entered ? 0 : 18)
+            .opacity(entered ? 1 : 0)
+            .shadow(color: .black.opacity(active ? 0.2 : 0.12), radius: active ? 15 : 10, y: active ? 10 : 7)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("add \(subject)")
+        .onAppear {
+            withAnimation(.spring(response: 0.62, dampingFraction: 0.84).delay(delay)) {
+                entered = true
+            }
+            withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true).delay(delay)) {
+                glow = true
+            }
+        }
+    }
+
+    private var symbol: String {
+        switch subject {
+        case let text where text.contains("math") || text.contains("calculus") || text.contains("algebra") || text.contains("geometry"):
+            return "function"
+        case let text where text.contains("biology") || text.contains("anatomy"):
+            return "leaf.fill"
+        case let text where text.contains("chemistry"):
+            return "atom"
+        case let text where text.contains("physics"):
+            return "scope"
+        case let text where text.contains("computer") || text.contains("coding"):
+            return "chevron.left.forwardslash.chevron.right"
+        case let text where text.contains("history") || text.contains("government"):
+            return "building.columns.fill"
+        case let text where text.contains("english") || text.contains("literature") || text.contains("writing"):
+            return "text.book.closed.fill"
+        default:
+            return "book.closed.fill"
+        }
     }
 }
 

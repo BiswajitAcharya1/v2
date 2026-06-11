@@ -837,6 +837,17 @@ enum AuthProvider: String, CaseIterable, Identifiable, Codable {
         case .email: "envelope.fill"
         }
     }
+
+    var credentialSetupMessage: String {
+        switch self {
+        case .apple:
+            "apple sign in needs your app services key."
+        case .google:
+            "google sign in needs your client id."
+        case .email:
+            "email sign in is ready."
+        }
+    }
 }
 
 enum AuthError: LocalizedError {

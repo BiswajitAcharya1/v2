@@ -9,8 +9,12 @@ struct DocumentScannerView: View {
     var body: some View {
         Group {
             if VNDocumentCameraViewController.isSupported {
-                DocumentCameraRepresentable(onScan: onScan, onCancel: onCancel)
-                    .ignoresSafeArea()
+                ZStack {
+                    DocumentCameraRepresentable(onScan: onScan, onCancel: onCancel)
+                        .ignoresSafeArea()
+                    NativeScannerChrome()
+                        .allowsHitTesting(false)
+                }
             } else {
                 PhotoImportScannerFallback(onScan: onScan, onCancel: onCancel)
             }
@@ -73,6 +77,7 @@ private struct PhotoImportScannerFallback: View {
     @State private var selectedImages: [UIImage] = []
     @State private var isLoading = false
     @State private var glow = false
+    @State private var scanLight = false
 
     var body: some View {
         ZStack {
@@ -144,6 +149,10 @@ private struct PhotoImportScannerFallback: View {
                     ScannerFallbackSweep(active: glow || isLoading)
                         .frame(width: 254, height: 340)
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                    ScannerExtractionHUD(active: scanLight || !selectedImages.isEmpty)
+                        .frame(width: 252, height: 334)
+                        .opacity(selectedImages.isEmpty ? 0.72 : 1)
                 }
                 .rotation3DEffect(.degrees(glow ? 2.4 : -2.4), axis: (x: 0.2, y: 1, z: 0), perspective: 0.78)
 
@@ -200,6 +209,9 @@ private struct PhotoImportScannerFallback: View {
             withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
                 glow = true
             }
+            withAnimation(.easeInOut(duration: 1.55).repeatForever(autoreverses: true)) {
+                scanLight = true
+            }
         }
     }
 
@@ -231,6 +243,150 @@ private struct PhotoImportScannerFallback: View {
         }
         selectedImages = images
         isLoading = false
+    }
+}
+
+private struct NativeScannerChrome: View {
+    @State private var active = false
+
+    var body: some View {
+        VStack {
+            Spacer()
+            VStack(spacing: 14) {
+                ScannerFocusFrame(active: active)
+                    .frame(height: 430)
+                    .padding(.horizontal, 30)
+
+                HStack(spacing: 9) {
+                    scannerChip("edges", "viewfinder")
+                    scannerChip("text", "text.viewfinder")
+                    scannerChip("objects", "cube.transparent")
+                }
+                .padding(.bottom, 26)
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                active = true
+            }
+        }
+    }
+
+    private func scannerChip(_ title: String, _ symbol: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .bold))
+            Text(title)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+        }
+        .foregroundStyle(.white.opacity(0.9))
+        .padding(.horizontal, 11)
+        .frame(height: 32)
+        .background(.black.opacity(0.24), in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.18), lineWidth: 0.7)
+        }
+    }
+}
+
+private struct ScannerFocusFrame: View {
+    var active: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+            ZStack {
+                RoundedRectangle(cornerRadius: 32, style: .continuous)
+                    .stroke(.white.opacity(0.34), lineWidth: 1)
+                    .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+
+                ScannerCornerMarks()
+                    .stroke(.white.opacity(0.84), style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+                    .padding(13)
+
+                LinearGradient(colors: [.clear, .white.opacity(0.28), .clear], startPoint: .leading, endPoint: .trailing)
+                    .frame(width: width * 0.72, height: 24)
+                    .blur(radius: 7)
+                    .rotationEffect(.degrees(-10))
+                    .offset(x: active ? width * 0.2 : -width * 0.34, y: active ? height * 0.22 : -height * 0.18)
+                    .blendMode(.screen)
+
+                ForEach(0..<4, id: \.self) { index in
+                    Circle()
+                        .fill(.white.opacity(active ? 0.74 : 0.36))
+                        .frame(width: 5, height: 5)
+                        .position(anchorPosition(index, width: width, height: height))
+                }
+            }
+        }
+    }
+
+    private func anchorPosition(_ index: Int, width: CGFloat, height: CGFloat) -> CGPoint {
+        let points = [
+            CGPoint(x: width * 0.2, y: height * 0.22),
+            CGPoint(x: width * 0.8, y: height * 0.18),
+            CGPoint(x: width * 0.84, y: height * 0.78),
+            CGPoint(x: width * 0.16, y: height * 0.82)
+        ]
+        return points[index]
+    }
+}
+
+private struct ScannerCornerMarks: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let length: CGFloat = 36
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + length))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.minX + length, y: rect.minY))
+        path.move(to: CGPoint(x: rect.maxX - length, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + length))
+        path.move(to: CGPoint(x: rect.maxX, y: rect.maxY - length))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX - length, y: rect.maxY))
+        path.move(to: CGPoint(x: rect.minX + length, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - length))
+        return path
+    }
+}
+
+private struct ScannerExtractionHUD: View {
+    var active: Bool
+
+    var body: some View {
+        ZStack {
+            ScannerCornerMarks()
+                .stroke(NotebookTheme.ink.opacity(0.42), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+                .padding(8)
+
+            VStack {
+                Spacer()
+                HStack(spacing: 7) {
+                    miniStatus("ocr", "text.viewfinder", active)
+                    miniStatus("table", "tablecells", active)
+                    miniStatus("3d", "cube.transparent", active)
+                }
+                .padding(.bottom, 12)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func miniStatus(_ text: String, _ symbol: String, _ active: Bool) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .bold))
+            Text(text)
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+        }
+        .foregroundStyle(NotebookTheme.ink.opacity(0.78))
+        .padding(.horizontal, 7)
+        .frame(height: 24)
+        .background(.white.opacity(active ? 0.68 : 0.42), in: Capsule())
+        .scaleEffect(active ? 1.03 : 0.98)
     }
 }
 

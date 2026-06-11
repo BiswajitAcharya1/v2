@@ -21,7 +21,7 @@ struct CompositionNotebookCard: View {
                 CompositionCoverFace(
                     subject: notebook.subject,
                     cornerRadius: 20,
-                    spineWidth: 11,
+                    spineWidth: 8,
                     labelWidth: 142,
                     labelHeight: 108,
                     labelOffsetY: 30
@@ -221,9 +221,9 @@ private struct CompositionSpine: View {
             .fill(
                 LinearGradient(
                     colors: [
-                        Color.black,
-                        Color(red: 0.035, green: 0.034, blue: 0.032),
-                        Color.black
+                        Color(red: 0.006, green: 0.006, blue: 0.005),
+                        Color(red: 0.034, green: 0.032, blue: 0.029),
+                        Color(red: 0.01, green: 0.01, blue: 0.009)
                     ],
                     startPoint: .leading,
                     endPoint: .trailing
@@ -234,29 +234,17 @@ private struct CompositionSpine: View {
                 UnevenRoundedRectangle(cornerRadii: .init(topLeading: cornerRadius, bottomLeading: cornerRadius), style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [.white.opacity(0.09), .clear, .black.opacity(0.32)],
+                            colors: [.white.opacity(0.055), .clear, .black.opacity(0.24)],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                     )
-                    .frame(width: max(4, width * 0.46))
-            }
-            .overlay {
-                Canvas(rendersAsynchronously: true) { context, size in
-                    for index in 0..<9 {
-                        let y = size.height * (0.08 + CGFloat(index) * 0.105)
-                        var thread = Path()
-                        thread.move(to: CGPoint(x: size.width * 0.24, y: y))
-                        thread.addLine(to: CGPoint(x: size.width * 0.72, y: y + 0.4))
-                        context.stroke(thread, with: .color(.white.opacity(0.035)), style: StrokeStyle(lineWidth: 0.45, lineCap: .round))
-                    }
-                }
-                .padding(.vertical, 10)
+                    .frame(width: max(2.5, width * 0.42))
             }
             .overlay(alignment: .trailing) {
                 Capsule()
-                    .fill(.white.opacity(0.14))
-                    .frame(width: 1.4)
+                    .fill(.white.opacity(0.11))
+                    .frame(width: 0.9)
                     .padding(.vertical, 14)
             }
     }
@@ -355,7 +343,7 @@ struct NotebookLogo: View {
         CompositionCoverFace(
             subject: nil,
             cornerRadius: 18,
-            spineWidth: 11,
+            spineWidth: 8,
             labelWidth: 102,
             labelHeight: 88,
             labelOffsetY: 30
