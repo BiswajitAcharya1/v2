@@ -1470,7 +1470,7 @@ struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
     var body: some View {
         GeometryReader { proxy in
             let isWide = proxy.size.width > 560
-            let pageGap = singlePage ? 0.0 : (isWide ? 18.0 : 2.0)
+            let pageGap = singlePage ? 0.0 : (isWide ? 12.0 : 2.0)
 
             ZStack {
                 OpenCompositionSpreadBackground(singlePage: singlePage)
@@ -1478,10 +1478,10 @@ struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
                 HStack(spacing: pageGap) {
                     leftContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(.leading, singlePage ? 22 : (isWide ? 32 : 16))
-                        .padding(.trailing, singlePage ? 18 : (isWide ? 14 : 9))
-                        .padding(.top, 32)
-                        .padding(.bottom, 14)
+                        .padding(.leading, singlePage ? 18 : (isWide ? 24 : 14))
+                        .padding(.trailing, singlePage ? 14 : (isWide ? 10 : 8))
+                        .padding(.top, 24)
+                        .padding(.bottom, 12)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             onSelect(left)
@@ -1490,10 +1490,10 @@ struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
                     if !singlePage {
                         rightContent
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            .padding(.leading, isWide ? 12 : 6)
-                            .padding(.trailing, isWide ? 32 : 16)
-                            .padding(.top, 32)
-                            .padding(.bottom, 14)
+                            .padding(.leading, isWide ? 10 : 6)
+                            .padding(.trailing, isWide ? 24 : 14)
+                            .padding(.top, 24)
+                            .padding(.bottom, 12)
                             .opacity(right == nil ? 0.42 : 1)
                             .contentShape(Rectangle())
                             .onTapGesture {
@@ -1551,7 +1551,7 @@ struct OpenCompositionSpreadBackground: View {
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let gap: CGFloat = singlePage ? 0 : (size.width > 560 ? 18 : 2)
+            let gap: CGFloat = singlePage ? 0 : (size.width > 560 ? 12 : 2)
             let pageWidth = singlePage ? size.width : max(0, (size.width - gap) / 2)
             ZStack {
                 bottomPageStack(size: size)
@@ -1609,15 +1609,16 @@ struct OpenCompositionSpreadBackground: View {
         .fill(
             LinearGradient(
                 colors: [
-                    Color(red: 0.965, green: 0.968, blue: 0.982),
-                    Color(red: 0.94, green: 0.948, blue: 0.968),
-                    Color(red: 0.905, green: 0.915, blue: 0.94)
+                    Color(red: 0.976, green: 0.98, blue: 0.99),
+                    Color(red: 0.948, green: 0.956, blue: 0.976),
+                    Color(red: 0.91, green: 0.924, blue: 0.952)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
         )
         .overlay(OpenCompositionRules(isLeft: isLeft))
+        .overlay(PageFiberWash(isLeft: isLeft).opacity(0.2))
         .overlay {
             if isLeft {
                 ClassProgramInset()
@@ -1626,14 +1627,14 @@ struct OpenCompositionSpreadBackground: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
-        .overlay(PaperGrain(density: 420).opacity(0.16))
+        .overlay(PaperGrain(density: 320).opacity(0.13))
         .overlay(alignment: isLeft ? .trailing : .leading) {
             LinearGradient(
-                colors: [.black.opacity(0.08), .clear],
+                colors: [.black.opacity(0.1), .white.opacity(0.16), .clear],
                 startPoint: isLeft ? .trailing : .leading,
                 endPoint: isLeft ? .leading : .trailing
             )
-            .frame(width: 34)
+            .frame(width: 28)
             .allowsHitTesting(false)
         }
         .overlay {
@@ -1647,19 +1648,19 @@ struct OpenCompositionSpreadBackground: View {
             Rectangle()
                 .fill(
                     LinearGradient(
-                        colors: [.black.opacity(0.13), .white.opacity(0.42), .black.opacity(0.1)],
+                        colors: [.black.opacity(0.16), .white.opacity(0.34), .black.opacity(0.12)],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 )
-                .frame(width: 28)
-                .blur(radius: 2.4)
+                .frame(width: 22)
+                .blur(radius: 2.0)
             Capsule()
                 .fill(.black.opacity(0.13))
                 .frame(width: 1.1)
             Capsule()
-                .stroke(.white.opacity(0.5), lineWidth: 0.7)
-                .frame(width: 8)
+                .stroke(.white.opacity(0.48), lineWidth: 0.7)
+                .frame(width: 7)
         }
         .allowsHitTesting(false)
     }
@@ -1671,14 +1672,14 @@ struct OpenCompositionSpreadBackground: View {
                     cornerRadii: .init(topLeading: 30, bottomLeading: 6, bottomTrailing: 0, topTrailing: 8),
                     style: .continuous
                 )
-                .fill(.white.opacity(0.38))
+                .fill(.white.opacity(0.34))
                 .frame(width: size.width * 0.5, height: 10)
                 .offset(y: -2)
                 UnevenRoundedRectangle(
                     cornerRadii: .init(topLeading: 8, bottomLeading: 0, bottomTrailing: 6, topTrailing: 30),
                     style: .continuous
                 )
-                .fill(.white.opacity(0.34))
+                .fill(.white.opacity(0.3))
                 .frame(width: size.width * 0.5, height: 10)
                 .offset(y: -2)
             }
@@ -1698,7 +1699,7 @@ struct OpenCompositionSpreadBackground: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.78, green: 0.8, blue: 0.84).opacity(0.26),
+                            Color(red: 0.78, green: 0.8, blue: 0.84).opacity(0.3),
                             .white.opacity(0.28),
                             Color(red: 0.55, green: 0.58, blue: 0.64).opacity(0.18)
                         ],
@@ -1706,7 +1707,7 @@ struct OpenCompositionSpreadBackground: View {
                         endPoint: .bottom
                     )
                 )
-                .frame(width: size.width - 10, height: 18)
+                .frame(width: size.width - 8, height: 18)
                 .offset(y: 7)
 
                 HStack(spacing: 5) {
@@ -1716,7 +1717,7 @@ struct OpenCompositionSpreadBackground: View {
                             .frame(width: 1, height: 6 + CGFloat(index % 4))
                     }
                 }
-                .frame(width: size.width - 44)
+                .frame(width: size.width - 34)
                 .offset(y: 7)
             }
         }
@@ -1727,11 +1728,11 @@ struct OpenCompositionSpreadBackground: View {
         VStack(spacing: 4) {
             ForEach(0..<26, id: \.self) { index in
                 Capsule()
-                    .fill(Color(red: 0.58, green: 0.62, blue: 0.68).opacity(index.isMultiple(of: 2) ? 0.34 : 0.2))
-                    .frame(width: 8 + CGFloat(index % 3), height: 1)
+                    .fill(Color(red: 0.58, green: 0.62, blue: 0.68).opacity(index.isMultiple(of: 2) ? 0.3 : 0.18))
+                    .frame(width: 6 + CGFloat(index % 3), height: 1)
             }
         }
-        .frame(width: 16)
+        .frame(width: 12)
         .padding(.vertical, 30)
         .frame(maxHeight: .infinity)
     }
@@ -1748,24 +1749,58 @@ struct OpenCompositionRules: View {
             for x in [margin, farMargin] {
                 var vertical = Path()
                 vertical.move(to: CGPoint(x: x, y: 0))
-                vertical.addLine(to: CGPoint(x: x, y: size.height))
-                context.stroke(vertical, with: .color(NotebookTheme.redRule.opacity(0.32)), lineWidth: 0.75)
+                vertical.addCurve(
+                    to: CGPoint(x: x + (isLeft ? -1.8 : 1.8), y: size.height),
+                    control1: CGPoint(x: x + (isLeft ? 2.2 : -2.2), y: size.height * 0.28),
+                    control2: CGPoint(x: x + (isLeft ? -2.4 : 2.4), y: size.height * 0.72)
+                )
+                context.stroke(vertical, with: .color(NotebookTheme.redRule.opacity(0.3)), lineWidth: 0.75)
             }
 
-            var y: CGFloat = 72
+            var y: CGFloat = 48
             while y < size.height - 22 {
                 var line = Path()
                 line.move(to: CGPoint(x: 0, y: y))
-                line.addLine(to: CGPoint(x: size.width, y: y + (isLeft ? -0.8 : 0.8)))
-                context.stroke(line, with: .color(NotebookTheme.blueLine.opacity(0.48)), lineWidth: 0.65)
-                y += 18
+                line.addCurve(
+                    to: CGPoint(x: size.width, y: y + (isLeft ? -0.9 : 0.9)),
+                    control1: CGPoint(x: size.width * 0.34, y: y - 1.4),
+                    control2: CGPoint(x: size.width * 0.68, y: y + 1.4)
+                )
+                context.stroke(line, with: .color(NotebookTheme.blueLine.opacity(0.5)), lineWidth: 0.62)
+                y += 19
             }
 
             var top = Path()
-            top.move(to: CGPoint(x: 0, y: 56))
-            top.addLine(to: CGPoint(x: size.width, y: 56))
-            context.stroke(top, with: .color(NotebookTheme.blueLine.opacity(0.38)), lineWidth: 0.8)
+            top.move(to: CGPoint(x: 0, y: 40))
+            top.addCurve(
+                to: CGPoint(x: size.width, y: 41),
+                control1: CGPoint(x: size.width * 0.35, y: 38.5),
+                control2: CGPoint(x: size.width * 0.7, y: 42.5)
+            )
+            context.stroke(top, with: .color(NotebookTheme.blueLine.opacity(0.36)), lineWidth: 0.78)
         }
+    }
+}
+
+private struct PageFiberWash: View {
+    var isLeft: Bool
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            for index in 0..<24 {
+                let y = size.height * CGFloat((index * 17) % 101) / 100
+                let x = size.width * CGFloat((index * 31) % 97) / 100
+                var path = Path()
+                path.move(to: CGPoint(x: x, y: y))
+                path.addCurve(
+                    to: CGPoint(x: x + (isLeft ? -28 : 28), y: y + CGFloat(index % 7) - 3),
+                    control1: CGPoint(x: x + (isLeft ? -10 : 10), y: y - 5),
+                    control2: CGPoint(x: x + (isLeft ? -18 : 18), y: y + 5)
+                )
+                context.stroke(path, with: .color(NotebookTheme.ink.opacity(index.isMultiple(of: 3) ? 0.035 : 0.02)), lineWidth: 0.6)
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -1939,7 +1974,7 @@ struct ClassProgramInset: View {
                 .padding(.top, 1)
         }
         .padding(9)
-        .background(.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .stroke(NotebookTheme.ink.opacity(0.14), lineWidth: 0.6)

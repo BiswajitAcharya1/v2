@@ -589,13 +589,6 @@ struct NotebookDetailView: View {
             }
             .disabled(isScanning)
 
-            railButton(symbol: "pencil.and.scribble", label: "write") {
-                Haptics.open()
-                typedText = ""
-                showingComposer = true
-            }
-            .disabled(isScanning || isEditing)
-
             railButton(symbol: "sparkles", label: "study") {
                 if let page = currentPage {
                     Haptics.open()

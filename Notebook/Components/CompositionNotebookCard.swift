@@ -21,7 +21,7 @@ struct CompositionNotebookCard: View {
                 CompositionCoverFace(
                     subject: notebook.subject,
                     cornerRadius: 20,
-                    spineWidth: 5.25,
+                    spineWidth: 4.25,
                     labelWidth: 142,
                     labelHeight: 108,
                     labelOffsetY: 30

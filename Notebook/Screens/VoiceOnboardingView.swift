@@ -3,6 +3,8 @@ import SwiftUI
 struct VoiceOnboardingView: View {
     @Environment(NotebookStore.self) private var store
     @State private var pulse = false
+    @State private var recordTaskActive = false
+    @State private var retakeRotation = 0.0
 
     private let prompts = [
         "today i will study with calm focus.",
@@ -12,7 +14,7 @@ struct VoiceOnboardingView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack(alignment: .topTrailing) {
+            ZStack(alignment: .top) {
                 VStack(spacing: 24) {
                     Spacer(minLength: 12)
 
@@ -45,6 +47,21 @@ struct VoiceOnboardingView: View {
                                 .foregroundStyle(store.isRecordingVoice && store.voiceSignalActive ? NotebookTheme.accent(.green) : NotebookTheme.muted)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .animation(.spring(response: 0.25, dampingFraction: 0.76), value: store.voiceSignalActive)
+                            if let transcript = store.latestVoiceTranscript, store.isRecordingVoice {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "quote.bubble.fill")
+                                        .font(.system(size: 11, weight: .bold))
+                                    Text(transcript)
+                                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                                        .lineLimit(2)
+                                        .minimumScaleFactor(0.72)
+                                }
+                                .foregroundStyle(NotebookTheme.ink.opacity(0.74))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 9)
+                                .background(.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.96)))
+                            }
                             VoiceLevelStrip(level: store.voiceRecordingLevel, recording: store.isRecordingVoice)
                             if let message = store.voiceSetupMessage {
                                 Text(message)
@@ -63,8 +80,8 @@ struct VoiceOnboardingView: View {
                                     .frame(width: 64, height: 64)
                             }
                             .buttonStyle(CircleButtonStyle(tint: recordedCount >= prompts.count ? NotebookTheme.accent(.green) : NotebookTheme.ink, foreground: .white))
-                            .disabled(store.isPreparingVoiceRecording)
-                            .scaleEffect(store.isPreparingVoiceRecording ? 0.96 : 1)
+                            .disabled(store.isPreparingVoiceRecording || recordTaskActive)
+                            .scaleEffect(store.isPreparingVoiceRecording || recordTaskActive ? 0.96 : 1)
                             .accessibilityLabel(recordedCount >= prompts.count ? "voice ready" : store.isRecordingVoice ? "finish recording" : "record")
                         }
                     }
@@ -82,20 +99,44 @@ struct VoiceOnboardingView: View {
                 }
                 .padding(.bottom, 20)
 
-                Button {
-                    Haptics.softTap()
-                    store.skipVoiceSetup()
-                } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(NotebookTheme.ink)
-                        .frame(width: 50, height: 50)
+                HStack {
+                    if recordedCount > 0, !store.isRecordingVoice {
+                        Button {
+                            Haptics.rigid()
+                            withAnimation(.spring(response: 0.36, dampingFraction: 0.72)) {
+                                retakeRotation -= 90
+                            }
+                            store.retakeVoicePrompt()
+                        } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(NotebookTheme.ink)
+                                .frame(width: 50, height: 50)
+                                .rotationEffect(.degrees(retakeRotation))
+                        }
+                        .buttonStyle(.plain)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .accessibilityLabel("retake voice")
+                        .transition(.scale.combined(with: .opacity))
+                    }
+
+                    Spacer()
+
+                    Button {
+                        Haptics.softTap()
+                        store.skipVoiceSetup()
+                    } label: {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(NotebookTheme.ink)
+                            .frame(width: 50, height: 50)
+                    }
+                    .buttonStyle(.plain)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .accessibilityLabel("skip voice")
                 }
-                .buttonStyle(.plain)
-                .background(.ultraThinMaterial, in: Circle())
                 .padding(.top, 18)
-                .padding(.trailing, 20)
-                .accessibilityLabel("skip voice")
+                .padding(.horizontal, 20)
             }
             .background(NotebookTheme.field.ignoresSafeArea())
             .navigationTitle("voice")
@@ -144,18 +185,25 @@ struct VoiceOnboardingView: View {
 
     private var recordButtonSymbol: String {
         if recordedCount >= prompts.count { return "checkmark" }
-        if store.isPreparingVoiceRecording { return "ellipsis" }
+        if store.isPreparingVoiceRecording || recordTaskActive { return "ellipsis" }
         return store.isRecordingVoice ? "waveform" : "mic.fill"
     }
 
     private func recordCurrentPrompt() {
+        guard !recordTaskActive else { return }
         guard recordedCount < prompts.count else {
             store.continueToSubjects()
             return
         }
         Haptics.open()
         Task {
+            await MainActor.run {
+                recordTaskActive = true
+            }
             await store.recordVoicePrompt(currentPrompt)
+            await MainActor.run {
+                recordTaskActive = false
+            }
         }
     }
 

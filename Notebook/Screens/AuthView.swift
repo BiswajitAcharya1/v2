@@ -137,7 +137,7 @@ struct AuthView: View {
             CompositionCoverFace(
                 subject: nil,
                 cornerRadius: 22,
-                spineWidth: 7,
+                spineWidth: 5.5,
                 labelWidth: 152,
                 labelHeight: 104,
                 labelOffsetY: 36,
