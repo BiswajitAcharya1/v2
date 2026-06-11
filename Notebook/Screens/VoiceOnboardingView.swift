@@ -49,11 +49,13 @@ struct VoiceOnboardingView: View {
                             Button {
                                 recordCurrentPrompt()
                             } label: {
-                                Image(systemName: recordedCount >= prompts.count ? "checkmark" : store.isRecordingVoice ? "waveform" : "mic.fill")
+                                Image(systemName: recordButtonSymbol)
                                     .font(.system(size: 20, weight: .bold))
                                     .frame(width: 64, height: 64)
                             }
                             .buttonStyle(CircleButtonStyle(tint: recordedCount >= prompts.count ? NotebookTheme.accent(.green) : NotebookTheme.ink, foreground: .white))
+                            .disabled(store.isPreparingVoiceRecording)
+                            .scaleEffect(store.isPreparingVoiceRecording ? 0.96 : 1)
                             .accessibilityLabel(recordedCount >= prompts.count ? "voice ready" : store.isRecordingVoice ? "finish recording" : "record")
                         }
                     }
@@ -106,6 +108,9 @@ struct VoiceOnboardingView: View {
     }
 
     private var statusText: String {
+        if store.isPreparingVoiceRecording {
+            return "opening microphone"
+        }
         guard store.isRecordingVoice else {
             return "tap once and read naturally."
         }
@@ -119,10 +124,19 @@ struct VoiceOnboardingView: View {
     }
 
     private var voiceSubtitle: String {
+        if store.isPreparingVoiceRecording {
+            return "getting your microphone ready."
+        }
         if store.isRecordingVoice && !store.voiceRecognitionAvailable {
             return "keep reading naturally. the meter saves your voice sample."
         }
         return store.isRecordingVoice ? durationText(store.voiceRecordingElapsed) : "record three short lines to personalize reading."
+    }
+
+    private var recordButtonSymbol: String {
+        if recordedCount >= prompts.count { return "checkmark" }
+        if store.isPreparingVoiceRecording { return "ellipsis" }
+        return store.isRecordingVoice ? "waveform" : "mic.fill"
     }
 
     private func recordCurrentPrompt() {

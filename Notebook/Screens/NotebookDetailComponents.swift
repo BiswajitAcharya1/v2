@@ -1264,7 +1264,7 @@ struct PageCaptureDeck: View {
                     .stroke(confidenceTint, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .rotationEffect(.degrees(awake ? 126 : -22))
                     .padding(5)
-                Image(systemName: page.content.sourceEngine == "typed" ? "keyboard" : "text.viewfinder")
+                Image(systemName: page.content.sourceEngine == "typed" ? "pencil.line" : "text.viewfinder")
                     .font(.system(size: 11 * scale, weight: .bold))
                     .foregroundStyle(NotebookTheme.ink)
             }
@@ -1319,7 +1319,7 @@ struct PageCaptureDeck: View {
         if engine.contains("surya") { return "surya ocr" }
         if engine.contains("fused") { return "vision fused" }
         if engine.contains("vision") { return "vision ocr" }
-        if engine.contains("typed") { return "typed notes" }
+        if engine.contains("typed") { return "written notes" }
         if engine.contains("repaired") { return "layout repaired" }
         return engine.isEmpty ? "local ocr" : engine
     }

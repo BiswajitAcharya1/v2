@@ -164,9 +164,7 @@ private struct PhotoImportScannerFallback: View {
                     .disabled(isLoading)
 
                     if !selectedImages.isEmpty {
-                        Text("\(selectedImages.count) selected")
-                            .font(.system(.caption, design: .rounded, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.74))
+                        ScannerFallbackPageRail(images: selectedImages)
                             .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
 
@@ -179,7 +177,7 @@ private struct PhotoImportScannerFallback: View {
                         HStack(spacing: 10) {
                             Image(systemName: isLoading ? "hourglass" : "viewfinder")
                                 .font(.system(size: 15, weight: .bold))
-                            Text(isLoading ? "reading" : "scan selected")
+                            Text(isLoading ? "reading" : scanButtonTitle)
                                 .font(.system(.headline, design: .rounded, weight: .semibold))
                         }
                         .foregroundStyle(.white)
@@ -212,6 +210,11 @@ private struct PhotoImportScannerFallback: View {
             .joined(separator: "|")
     }
 
+    private var scanButtonTitle: String {
+        if selectedImages.count <= 1 { return "scan page" }
+        return "scan \(selectedImages.count) pages"
+    }
+
     @MainActor
     private func loadSelectedImages() async {
         guard !selectedItems.isEmpty else {
@@ -228,6 +231,43 @@ private struct PhotoImportScannerFallback: View {
         }
         selectedImages = images
         isLoading = false
+    }
+}
+
+private struct ScannerFallbackPageRail: View {
+    let images: [UIImage]
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(images.prefix(5).enumerated()), id: \.offset) { index, image in
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 38, height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(.white.opacity(0.62), lineWidth: 0.8)
+                    }
+                    .rotationEffect(.degrees(Double(index - 2) * 1.7))
+                    .offset(y: CGFloat(abs(index - 2)) * 1.5)
+            }
+
+            if images.count > 5 {
+                Text("+\(images.count - 5)")
+                    .font(.system(.caption, design: .rounded, weight: .bold))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .frame(width: 38, height: 48)
+                    .background(.white.opacity(0.82), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(.white.opacity(0.13), in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.24), lineWidth: 0.7)
+        }
+        .accessibilityLabel("\(images.count) pages selected")
     }
 }
 

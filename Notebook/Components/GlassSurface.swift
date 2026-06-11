@@ -366,10 +366,10 @@ enum LegalDocument: String, Identifiable {
             ]
         case .privacy:
             [
-                ("data we save", "vellum stores your account session, subjects, notebooks, scanned pages, typed notes, study state, and optional voice samples on device for this demo build."),
+                ("data we save", "vellum stores your account session, subjects, notebooks, scanned pages, written notes, study state, and optional voice samples on device."),
                 ("scans and text", "scanned notes are processed to extract readable text, tables, diagrams, and subject labels so pages can be filed into notebooks."),
                 ("voice setup", "voice recording is optional. if you use it, the app stores short samples and transcripts so reading features can personalize playback."),
-                ("sign in", "email sign in is local in this build. apple and google require production secrets before they can connect."),
+                ("sign in", "email sign in is stored on device. apple and google connect once credentials are added."),
                 ("control", "you can skip voice setup, edit notes, add subjects, and review saved account information from account center.")
             ]
         }
@@ -389,7 +389,7 @@ struct LegalDocumentView: View {
                     ForEach(Array(document.sections.enumerated()), id: \.offset) { index, section in
                         legalSection(index: index + 1, title: section.0, body: section.1)
                     }
-                    Text("last updated for this demo build.")
+                    Text("last updated june 2026.")
                         .font(.system(.caption, design: .rounded, weight: .medium))
                         .foregroundStyle(NotebookTheme.muted)
                         .frame(maxWidth: .infinity, alignment: .center)

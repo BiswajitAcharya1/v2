@@ -32,7 +32,6 @@ protocol SpacedRepetitionServing {
 @MainActor
 protocol VoiceServing {
     func makePlayback(_ text: String, style: PlaybackStyle, profile: VoiceProfile) async -> VoicePlayback
-    func transcribeQuestion() async -> String
 }
 
 struct MossTTSRequest: Hashable {
@@ -750,11 +749,12 @@ struct MossTTSVoiceService: VoiceServing {
         }
 
         let words = request.text.split(separator: " ").count
+        let styleName = style.rawValue.replacingOccurrences(of: "-", with: " ")
         let summary: String
         if request.referenceAudioURLs.isEmpty {
-            summary = "\(backend.displayName) is selected for \(words) words. playing system speech until a tts endpoint is configured."
+            summary = "on device \(styleName) reader is speaking \(words) words."
         } else {
-            summary = "\(backend.displayName) has \(request.referenceAudioURLs.count) saved reference samples. playing system speech until a cloning endpoint is configured."
+            summary = "on device \(styleName) reader is using \(request.referenceAudioURLs.count) saved voice samples for timing."
         }
         return VoicePlayback(
             style: style,
@@ -762,10 +762,6 @@ struct MossTTSVoiceService: VoiceServing {
             engine: backend,
             referenceSampleCount: request.referenceAudioURLs.count
         )
-    }
-
-    func transcribeQuestion() async -> String {
-        "can you explain the limit step more simply?"
     }
 
     private func requestRemotePlayback(request: MossTTSRequest, style: PlaybackStyle, backend: VoiceReplicationBackend) async -> VoicePlayback? {

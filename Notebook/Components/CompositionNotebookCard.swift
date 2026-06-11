@@ -21,7 +21,7 @@ struct CompositionNotebookCard: View {
                 CompositionCoverFace(
                     subject: notebook.subject,
                     cornerRadius: 20,
-                    spineWidth: 19,
+                    spineWidth: 15,
                     labelWidth: 142,
                     labelHeight: 108,
                     labelOffsetY: 30
@@ -243,8 +243,8 @@ private struct CompositionSpine: View {
             }
             .overlay {
                 Canvas(rendersAsynchronously: true) { context, size in
-                    for index in 0..<24 {
-                        let y = size.height * CGFloat(index) / 23
+                    for index in 0..<18 {
+                        let y = size.height * CGFloat(index) / 17
                         var thread = Path()
                         thread.move(to: CGPoint(x: size.width * 0.18, y: y))
                         thread.addCurve(
@@ -252,7 +252,7 @@ private struct CompositionSpine: View {
                             control1: CGPoint(x: size.width * 0.32, y: y - 3),
                             control2: CGPoint(x: size.width * 0.54, y: y + 3)
                         )
-                        context.stroke(thread, with: .color(.white.opacity(0.028)), style: StrokeStyle(lineWidth: 0.7, lineCap: .round))
+                        context.stroke(thread, with: .color(.white.opacity(0.014)), style: StrokeStyle(lineWidth: 0.55, lineCap: .round))
                     }
                 }
                 .padding(.vertical, 10)

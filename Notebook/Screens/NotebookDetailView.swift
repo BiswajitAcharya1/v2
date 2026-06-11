@@ -101,6 +101,11 @@ struct NotebookDetailView: View {
                 .presentationDetents([.height(360), .medium])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showingComposer) {
+            typedPageComposer
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showingCamera) {
             DocumentScannerView { images in
                 Task {
@@ -180,7 +185,7 @@ struct NotebookDetailView: View {
             Spacer(minLength: 8)
 
             if let currentPage {
-                Text("page \(min(pageIndex * 2 + 1, pages.count))")
+                Text(currentPageLabel)
                     .font(.system(.caption, design: .rounded, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink.opacity(0.74))
                     .padding(.horizontal, 10)
@@ -243,6 +248,19 @@ struct NotebookDetailView: View {
             models > 0 ? "\(models) models" : nil
         ].compactMap(\.self).joined(separator: "  ")
         return extras.isEmpty ? "\(pages.count) pages" : "\(pages.count) pages  \(extras)"
+    }
+
+    private var currentPageLabel: String {
+        guard !pages.isEmpty else { return "page" }
+        if usesSinglePageLayout {
+            return "page \(min(pageIndex + 1, pages.count))"
+        }
+        let left = min(pageIndex * 2 + 1, pages.count)
+        let right = left + 1
+        if right <= pages.count {
+            return "pages \(left) and \(right)"
+        }
+        return "page \(left)"
     }
 
     private var pageReader: some View {
@@ -483,21 +501,35 @@ struct NotebookDetailView: View {
                     }
                     .frame(height: 302)
 
-                    Button {
-                        Haptics.open()
-                        showingCamera = true
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "viewfinder")
-                                .font(.system(size: 17, weight: .bold))
-                            Text("scan notes")
-                                .font(.system(.headline, design: .rounded, weight: .semibold))
+                    HStack(spacing: 12) {
+                        Button {
+                            Haptics.open()
+                            showingCamera = true
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "viewfinder")
+                                    .font(.system(size: 17, weight: .bold))
+                                Text("scan notes")
+                                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                            }
+                            .padding(.horizontal, 20)
+                            .frame(height: 58)
                         }
-                        .padding(.horizontal, 20)
-                        .frame(height: 58)
+                        .buttonStyle(PillButtonStyle(tint: NotebookTheme.ink, foreground: .white))
+                        .disabled(isScanning)
+
+                        Button {
+                            Haptics.open()
+                            typedText = ""
+                            showingComposer = true
+                        } label: {
+                            Image(systemName: "pencil.and.scribble")
+                                .font(.system(size: 17, weight: .bold))
+                                .frame(width: 58, height: 58)
+                        }
+                        .buttonStyle(FloatingCircleButtonStyle(tint: .white.opacity(0.82), foreground: NotebookTheme.ink))
+                        .disabled(isScanning)
                     }
-                    .buttonStyle(PillButtonStyle(tint: NotebookTheme.ink, foreground: .white))
-                    .disabled(isScanning)
 
                     Spacer()
                 }
@@ -548,6 +580,13 @@ struct NotebookDetailView: View {
                 showingCamera = true
             }
             .disabled(isScanning)
+
+            railButton(symbol: "pencil.and.scribble", label: "write") {
+                Haptics.open()
+                typedText = ""
+                showingComposer = true
+            }
+            .disabled(isScanning || isEditing)
 
             railButton(symbol: "sparkles", label: "study") {
                 if let page = currentPage {
@@ -608,7 +647,7 @@ struct NotebookDetailView: View {
             NotebookTheme.field.ignoresSafeArea()
             VStack(spacing: 16) {
                 HStack {
-                    Text("type notes")
+                    Text("write notes")
                         .font(.system(.title3, design: .serif, weight: .semibold))
                         .foregroundStyle(NotebookTheme.ink)
                     Spacer()

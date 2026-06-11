@@ -23,6 +23,7 @@ final class NotebookStore {
     var scanPhase: ScanPhase = .framing
     var onboardingSubjects: [String] = ["math", "science", "history", "english"]
     var isRecordingVoice = false
+    var isPreparingVoiceRecording = false
     var isVoicePaused = false
     var voiceRecordingElapsed: TimeInterval = 0
     var voiceRecordingLevel: Double = 0
@@ -78,7 +79,7 @@ final class NotebookStore {
 
     func signIn(provider: AuthProvider) async {
         if provider == .apple || provider == .google {
-            let message = "\(provider.rawValue) secrets are not added yet."
+            let message = "\(provider.rawValue) sign in needs credentials before it can connect."
             authMessage = message
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(2.4))
@@ -149,6 +150,7 @@ final class NotebookStore {
 
     func recordVoicePrompt(_ prompt: String) async {
         guard voiceProfile.samples.count < 3 else { return }
+        guard !isPreparingVoiceRecording else { return }
         if isRecordingVoice {
             finishVoicePrompt()
         } else {
@@ -173,6 +175,7 @@ final class NotebookStore {
         voiceProfile.isPersonalized = false
         voiceProfile.samples.removeAll()
         isRecordingVoice = false
+        isPreparingVoiceRecording = false
         isVoicePaused = false
         voiceRecordingElapsed = 0
         voiceRecordingLevel = 0
@@ -200,6 +203,13 @@ final class NotebookStore {
         guard !voiceProfile.samples.isEmpty else { return }
         voiceProfile.samples.removeLast()
         voiceProfile.isPersonalized = false
+        persist()
+    }
+
+    func setPersonalVoiceEnabled(_ isEnabled: Bool) {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            voiceProfile.wantsPersonalVoice = isEnabled
+        }
         persist()
     }
 
@@ -269,6 +279,8 @@ final class NotebookStore {
 
     private func startVoicePrompt(_ prompt: String) async {
         stopLiveVoiceCapture(cancelRecognition: true)
+        isPreparingVoiceRecording = true
+        defer { isPreparingVoiceRecording = false }
         guard await requestMicrophonePermission() else {
             authMessage = "microphone access is needed to record voice."
             return
@@ -291,6 +303,7 @@ final class NotebookStore {
             guard format.sampleRate > 0, format.channelCount > 0 else {
                 throw VoiceRecordingError.failedToStart
             }
+            input.removeTap(onBus: 0)
             audioEngine = engine
             let audioFile = try AVAudioFile(forWriting: url, settings: format.settings)
             var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -398,6 +411,7 @@ final class NotebookStore {
             stopLiveVoiceCapture(cancelRecognition: true)
             recordingURL = nil
             recordingPrompt = nil
+            isPreparingVoiceRecording = false
             isVoicePaused = false
             voiceRecordingElapsed = 0
             voiceRecordingLevel = 0
@@ -1104,7 +1118,7 @@ final class NotebookStore {
         )
         withAnimation(.spring(response: 0.62, dampingFraction: 0.82)) {
             notebooks[notebookIndex].pages.insert(page, at: 0)
-            notebooks[notebookIndex].lastActivity = "typed page added"
+            notebooks[notebookIndex].lastActivity = "written page added"
         }
         persist()
     }

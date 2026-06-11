@@ -35,6 +35,8 @@
 		10000000000000000000011B /* VoicePromptWordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000023 /* VoicePromptWordsView.swift */; };
 		10000000000000000000011C /* ProfileAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000024 /* ProfileAvatarView.swift */; };
 		10000000000000000000011D /* NotebookDetailComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000025 /* NotebookDetailComponents.swift */; };
+		10000000000000000000011E /* AccountCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000026 /* AccountCenterView.swift */; };
+		10000000000000000000011F /* HomeStudySheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000027 /* HomeStudySheets.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +70,8 @@
 		100000000000000000000023 /* VoicePromptWordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePromptWordsView.swift; sourceTree = "<group>"; };
 		100000000000000000000024 /* ProfileAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileAvatarView.swift; sourceTree = "<group>"; };
 		100000000000000000000025 /* NotebookDetailComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookDetailComponents.swift; sourceTree = "<group>"; };
+		100000000000000000000026 /* AccountCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCenterView.swift; sourceTree = "<group>"; };
+		100000000000000000000027 /* HomeStudySheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeStudySheets.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -164,6 +168,8 @@
 				100000000000000000000009 /* RootShellView.swift */,
 				10000000000000000000000A /* AuthView.swift */,
 				10000000000000000000000B /* HomeView.swift */,
+				100000000000000000000027 /* HomeStudySheets.swift */,
+				100000000000000000000026 /* AccountCenterView.swift */,
 					10000000000000000000000C /* ScanView.swift */,
 					10000000000000000000000D /* NotebookDetailView.swift */,
 					100000000000000000000025 /* NotebookDetailComponents.swift */,
@@ -263,6 +269,8 @@
 				100000000000000000000109 /* RootShellView.swift in Sources */,
 				10000000000000000000010A /* AuthView.swift in Sources */,
 				10000000000000000000010B /* HomeView.swift in Sources */,
+				10000000000000000000011F /* HomeStudySheets.swift in Sources */,
+				10000000000000000000011E /* AccountCenterView.swift in Sources */,
 				10000000000000000000010C /* ScanView.swift in Sources */,
 				10000000000000000000010D /* NotebookDetailView.swift in Sources */,
 				10000000000000000000010E /* StudyFocusView.swift in Sources */,

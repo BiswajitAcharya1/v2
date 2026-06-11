@@ -130,12 +130,13 @@ private struct SetupFlowView: View {
                     heardWords: store.voicePromptWordProgress,
                     totalWords: currentVoicePrompt.split(separator: " ").count,
                     isRecording: store.isRecordingVoice,
+                    isPreparing: store.isPreparingVoiceRecording,
                     voiceActive: store.voiceSignalActive,
                     recognitionAvailable: store.voiceRecognitionAvailable,
                     level: store.voiceRecordingLevel
                 )
 
-                VoiceProgress(count: store.voiceProfile.samples.count, total: prompts.count, recording: store.isRecordingVoice)
+                VoiceProgress(count: store.voiceProfile.samples.count, total: prompts.count, recording: store.isRecordingVoice, preparing: store.isPreparingVoiceRecording)
                 VoiceRecordingReadout(
                     elapsed: store.voiceRecordingElapsed,
                     level: store.voiceRecordingLevel,
@@ -153,6 +154,8 @@ private struct SetupFlowView: View {
                             .frame(width: 56, height: 56)
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.muted.opacity(0.6), foreground: NotebookTheme.ink))
+                    .disabled(store.voiceProfile.samples.isEmpty || store.isRecordingVoice || store.isPreparingVoiceRecording)
+                    .opacity(store.voiceProfile.samples.isEmpty || store.isRecordingVoice || store.isPreparingVoiceRecording ? 0.38 : 1)
 
                     Button {
                         Haptics.open()
@@ -165,12 +168,14 @@ private struct SetupFlowView: View {
                                 .stroke(.white.opacity(0.26), lineWidth: 8)
                                 .scaleEffect(store.isRecordingVoice ? 1.18 + store.voiceRecordingLevel * 0.12 : 1)
                                 .opacity(store.isRecordingVoice ? 1 : 0)
-                            Image(systemName: store.isRecordingVoice ? "waveform" : "mic.fill")
+                            Image(systemName: voiceRecordSymbol)
                                 .font(.system(size: 22, weight: .bold))
                                 .frame(width: 72, height: 72)
                         }
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
+                    .disabled(store.isPreparingVoiceRecording)
+                    .scaleEffect(store.isPreparingVoiceRecording ? 0.96 : 1)
                     .accessibilityLabel(store.isRecordingVoice ? "finish recording" : "start recording")
                 }
             }
@@ -182,10 +187,18 @@ private struct SetupFlowView: View {
     }
 
     private var voiceInstructionText: String {
+        if store.isPreparingVoiceRecording {
+            return "opening microphone."
+        }
         if store.isRecordingVoice && !store.voiceRecognitionAvailable {
             return "keep reading naturally. the meter saves your voice sample."
         }
         return "read each sentence once. words darken only when they are matched."
+    }
+
+    private var voiceRecordSymbol: String {
+        if store.isPreparingVoiceRecording { return "ellipsis" }
+        return store.isRecordingVoice ? "waveform" : "mic.fill"
     }
 
     private var subjectChoice: some View {
@@ -305,6 +318,7 @@ private struct VoiceProgress: View {
     var count: Int
     var total: Int
     var recording: Bool
+    var preparing: Bool
 
     var body: some View {
         ZStack {
@@ -314,12 +328,13 @@ private struct VoiceProgress: View {
                 .trim(from: 0, to: CGFloat(count) / CGFloat(total))
                 .stroke(NotebookTheme.ink, style: StrokeStyle(lineWidth: 10, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-            Image(systemName: recording ? "waveform" : "mic")
+            Image(systemName: preparing ? "ellipsis" : recording ? "waveform" : "mic")
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(NotebookTheme.ink)
         }
         .frame(width: 118, height: 118)
         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: count)
+        .animation(.spring(response: 0.28, dampingFraction: 0.78), value: preparing)
     }
 }
 
@@ -329,6 +344,7 @@ private struct VoiceRecognitionStatus: View {
     var heardWords: Int
     var totalWords: Int
     var isRecording: Bool
+    var isPreparing: Bool
     var voiceActive: Bool
     var recognitionAvailable: Bool
     var level: Double
@@ -358,6 +374,7 @@ private struct VoiceRecognitionStatus: View {
     }
 
     private var statusText: String {
+        if isPreparing { return "opening microphone" }
         guard isRecording else { return "\(min(heardWords, totalWords)) of \(totalWords) words" }
         if voiceActive && recognitionAvailable {
             return "\(min(heardWords, totalWords)) of \(totalWords) heard"
