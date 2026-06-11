@@ -367,10 +367,11 @@ private struct CompositionCoverLabel: View {
                 Text("vellum")
                     .font(.system(size: isLarge ? 6.7 : 5.2, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, isLarge ? 5 : 3)
-                    .frame(height: isLarge ? 21 : 16)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .allowsTightening(true)
+                    .frame(width: isLarge ? 42 : 32, height: isLarge ? 21 : 16)
                     .background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: isLarge ? 5 : 4, style: .continuous))
-                    .minimumScaleFactor(0.68)
             }
             HStack(spacing: isLarge ? 7 : 6) {
                 CompositionBadge(text: "80\nsheets", size: isLarge ? 30 : 25)

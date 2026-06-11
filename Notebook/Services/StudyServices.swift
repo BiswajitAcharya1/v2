@@ -514,7 +514,9 @@ private enum NoteLayoutAnalyzer {
         let candidateRows = lines
             .map { splitColumns($0) }
             .filter { $0.count >= 2 }
-        guard candidateRows.count >= 2 else { return [] }
+        if candidateRows.count < 2 {
+            return keyValueTable(from: lines).map { [$0] } ?? []
+        }
 
         let headers = candidateRows.first ?? []
         let rows = Array(candidateRows.dropFirst()).filter { !$0.allSatisfy(\.isEmpty) }
@@ -524,9 +526,12 @@ private enum NoteLayoutAnalyzer {
 
     static func models(from lines: [String], keywords: [String], visualSignal: Double) -> [DetectedModel] {
         let joined = lines.joined(separator: " ").lowercased()
-        let modelTriggers = ["diagram", "model", "graph", "figure", "chart", "axis", "cycle", "flow", "structure", "system", "map", "sketch"]
+        let modelTriggers = [
+            "diagram", "model", "graph", "figure", "chart", "axis", "cycle", "flow", "structure", "system", "map", "sketch",
+            "arrow", "pathway", "network", "circuit", "cell", "molecule", "atom", "timeline", "shape", "label"
+        ]
         let textTriggered = modelTriggers.contains(where: joined.contains)
-        let visuallyTriggered = visualSignal > 0.18 && joined.count < 520
+        let visuallyTriggered = visualSignal > 0.13 && joined.count < 640
         guard textTriggered || visuallyTriggered else { return [] }
 
         let title = modelTriggers.first(where: joined.contains) ?? "visual model"
@@ -552,10 +557,10 @@ private enum NoteLayoutAnalyzer {
     }
 
     private static func shape(from text: String, visualSignal: Double) -> ModelShape {
-        if text.contains("cycle") || text.contains("flow") || text.contains("loop") { return .cycle }
+        if text.contains("cycle") || text.contains("flow") || text.contains("loop") || text.contains("pathway") { return .cycle }
         if text.contains("table") || text.contains("chart") { return .table }
-        if text.contains("layer") || text.contains("stack") { return .stack }
-        return visualSignal > 0.26 ? .mesh : .orbit
+        if text.contains("layer") || text.contains("stack") || text.contains("timeline") { return .stack }
+        return visualSignal > 0.22 ? .mesh : .orbit
     }
 
     private static func splitColumns(_ line: String) -> [String] {
@@ -577,6 +582,25 @@ private enum NoteLayoutAnalyzer {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
         return tabPieces
+    }
+
+    private static func keyValueTable(from lines: [String]) -> DetectedTable? {
+        let pairs = lines.compactMap { line -> [String]? in
+            let separators = [":", " - ", " -> ", " = "]
+            guard let separator = separators.first(where: { line.contains($0) }) else { return nil }
+            let pieces = line
+                .components(separatedBy: separator)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .filter { !$0.isEmpty }
+            guard pieces.count >= 2, pieces[0].count <= 32 else { return nil }
+            return [pieces[0], pieces.dropFirst().joined(separator: " ")]
+        }
+        guard pairs.count >= 3 else { return nil }
+        return DetectedTable(
+            title: "structured notes",
+            headers: ["term", "detail"],
+            rows: Array(pairs.prefix(8))
+        )
     }
 }
 

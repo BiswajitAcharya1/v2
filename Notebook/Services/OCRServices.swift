@@ -277,8 +277,10 @@ private enum OCRImagePreprocessor {
 
         var variants: [Variant] = []
         appendVariant(name: "original", image: base, to: &variants)
+        appendVariant(name: "paper", image: paperNormalized(base), to: &variants)
         appendVariant(name: "ink", image: highContrastInk(base), to: &variants)
         appendVariant(name: "pencil", image: faintPencilBoost(base), to: &variants)
+        appendVariant(name: "shadow", image: shadowLift(base), to: &variants)
         return variants
     }
 
@@ -300,6 +302,24 @@ private enum OCRImagePreprocessor {
         return sharpen.outputImage ?? color.outputImage ?? image
     }
 
+    private static func paperNormalized(_ image: CIImage) -> CIImage {
+        let exposure = CIFilter.exposureAdjust()
+        exposure.inputImage = image
+        exposure.ev = 0.28
+
+        let controls = CIFilter.colorControls()
+        controls.inputImage = exposure.outputImage ?? image
+        controls.saturation = 0
+        controls.contrast = 1.24
+        controls.brightness = 0.025
+
+        let sharpen = CIFilter.unsharpMask()
+        sharpen.inputImage = controls.outputImage ?? image
+        sharpen.radius = 0.82
+        sharpen.intensity = 0.46
+        return sharpen.outputImage ?? controls.outputImage ?? image
+    }
+
     private static func faintPencilBoost(_ image: CIImage) -> CIImage {
         let mono = CIFilter.colorControls()
         mono.inputImage = image
@@ -316,6 +336,20 @@ private enum OCRImagePreprocessor {
         unsharp.radius = 1.3
         unsharp.intensity = 0.72
         return unsharp.outputImage ?? gamma.outputImage ?? mono.outputImage ?? image
+    }
+
+    private static func shadowLift(_ image: CIImage) -> CIImage {
+        let shadows = CIFilter.highlightShadowAdjust()
+        shadows.inputImage = image
+        shadows.shadowAmount = 0.72
+        shadows.highlightAmount = 0.84
+
+        let color = CIFilter.colorControls()
+        color.inputImage = shadows.outputImage ?? image
+        color.saturation = 0
+        color.contrast = 1.58
+        color.brightness = 0.045
+        return color.outputImage ?? shadows.outputImage ?? image
     }
 
 }

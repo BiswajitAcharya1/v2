@@ -24,12 +24,13 @@ struct SAM3DObjectReconstructionAdapter: ObjectReconstructionServing {
     static let sourceURL = URL(string: "https://github.com/facebookresearch/sam-3d-objects")!
 
     func reconstruct(from image: UIImage, lines: [String], keywords: [String], visualSignal: Double) async -> [DetectedModel] {
-        guard visualSignal > 0.2 else { return [] }
+        let joined = lines.joined(separator: " ").lowercased()
+        let textSuggestsObject = ["diagram", "sketch", "model", "shape", "cell", "atom", "circuit", "graph", "map", "arrow", "label"].contains(where: joined.contains)
+        guard visualSignal > 0.14 || textSuggestsObject else { return [] }
         if let endpointModel = await requestRemoteModel(from: image, keywords: keywords) {
             return [endpointModel]
         }
 
-        let joined = lines.joined(separator: " ").lowercased()
         let objectTerms = [
             "model", "diagram", "figure", "shape", "object", "structure", "cell", "atom", "molecule",
             "circuit", "graph", "map", "cycle", "system", "force", "lens", "organ"
@@ -103,12 +104,13 @@ struct TripoSRObjectReconstructionAdapter: ObjectReconstructionServing {
     static let sourceURL = URL(string: "https://github.com/VAST-AI-Research/TripoSR")!
 
     func reconstruct(from image: UIImage, lines: [String], keywords: [String], visualSignal: Double) async -> [DetectedModel] {
-        guard visualSignal > 0.24 else { return [] }
+        let joined = lines.joined(separator: " ").lowercased()
+        let textSuggestsObject = ["diagram", "sketch", "model", "shape", "cell", "atom", "circuit", "graph", "map", "arrow", "label"].contains(where: joined.contains)
+        guard visualSignal > 0.16 || textSuggestsObject else { return [] }
         if let endpointModel = await requestRemoteModel(from: image, keywords: keywords) {
             return [endpointModel]
         }
 
-        let joined = lines.joined(separator: " ").lowercased()
         let profile = ImageStructureAnalyzer.profile(in: image)
         let objectWords = ["cell", "atom", "molecule", "circuit", "lens", "organ", "shape", "structure", "model", "diagram", "figure"]
         let diagramNodes = ReconstructionTextAnalyzer.diagramNodes(from: lines, keywords: keywords)

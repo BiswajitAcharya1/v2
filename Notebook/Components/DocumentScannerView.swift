@@ -8,6 +8,9 @@ struct DocumentScannerView: View {
 
     var body: some View {
         Group {
+            #if targetEnvironment(simulator)
+            PhotoImportScannerFallback(onScan: onScan, onCancel: onCancel)
+            #else
             if VNDocumentCameraViewController.isSupported {
                 ZStack {
                     DocumentCameraRepresentable(onScan: onScan, onCancel: onCancel)
@@ -18,6 +21,7 @@ struct DocumentScannerView: View {
             } else {
                 PhotoImportScannerFallback(onScan: onScan, onCancel: onCancel)
             }
+            #endif
         }
     }
 }
