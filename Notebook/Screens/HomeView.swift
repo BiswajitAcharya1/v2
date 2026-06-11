@@ -15,19 +15,19 @@ struct HomeView: View {
     @State private var selectedStudyPage: NotebookPage?
     @State private var courseDraft = ""
     @State private var courseCloseRotation = 0.0
+    @State private var addButtonRotation = 0.0
     @State private var selectedJournalIndex = 0
     @State private var journalDragOffset: CGFloat = 0
     @State private var doodleDrift = false
     @State private var modelReadyPulse = false
     @State private var actionLensAwake = false
     @State private var revealDetailSurfaces = false
+    @State private var stylingNotebook: SubjectNotebook?
     var body: some View {
         ScrollView {
             VStack(alignment: .center, spacing: 18) {
                 header
                 journalCarousel
-                shelfNotes
-                journalCommandSurface
                 if revealDetailSurfaces {
                     memoryMapRibbon
                     dailyBriefStrip
@@ -62,6 +62,11 @@ struct HomeView: View {
         .sheet(isPresented: $showingCourseComposer) {
             addCourseSheet
                 .presentationDetents([.height(492)])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $stylingNotebook) { notebook in
+            NotebookStyleSheet(notebook: notebook)
+                .presentationDetents([.height(430), .medium])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingAccountCenter) {
@@ -128,25 +133,14 @@ struct HomeView: View {
 
     private var header: some View {
         ZStack {
-            Circle()
-                .fill(.white.opacity(0.34))
-                .frame(width: 92, height: 92)
-                .blur(radius: 18)
-                .scaleEffect(sparkleSpin ? 1.08 : 0.92)
-
-            MinimalAppLogo()
-                .frame(width: 68, height: 68)
-                .rotation3DEffect(.degrees(sparkleSpin ? 8 : -8), axis: (x: 0.2, y: 1, z: 0), perspective: 0.8)
-                .scaleEffect(sparkleSpin ? 1.02 : 0.98)
-
             HStack {
                 Button {
-                    Haptics.open()
-                    showingCourseComposer = true
+                    openCourseComposer()
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 16, weight: .bold))
                         .frame(width: 48, height: 48)
+                        .rotationEffect(.degrees(addButtonRotation))
                 }
                 .buttonStyle(FloatingCircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
                 .accessibilityLabel("add course")
@@ -239,6 +233,24 @@ struct HomeView: View {
 
                 journalIndexRail
                     .padding(.top, 502)
+
+                if let activeNotebook {
+                    Button {
+                        Haptics.open()
+                        stylingNotebook = activeNotebook
+                    } label: {
+                        Image(systemName: "paintpalette.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .frame(width: 46, height: 46)
+                    }
+                    .buttonStyle(FloatingCircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, 16)
+                    .padding(.trailing, 22)
+                    .opacity(entered ? 1 : 0)
+                    .offset(y: entered ? 0 : -8)
+                    .accessibilityLabel("customize notebook")
+                }
             }
         }
         .frame(height: 550)
@@ -264,25 +276,6 @@ struct HomeView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(.ultraThinMaterial, in: Capsule())
-    }
-
-    private var shelfNotes: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 6) {
-                Text("vellum")
-                    .font(.system(.callout, design: .serif, weight: .semibold))
-                ContainerTextFlip(words: ["scan", "sort", "study", "listen", "remember", "rebuild", "review", "focus", "recall", "diagram", "practice", "master"])
-            }
-            .foregroundStyle(NotebookTheme.ink.opacity(0.78))
-
-            HStack(spacing: 10) {
-                MiniSignal(text: "\(store.notebooks.count) journals", systemName: "books.vertical.fill")
-                MiniSignal(text: activeJournalText, systemName: "sparkle.magnifyingglass")
-            }
-        }
-        .padding(.horizontal, 20)
-        .opacity(entered ? 1 : 0)
-        .offset(y: entered ? 0 : 10)
     }
 
     private var journalCommandSurface: some View {
@@ -512,7 +505,7 @@ struct HomeView: View {
                 selectedNotebook = notebook
             }
         case .add:
-            showingCourseComposer = true
+            openCourseComposer()
         }
     }
 
@@ -650,8 +643,7 @@ struct HomeView: View {
             Haptics.open()
             selectedNotebook = store.notebook(with: notebook.id) ?? notebook
         case .add:
-            Haptics.open()
-            showingCourseComposer = true
+            openCourseComposer()
         }
     }
 
@@ -830,6 +822,16 @@ struct HomeView: View {
         showingCourseComposer = false
     }
 
+    private func openCourseComposer() {
+        Haptics.open()
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
+            addButtonRotation += 90
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            showingCourseComposer = true
+        }
+    }
+
     private func closeCourseSheet() {
         Haptics.softTap()
         withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
@@ -953,6 +955,145 @@ private struct CourseSuggestionCarousel: View {
     }
 }
 
+private struct NotebookStyleSheet: View {
+    @Environment(NotebookStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let notebook: SubjectNotebook
+    @State private var closeRotation = 0.0
+
+    private var liveNotebook: SubjectNotebook {
+        store.notebook(with: notebook.id) ?? notebook
+    }
+
+    var body: some View {
+        ZStack {
+            LivingPaperBackground().ignoresSafeArea()
+            VStack(spacing: 18) {
+                HStack {
+                    Text("cover")
+                        .font(.system(.title3, design: .serif, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                    Spacer()
+                    Button {
+                        close()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(width: 40, height: 40)
+                            .rotationEffect(.degrees(closeRotation))
+                    }
+                    .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
+                }
+
+                HStack(spacing: 18) {
+                    CompositionCoverFace(
+                        subject: liveNotebook.subject,
+                        cornerRadius: 18,
+                        spineWidth: 7.25,
+                        labelWidth: 106,
+                        labelHeight: 82,
+                        labelOffsetY: 24,
+                        paperGrainDensity: 70,
+                        coverStyle: liveNotebook.coverStyle,
+                        coverColor: liveNotebook.coverColor
+                    )
+                    .frame(width: 164, height: 222)
+                    .rotation3DEffect(.degrees(-7), axis: (x: 0.1, y: 1, z: 0), perspective: 0.7)
+                    .shadow(color: .black.opacity(0.16), radius: 16, y: 10)
+
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text("style")
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.muted)
+
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
+                            ForEach(NotebookCoverStyle.allCases) { style in
+                                styleButton(style)
+                            }
+                        }
+
+                        Text("color")
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.muted)
+
+                        HStack(spacing: 10) {
+                            ForEach(ColorToken.allCases, id: \.self) { color in
+                                colorButton(color)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Button {
+                    Haptics.success()
+                    close()
+                } label: {
+                    Text("done")
+                        .font(.system(.headline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                        .background(NotebookTheme.ink, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(20)
+        }
+    }
+
+    private func styleButton(_ style: NotebookCoverStyle) -> some View {
+        Button {
+            Haptics.selection()
+            store.updateNotebookAppearance(id: notebook.id, style: style)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: style.symbol)
+                    .font(.system(size: 12, weight: .bold))
+                Text(style.title)
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(liveNotebook.coverStyle == style ? .white : NotebookTheme.ink)
+            .frame(maxWidth: .infinity)
+            .frame(height: 42)
+            .background(liveNotebook.coverStyle == style ? NotebookTheme.ink : .white.opacity(0.58), in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func colorButton(_ color: ColorToken) -> some View {
+        Button {
+            Haptics.selection()
+            store.updateNotebookAppearance(id: notebook.id, color: color)
+        } label: {
+            Circle()
+                .fill(color == .graphite ? NotebookTheme.ink : NotebookTheme.accent(color))
+                .frame(width: liveNotebook.coverColor == color ? 38 : 32, height: liveNotebook.coverColor == color ? 38 : 32)
+                .overlay {
+                    Circle().stroke(.white.opacity(0.78), lineWidth: 1)
+                }
+                .overlay {
+                    if liveNotebook.coverColor == color {
+                        Circle().stroke(NotebookTheme.ink.opacity(0.64), lineWidth: 2)
+                            .padding(-4)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func close() {
+        Haptics.softTap()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
+            closeRotation += 90
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            dismiss()
+        }
+    }
+}
+
 private struct CourseSuggestionBook: View {
     var subject: String
     var active: Bool
@@ -971,7 +1112,7 @@ private struct CourseSuggestionBook: View {
                 CompositionCoverFace(
                     subject: subject,
                     cornerRadius: 16,
-                    spineWidth: 6,
+                    spineWidth: 7,
                     labelWidth: 70,
                     labelHeight: 56,
                     labelOffsetY: 16,

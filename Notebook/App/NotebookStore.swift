@@ -20,6 +20,7 @@ final class NotebookStore {
     var scanRouteNotice: ScanRouteNotice?
     var selectedStudyMode: MemorizationMode = .longTerm
     var voiceProfile = VoiceProfile()
+    var comfortSettings: ComfortSettings = .default
     var scanPhase: ScanPhase = .framing
     var onboardingSubjects: [String] = ["math", "science", "history", "english"]
     var isRecordingVoice = false
@@ -75,6 +76,7 @@ final class NotebookStore {
             selectedStudyMode = saved.selectedStudyMode
             voiceProfile = saved.voiceProfile
             onboardingSubjects = saved.onboardingSubjects
+            comfortSettings = saved.comfortSettings ?? .default
         }
     }
 
@@ -218,6 +220,20 @@ final class NotebookStore {
     func chooseTheme(_ theme: AppTheme) {
         withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
             appTheme = theme
+        }
+        persist()
+    }
+
+    func setComfortFeature(_ feature: ComfortFeature, enabled: Bool) {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+            comfortSettings.set(feature, enabled: enabled)
+        }
+        persist()
+    }
+
+    func applyComfortPreset(_ preset: ComfortPreset) {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.84)) {
+            comfortSettings.enabledFeatures = preset.features
         }
         persist()
     }
@@ -660,6 +676,19 @@ final class NotebookStore {
     func rename(_ notebook: SubjectNotebook, to name: String) {
         guard let index = notebooks.firstIndex(where: { $0.id == notebook.id }) else { return }
         notebooks[index].subject = name.lowercased()
+        persist()
+    }
+
+    func updateNotebookAppearance(id: SubjectNotebook.ID, style: NotebookCoverStyle? = nil, color: ColorToken? = nil) {
+        guard let index = notebooks.firstIndex(where: { $0.id == id }) else { return }
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.84)) {
+            if let style {
+                notebooks[index].coverStyle = style
+            }
+            if let color {
+                notebooks[index].coverColor = color
+            }
+        }
         persist()
     }
 
@@ -2267,7 +2296,8 @@ final class NotebookStore {
             appTheme: appTheme,
             selectedStudyMode: selectedStudyMode,
             voiceProfile: voiceProfile,
-            onboardingSubjects: onboardingSubjects
+            onboardingSubjects: onboardingSubjects,
+            comfortSettings: comfortSettings
         ))
     }
 

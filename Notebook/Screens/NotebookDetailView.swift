@@ -17,7 +17,9 @@ struct NotebookDetailView: View {
     @State private var isScanning = false
     @State private var composerCloseRotation = 0.0
     @State private var showingCamera = false
+    @State private var showingUpload = false
     @State private var closeRotation = 0.0
+    @State private var searchCloseRotation = 0.0
     @State private var didAutoOpenScanner = false
     @State private var chromeEntered = false
     @State private var actionRailAwake = false
@@ -110,14 +112,16 @@ struct NotebookDetailView: View {
         }
         .sheet(isPresented: $showingCamera) {
             DocumentScannerView { images in
-                Task {
-                    Haptics.open()
-                    isScanning = true
-                    await store.scanCapturedImages(images, into: liveNotebook.id)
-                    Haptics.success()
-                    pageIndex = 0
-                    isScanning = false
-                }
+                processScannedImages(images)
+            } onCancel: {
+                Haptics.softTap()
+                isScanning = false
+            }
+            .ignoresSafeArea()
+        }
+        .sheet(isPresented: $showingUpload) {
+            DocumentScannerView(preferPhotoImport: true) { images in
+                processScannedImages(images)
             } onCancel: {
                 Haptics.softTap()
                 isScanning = false
@@ -183,12 +187,6 @@ struct NotebookDetailView: View {
 
             Spacer(minLength: 8)
 
-            MinimalAppLogo()
-                .frame(width: 34, height: 34)
-                .opacity(0.9)
-
-            Spacer(minLength: 8)
-
             if let currentPage {
                 Text(currentPageLabel)
                     .font(.system(.caption, design: .rounded, weight: .semibold))
@@ -224,15 +222,12 @@ struct NotebookDetailView: View {
 
             if !query.isEmpty {
                 Button {
-                    Haptics.softTap()
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
-                        query = ""
-                        pageIndex = 0
-                    }
+                    clearSearch()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
                         .frame(width: 42, height: 42)
+                        .rotationEffect(.degrees(searchCloseRotation))
                 }
                 .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
                 .transition(.scale.combined(with: .opacity))
@@ -528,6 +523,17 @@ struct NotebookDetailView: View {
 
                         Button {
                             Haptics.open()
+                            showingUpload = true
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 17, weight: .bold))
+                                .frame(width: 58, height: 58)
+                        }
+                        .buttonStyle(FloatingCircleButtonStyle(tint: .white.opacity(0.82), foreground: NotebookTheme.ink))
+                        .disabled(isScanning)
+
+                        Button {
+                            Haptics.open()
                             typedText = ""
                             showingComposer = true
                         } label: {
@@ -586,6 +592,12 @@ struct NotebookDetailView: View {
             railButton(symbol: "viewfinder", label: "scan") {
                 Haptics.open()
                 showingCamera = true
+            }
+            .disabled(isScanning)
+
+            railButton(symbol: "square.and.arrow.up", label: "upload") {
+                Haptics.open()
+                showingUpload = true
             }
             .disabled(isScanning)
 
@@ -710,6 +722,30 @@ struct NotebookDetailView: View {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
             dismiss()
+        }
+    }
+
+    private func clearSearch() {
+        Haptics.softTap()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
+            searchCloseRotation += 90
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                query = ""
+                pageIndex = 0
+            }
+        }
+    }
+
+    private func processScannedImages(_ images: [UIImage]) {
+        Task {
+            Haptics.open()
+            isScanning = true
+            await store.scanCapturedImages(images, into: liveNotebook.id)
+            Haptics.success()
+            pageIndex = 0
+            isScanning = false
         }
     }
 

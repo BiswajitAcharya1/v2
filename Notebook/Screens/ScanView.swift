@@ -11,9 +11,9 @@ struct ScanView: View {
             ZStack {
                 LinearGradient(
                     colors: [
-                        Color(red: 0.045, green: 0.047, blue: 0.044),
-                        Color(red: 0.16, green: 0.155, blue: 0.14),
-                        Color(red: 0.08, green: 0.078, blue: 0.072)
+                        scannerTopColor,
+                        scannerMidColor,
+                        scannerBottomColor
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottom
@@ -23,7 +23,11 @@ struct ScanView: View {
                 TimelineView(.periodic(from: .now, by: 1.0 / 12.0)) { timeline in
                     let t = timeline.date.timeIntervalSinceReferenceDate
                     ZStack {
-                        ScanAtmosphere(seconds: t, phase: store.scanPhase)
+                        ScanAtmosphere(
+                            seconds: t,
+                            phase: store.scanPhase,
+                            calm: store.comfortSettings.scannerIsQuiet
+                        )
                         scannerStage(seconds: t)
                     }
                 }
@@ -64,7 +68,7 @@ struct ScanView: View {
     private func scannerStage(seconds: TimeInterval) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 42, style: .continuous)
-                .fill(.white.opacity(0.045))
+                .fill(.white.opacity(store.comfortSettings.scannerIsQuiet ? 0.035 : 0.045))
                 .frame(width: 336, height: 466)
                 .overlay {
                     RoundedRectangle(cornerRadius: 42, style: .continuous)
@@ -89,7 +93,7 @@ struct ScanView: View {
                 .frame(width: 306, height: 422)
                 .offset(y: -16)
 
-            if store.scanPhase != .framing {
+            if store.scanPhase != .framing, !store.comfortSettings.isEnabled(.scannerQuietProcessing) {
                 CaptureGlow(seconds: seconds)
                     .frame(width: 278, height: 394)
                     .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
@@ -98,7 +102,25 @@ struct ScanView: View {
             }
         }
         .animation(.spring(response: 0.75, dampingFraction: 0.8), value: pageFlying)
-        .animation(.spring(response: 0.55, dampingFraction: 0.86), value: store.scanPhase)
+        .animation(store.comfortSettings.reducesMotion ? nil : .spring(response: 0.55, dampingFraction: 0.86), value: store.scanPhase)
+    }
+
+    private var scannerTopColor: Color {
+        store.comfortSettings.scannerIsQuiet
+            ? Color(red: 0.105, green: 0.102, blue: 0.09)
+            : Color(red: 0.045, green: 0.047, blue: 0.044)
+    }
+
+    private var scannerMidColor: Color {
+        store.comfortSettings.scannerIsQuiet
+            ? Color(red: 0.2, green: 0.188, blue: 0.16)
+            : Color(red: 0.16, green: 0.155, blue: 0.14)
+    }
+
+    private var scannerBottomColor: Color {
+        store.comfortSettings.scannerIsQuiet
+            ? Color(red: 0.13, green: 0.122, blue: 0.105)
+            : Color(red: 0.08, green: 0.078, blue: 0.072)
     }
 
     private var phasePanel: some View {
@@ -250,10 +272,11 @@ private struct FloatingScanButton: View {
 private struct ScanAtmosphere: View {
     var seconds: TimeInterval
     var phase: ScanPhase
+    var calm: Bool
 
     var body: some View {
         Canvas(rendersAsynchronously: true) { context, size in
-            for index in 0..<7 {
+            for index in 0..<(calm ? 4 : 7) {
                 let y = size.height * CGFloat(index) / 11
                 let drift = CGFloat(sin(seconds * 0.42 + Double(index))) * 18
                 var path = Path()
@@ -265,12 +288,12 @@ private struct ScanAtmosphere: View {
                 )
                 context.stroke(
                     path,
-                    with: .color(.white.opacity(phase == .framing ? 0.035 : 0.055)),
+                    with: .color(.white.opacity(calm ? 0.025 : (phase == .framing ? 0.035 : 0.055))),
                     style: StrokeStyle(lineWidth: index.isMultiple(of: 3) ? 1 : 0.6, lineCap: .round)
                 )
             }
 
-            for index in 0..<9 {
+            for index in 0..<(calm ? 3 : 9) {
                 let x = size.width * CGFloat((index * 37) % 101) / 100
                 let y = size.height * CGFloat((index * 53) % 97) / 100
                 let pulse = CGFloat((sin(seconds * 0.9 + Double(index)) + 1) / 2)

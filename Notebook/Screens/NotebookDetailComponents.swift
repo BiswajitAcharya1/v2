@@ -2024,12 +2024,17 @@ struct ScanProcessingOverlay: View {
                         .font(.system(.title3, design: .serif, weight: .semibold))
                         .foregroundStyle(.white)
                         .contentTransition(.opacity)
-                    Text(phaseDetail)
-                        .font(.system(.footnote, design: .rounded, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.72))
+                    GeneratedTextEffect(
+                        text: phaseDetail,
+                        font: .system(.footnote, design: .rounded, weight: .semibold),
+                        foreground: .white.opacity(0.76),
+                        mutedForeground: .white.opacity(0.42),
+                        revealDelayMs: 44,
+                        lineSpacing: 3
+                    )
                         .multilineTextAlignment(.center)
-                        .lineSpacing(3)
                         .frame(width: 230)
+                        .id(phase)
                 }
 
                 ScanPhaseRail(current: phase)

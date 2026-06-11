@@ -508,3 +508,47 @@ struct ContainerTextFlip: View {
         .clipped()
     }
 }
+
+struct GeneratedTextEffect: View {
+    var text: String
+    var font: Font = .system(.body, design: .rounded)
+    var foreground: Color = NotebookTheme.ink
+    var mutedForeground: Color = NotebookTheme.muted
+    var revealDelayMs: UInt64 = 38
+    var lineSpacing: CGFloat = 5
+    var lineLimit: Int?
+
+    @State private var visibleWords = 0
+
+    private var words: [String] {
+        text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+    }
+
+    private var revealedText: String {
+        guard !words.isEmpty else { return "" }
+        return words.prefix(max(1, min(visibleWords, words.count))).joined(separator: " ")
+    }
+
+    var body: some View {
+        Text(revealedText)
+            .font(font)
+            .foregroundStyle(visibleWords >= words.count ? foreground : mutedForeground)
+            .lineSpacing(lineSpacing)
+            .lineLimit(lineLimit)
+            .fixedSize(horizontal: false, vertical: true)
+            .contentTransition(.opacity)
+            .animation(.easeOut(duration: 0.18), value: visibleWords)
+            .task(id: text) {
+                visibleWords = words.isEmpty ? 0 : 1
+                guard words.count > 1 else { return }
+                while visibleWords < words.count, !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(revealDelayMs))
+                    visibleWords += 1
+                }
+            }
+            .accessibilityLabel(text)
+    }
+}

@@ -21,10 +21,12 @@ struct CompositionNotebookCard: View {
                 CompositionCoverFace(
                     subject: notebook.subject,
                     cornerRadius: 20,
-                    spineWidth: 4.25,
+                    spineWidth: 6.75,
                     labelWidth: 142,
                     labelHeight: 108,
-                    labelOffsetY: 30
+                    labelOffsetY: 30,
+                    coverStyle: notebook.coverStyle,
+                    coverColor: notebook.coverColor
                 )
                     .shadow(color: .black.opacity(isPressed ? 0.12 : 0.28), radius: isPressed ? 5 : 16, y: isPressed ? 4 : 16)
 
@@ -139,25 +141,27 @@ struct CompositionCoverFace: View {
     var labelHeight: CGFloat
     var labelOffsetY: CGFloat
     var paperGrainDensity: Int = 90
+    var coverStyle: NotebookCoverStyle = .marbled
+    var coverColor: ColorToken = .graphite
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.04, green: 0.04, blue: 0.038),
-                            Color(red: 0.115, green: 0.115, blue: 0.105),
-                            Color(red: 0.045, green: 0.045, blue: 0.04)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(coverFill)
 
-            SpeckledCompositionTexture()
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                .opacity(0.98)
+            if coverStyle == .marbled {
+                SpeckledCompositionTexture()
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    .opacity(0.98)
+            } else if coverStyle == .linen {
+                LinenCoverTexture(color: NotebookTheme.accent(coverColor))
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    .opacity(0.34)
+            } else if coverStyle == .paper {
+                PaperRules()
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    .opacity(0.34)
+            }
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(
@@ -207,6 +211,66 @@ struct CompositionCoverFace: View {
                 }
                 .padding(.top, labelOffsetY)
                 Spacer()
+            }
+        }
+    }
+
+    private var coverFill: LinearGradient {
+        let accent = NotebookTheme.accent(coverColor)
+        switch coverStyle {
+        case .marbled:
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.04, green: 0.04, blue: 0.038),
+                    Color(red: 0.115, green: 0.115, blue: 0.105),
+                    Color(red: 0.045, green: 0.045, blue: 0.04)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .solid:
+            return LinearGradient(
+                colors: [accent.opacity(0.94), accent.opacity(0.72), NotebookTheme.ink.opacity(0.22)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .linen:
+            return LinearGradient(
+                colors: [accent.opacity(0.72), accent.opacity(0.44), NotebookTheme.paper.opacity(0.64)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .paper:
+            return LinearGradient(
+                colors: [NotebookTheme.paper, Color(red: 0.9, green: 0.91, blue: 0.87)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+}
+
+private struct LinenCoverTexture: View {
+    var color: Color
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            let step: CGFloat = 7
+            var x: CGFloat = 0
+            while x < size.width {
+                var path = Path()
+                path.move(to: CGPoint(x: x, y: 0))
+                path.addLine(to: CGPoint(x: x + sin(x * 0.2) * 1.5, y: size.height))
+                context.stroke(path, with: .color(color.opacity(0.18)), lineWidth: 0.7)
+                x += step
+            }
+            var y: CGFloat = 0
+            while y < size.height {
+                var path = Path()
+                path.move(to: CGPoint(x: 0, y: y))
+                path.addLine(to: CGPoint(x: size.width, y: y + cos(y * 0.18) * 1.2))
+                context.stroke(path, with: .color(.white.opacity(0.2)), lineWidth: 0.6)
+                y += step
             }
         }
     }
@@ -369,7 +433,7 @@ struct NotebookLogo: View {
         CompositionCoverFace(
             subject: nil,
             cornerRadius: 18,
-            spineWidth: 5.25,
+            spineWidth: 7,
             labelWidth: 102,
             labelHeight: 88,
             labelOffsetY: 30
@@ -390,7 +454,7 @@ private struct CompositionCoverLabel: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: true, vertical: true)
                 Spacer(minLength: 4)
-                Text("vellum")
+                Text("notes")
                     .font(.system(size: isLarge ? 6.7 : 5.2, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)

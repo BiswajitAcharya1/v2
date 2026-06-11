@@ -11,9 +11,9 @@ struct ProfileAvatarView: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            .white.opacity(0.92),
-                            NotebookTheme.accent(avatar.base).opacity(0.48),
-                            NotebookTheme.accent(avatar.accent).opacity(0.38)
+                            .white.opacity(0.96),
+                            NotebookTheme.accent(avatar.base).opacity(0.34),
+                            NotebookTheme.accent(avatar.accent).opacity(0.22)
                         ],
                         center: .topLeading,
                         startRadius: 0,
@@ -22,21 +22,38 @@ struct ProfileAvatarView: View {
                 )
                 .overlay {
                     Circle()
-                        .stroke(.white.opacity(0.72), lineWidth: max(0.8, size * 0.018))
+                        .stroke(.white.opacity(0.84), lineWidth: max(0.8, size * 0.018))
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    Circle()
+                        .fill(NotebookTheme.accent(avatar.accent))
+                        .frame(width: size * 0.24, height: size * 0.24)
+                        .overlay {
+                            Circle().stroke(.white.opacity(0.72), lineWidth: max(0.7, size * 0.012))
+                        }
+                        .padding(size * 0.08)
                 }
 
             AvatarDetailLayer(detail: avatar.detail, accent: NotebookTheme.accent(avatar.accent), animated: animated)
-                .padding(size * 0.1)
+                .padding(size * 0.13)
                 .clipShape(Circle())
+                .opacity(0.8)
+
+            Circle()
+                .fill(.white.opacity(0.72))
+                .frame(width: size * 0.52, height: size * 0.52)
+                .overlay {
+                    Circle().stroke(.white.opacity(0.82), lineWidth: max(0.7, size * 0.012))
+                }
 
             Image(systemName: avatar.symbol)
-                .font(.system(size: size * 0.34, weight: .semibold))
+                .font(.system(size: size * 0.28, weight: .semibold))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(NotebookTheme.ink.opacity(0.88))
-                .scaleEffect(animated ? 1.04 : 0.98)
+                .scaleEffect(animated ? 1.02 : 1)
         }
         .frame(width: size, height: size)
-        .shadow(color: NotebookTheme.accent(avatar.base).opacity(0.18), radius: size * 0.16, y: size * 0.09)
+        .shadow(color: NotebookTheme.accent(avatar.base).opacity(0.14), radius: size * 0.14, y: size * 0.08)
         .accessibilityHidden(true)
     }
 }

@@ -117,11 +117,16 @@ struct ReviewSprintView: View {
                     Spacer()
                 }
 
-                Text(page.content.insight.onlyWhatMatters.isEmpty ? firstUsefulLine(page) : page.content.insight.onlyWhatMatters)
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(NotebookTheme.ink)
-                    .lineSpacing(5)
-                    .lineLimit(5)
+                GeneratedTextEffect(
+                    text: page.content.insight.onlyWhatMatters.isEmpty ? firstUsefulLine(page) : page.content.insight.onlyWhatMatters,
+                    font: .system(.body, design: .rounded),
+                    foreground: NotebookTheme.ink,
+                    mutedForeground: NotebookTheme.ink.opacity(0.56),
+                    revealDelayMs: 36,
+                    lineSpacing: 5,
+                    lineLimit: 5
+                )
+                .id(page.id)
 
                 if let prompt = (page.content.insight.recallPrompts + page.content.insight.quickQuestions).first {
                     Text(prompt)

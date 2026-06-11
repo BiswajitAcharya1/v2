@@ -39,6 +39,320 @@ struct AvatarProfile: Hashable, Codable {
     static let `default` = AvatarProfile(base: .blue, accent: .green, symbol: "book.closed.fill", detail: .spark)
 }
 
+struct ComfortSettings: Hashable, Codable {
+    var enabledFeatures: Set<ComfortFeature>
+
+    static let `default` = ComfortSettings(enabledFeatures: [
+        .einkPaper,
+        .warmPaper,
+        .softerInk,
+        .mutedAccents,
+        .lessGlow,
+        .calmerMotion,
+        .staticPaper,
+        .largeReadingText,
+        .roomyLines,
+        .scannerLowGlare,
+        .scannerSteadyFrame,
+        .pageTexture,
+        .softRules,
+        .tapTargets
+    ])
+
+    func isEnabled(_ feature: ComfortFeature) -> Bool {
+        enabledFeatures.contains(feature)
+    }
+
+    mutating func set(_ feature: ComfortFeature, enabled: Bool) {
+        if enabled {
+            enabledFeatures.insert(feature)
+        } else {
+            enabledFeatures.remove(feature)
+        }
+    }
+
+    var warmth: Double {
+        var value = 0.08
+        if isEnabled(.warmPaper) { value += 0.12 }
+        if isEnabled(.reducedBlue) { value += 0.08 }
+        if isEnabled(.eveningShade) { value += 0.14 }
+        return min(value, 0.38)
+    }
+
+    var paperWash: Double {
+        var value = isEnabled(.einkPaper) ? 0.16 : 0.06
+        if isEnabled(.matteGlass) { value += 0.05 }
+        if isEnabled(.focusVignette) { value += 0.04 }
+        return min(value, 0.32)
+    }
+
+    var saturation: Double {
+        var value = 1.0
+        if isEnabled(.mutedAccents) { value -= 0.18 }
+        if isEnabled(.graphiteOnly) { value -= 0.42 }
+        if isEnabled(.scannerLowGlare) { value -= 0.06 }
+        return max(value, 0.42)
+    }
+
+    var contrast: Double {
+        var value = 1.0
+        if isEnabled(.softerInk) { value -= 0.08 }
+        if isEnabled(.einkPaper) { value -= 0.04 }
+        if isEnabled(.ocrSharpness) { value += 0.04 }
+        return min(max(value, 0.82), 1.08)
+    }
+
+    var brightness: Double {
+        var value = 0.0
+        if isEnabled(.eveningShade) { value -= 0.035 }
+        if isEnabled(.batterySaver) { value -= 0.012 }
+        return value
+    }
+
+    var textureDensity: Int {
+        var density = 80
+        if isEnabled(.paperGrain) { density += 110 }
+        if isEnabled(.pageTexture) { density += 70 }
+        if isEnabled(.batterySaver) { density = max(30, density / 2) }
+        return density
+    }
+
+    var reducesMotion: Bool {
+        isEnabled(.calmerMotion) || isEnabled(.noPulse) || isEnabled(.lowRefresh) || isEnabled(.batterySaver)
+    }
+
+    var scannerIsQuiet: Bool {
+        isEnabled(.scannerLowGlare) || isEnabled(.scannerSteadyFrame) || isEnabled(.scannerQuietProcessing)
+    }
+
+    var comfortScore: Int {
+        min(100, Int((Double(enabledFeatures.count) / Double(ComfortFeature.allCases.count) * 100).rounded()))
+    }
+}
+
+enum ComfortFeature: String, CaseIterable, Identifiable, Hashable, Codable {
+    case einkPaper
+    case warmPaper
+    case matteGlass
+    case softerInk
+    case reducedBlue
+    case mutedAccents
+    case graphiteOnly
+    case lessGlow
+    case calmerMotion
+    case staticPaper
+    case noPulse
+    case largeReadingText
+    case roomyLines
+    case widerMargins
+    case focusVignette
+    case readingRuler
+    case tapTargets
+    case scannerLowGlare
+    case scannerSteadyFrame
+    case scannerQuietProcessing
+    case ocrSharpness
+    case pageTexture
+    case paperGrain
+    case softRules
+    case marginGuide
+    case hiddenProgressNoise
+    case compactToolbars
+    case batterySaver
+    case lowRefresh
+    case eveningShade
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .einkPaper: "e ink paper"
+        case .warmPaper: "warm paper"
+        case .matteGlass: "matte glass"
+        case .softerInk: "softer ink"
+        case .reducedBlue: "reduced blue"
+        case .mutedAccents: "muted accents"
+        case .graphiteOnly: "graphite only"
+        case .lessGlow: "less glow"
+        case .calmerMotion: "calmer motion"
+        case .staticPaper: "static paper"
+        case .noPulse: "no pulse"
+        case .largeReadingText: "larger reading"
+        case .roomyLines: "roomy lines"
+        case .widerMargins: "wide margins"
+        case .focusVignette: "focus vignette"
+        case .readingRuler: "reading ruler"
+        case .tapTargets: "larger taps"
+        case .scannerLowGlare: "low glare scan"
+        case .scannerSteadyFrame: "steady frame"
+        case .scannerQuietProcessing: "quiet processing"
+        case .ocrSharpness: "ocr sharpness"
+        case .pageTexture: "page texture"
+        case .paperGrain: "paper grain"
+        case .softRules: "soft rules"
+        case .marginGuide: "margin guide"
+        case .hiddenProgressNoise: "quiet progress"
+        case .compactToolbars: "compact tools"
+        case .batterySaver: "battery saver"
+        case .lowRefresh: "low refresh"
+        case .eveningShade: "evening shade"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .einkPaper: "low glare off white paper wash"
+        case .warmPaper: "warmer surface for long sessions"
+        case .matteGlass: "flattens shiny glass panels"
+        case .softerInk: "reduces harsh black contrast"
+        case .reducedBlue: "cuts cool light from the ui"
+        case .mutedAccents: "quieter colors across notebooks"
+        case .graphiteOnly: "near monochrome study mode"
+        case .lessGlow: "reduces luminous effects"
+        case .calmerMotion: "shortens animated movement"
+        case .staticPaper: "keeps paper backgrounds still"
+        case .noPulse: "removes pulsing decorations"
+        case .largeReadingText: "prefers easier reading sizes"
+        case .roomyLines: "adds breathing room to text"
+        case .widerMargins: "keeps text away from edges"
+        case .focusVignette: "soft edge shade while reading"
+        case .readingRuler: "adds a subtle line guide"
+        case .tapTargets: "keeps controls finger friendly"
+        case .scannerLowGlare: "dims the scanner surface"
+        case .scannerSteadyFrame: "simplifies scan frame motion"
+        case .scannerQuietProcessing: "calmer scan processing"
+        case .ocrSharpness: "adds slight text clarity contrast"
+        case .pageTexture: "adds tactile paper depth"
+        case .paperGrain: "adds fine paper grain"
+        case .softRules: "softens ruled paper lines"
+        case .marginGuide: "keeps the red margin subtle"
+        case .hiddenProgressNoise: "hides extra status noise"
+        case .compactToolbars: "reduces toolbar weight"
+        case .batterySaver: "cuts animation and texture work"
+        case .lowRefresh: "slows decorative refresh"
+        case .eveningShade: "warmer dimmer night reading"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .einkPaper: "text.page"
+        case .warmPaper: "sun.haze.fill"
+        case .matteGlass: "circle.lefthalf.filled"
+        case .softerInk: "drop.fill"
+        case .reducedBlue: "moon.fill"
+        case .mutedAccents: "paintpalette.fill"
+        case .graphiteOnly: "circle.grid.cross"
+        case .lessGlow: "lightbulb.min"
+        case .calmerMotion: "slowmo"
+        case .staticPaper: "pause.fill"
+        case .noPulse: "waveform.path"
+        case .largeReadingText: "textformat.size"
+        case .roomyLines: "line.3.horizontal"
+        case .widerMargins: "increase.indent"
+        case .focusVignette: "viewfinder"
+        case .readingRuler: "ruler.fill"
+        case .tapTargets: "target"
+        case .scannerLowGlare: "camera.filters"
+        case .scannerSteadyFrame: "viewfinder.rectangular"
+        case .scannerQuietProcessing: "wand.and.rays.inverse"
+        case .ocrSharpness: "text.viewfinder"
+        case .pageTexture: "doc.richtext"
+        case .paperGrain: "circle.hexagongrid.fill"
+        case .softRules: "list.bullet"
+        case .marginGuide: "sidebar.left"
+        case .hiddenProgressNoise: "eye.slash.fill"
+        case .compactToolbars: "rectangle.compress.vertical"
+        case .batterySaver: "battery.75percent"
+        case .lowRefresh: "tortoise.fill"
+        case .eveningShade: "moon.zzz.fill"
+        }
+    }
+
+    var group: ComfortFeatureGroup {
+        switch self {
+        case .einkPaper, .warmPaper, .matteGlass, .softerInk, .reducedBlue, .mutedAccents, .graphiteOnly, .lessGlow, .eveningShade:
+            .surface
+        case .calmerMotion, .staticPaper, .noPulse, .batterySaver, .lowRefresh:
+            .motion
+        case .largeReadingText, .roomyLines, .widerMargins, .focusVignette, .readingRuler, .tapTargets:
+            .reading
+        case .scannerLowGlare, .scannerSteadyFrame, .scannerQuietProcessing, .ocrSharpness:
+            .scanner
+        case .pageTexture, .paperGrain, .softRules, .marginGuide, .hiddenProgressNoise, .compactToolbars:
+            .notebook
+        }
+    }
+}
+
+enum ComfortFeatureGroup: String, CaseIterable, Identifiable {
+    case surface
+    case motion
+    case reading
+    case scanner
+    case notebook
+
+    var id: String { rawValue }
+}
+
+enum ComfortPreset: String, CaseIterable, Identifiable {
+    case paper
+    case focus
+    case evening
+    case performance
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .paper: "paper"
+        case .focus: "focus"
+        case .evening: "evening"
+        case .performance: "fast"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .paper: "text.page"
+        case .focus: "viewfinder"
+        case .evening: "moon.zzz.fill"
+        case .performance: "bolt.fill"
+        }
+    }
+
+    var features: Set<ComfortFeature> {
+        switch self {
+        case .paper:
+            [
+                .einkPaper, .warmPaper, .matteGlass, .softerInk, .mutedAccents,
+                .lessGlow, .staticPaper, .largeReadingText, .roomyLines, .widerMargins,
+                .pageTexture, .paperGrain, .softRules, .marginGuide, .tapTargets
+            ]
+        case .focus:
+            [
+                .einkPaper, .softerInk, .reducedBlue, .mutedAccents, .graphiteOnly,
+                .lessGlow, .calmerMotion, .staticPaper, .noPulse, .largeReadingText,
+                .roomyLines, .widerMargins, .focusVignette, .readingRuler, .hiddenProgressNoise,
+                .compactToolbars, .scannerLowGlare, .scannerSteadyFrame
+            ]
+        case .evening:
+            [
+                .einkPaper, .warmPaper, .matteGlass, .softerInk, .reducedBlue,
+                .mutedAccents, .lessGlow, .calmerMotion, .staticPaper, .noPulse,
+                .largeReadingText, .roomyLines, .focusVignette, .readingRuler, .scannerLowGlare,
+                .scannerQuietProcessing, .pageTexture, .softRules, .eveningShade
+            ]
+        case .performance:
+            [
+                .einkPaper, .matteGlass, .softerInk, .mutedAccents, .lessGlow,
+                .calmerMotion, .staticPaper, .noPulse, .scannerSteadyFrame, .scannerQuietProcessing,
+                .hiddenProgressNoise, .compactToolbars, .batterySaver, .lowRefresh
+            ]
+        }
+    }
+}
+
 enum AvatarDetail: String, CaseIterable, Identifiable, Hashable, Codable {
     case spark
     case orbit
@@ -61,6 +375,75 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
     var lastActivity: String
     var isPinned: Bool
     var accent: ColorToken
+    var coverStyle: NotebookCoverStyle
+    var coverColor: ColorToken
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case subject
+        case pages
+        case progress
+        case lastActivity
+        case isPinned
+        case accent
+        case coverStyle
+        case coverColor
+    }
+
+    init(
+        id: UUID = UUID(),
+        subject: String,
+        pages: [NotebookPage],
+        progress: Double,
+        lastActivity: String,
+        isPinned: Bool,
+        accent: ColorToken,
+        coverStyle: NotebookCoverStyle = .marbled,
+        coverColor: ColorToken = .graphite
+    ) {
+        self.id = id
+        self.subject = subject
+        self.pages = pages
+        self.progress = progress
+        self.lastActivity = lastActivity
+        self.isPinned = isPinned
+        self.accent = accent
+        self.coverStyle = coverStyle
+        self.coverColor = coverColor
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        subject = try container.decode(String.self, forKey: .subject)
+        pages = try container.decode([NotebookPage].self, forKey: .pages)
+        progress = try container.decode(Double.self, forKey: .progress)
+        lastActivity = try container.decode(String.self, forKey: .lastActivity)
+        isPinned = try container.decode(Bool.self, forKey: .isPinned)
+        accent = try container.decode(ColorToken.self, forKey: .accent)
+        coverStyle = try container.decodeIfPresent(NotebookCoverStyle.self, forKey: .coverStyle) ?? .marbled
+        coverColor = try container.decodeIfPresent(ColorToken.self, forKey: .coverColor) ?? .graphite
+    }
+}
+
+enum NotebookCoverStyle: String, CaseIterable, Identifiable, Hashable, Codable {
+    case marbled
+    case solid
+    case linen
+    case paper
+
+    var id: String { rawValue }
+
+    var title: String { rawValue }
+
+    var symbol: String {
+        switch self {
+        case .marbled: "scribble"
+        case .solid: "rectangle.fill"
+        case .linen: "square.grid.3x3.fill"
+        case .paper: "doc.richtext"
+        }
+    }
 }
 
 struct NotebookPage: Identifiable, Hashable, Codable {

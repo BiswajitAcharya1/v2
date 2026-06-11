@@ -3,6 +3,7 @@ import PhotosUI
 import VisionKit
 
 struct DocumentScannerView: View {
+    var preferPhotoImport = false
     var onScan: @MainActor ([UIImage]) -> Void
     var onCancel: @MainActor () -> Void = {}
 
@@ -11,7 +12,9 @@ struct DocumentScannerView: View {
             #if targetEnvironment(simulator)
             PhotoImportScannerFallback(onScan: onScan, onCancel: onCancel)
             #else
-            if VNDocumentCameraViewController.isSupported {
+            if preferPhotoImport {
+                PhotoImportScannerFallback(onScan: onScan, onCancel: onCancel)
+            } else if VNDocumentCameraViewController.isSupported {
                 ZStack {
                     DocumentCameraRepresentable(onScan: onScan, onCancel: onCancel)
                         .ignoresSafeArea()
@@ -82,6 +85,7 @@ private struct PhotoImportScannerFallback: View {
     @State private var isLoading = false
     @State private var glow = false
     @State private var scanLight = false
+    @State private var closeRotation = 0.0
 
     var body: some View {
         ZStack {
@@ -98,15 +102,14 @@ private struct PhotoImportScannerFallback: View {
             VStack(spacing: 18) {
                 HStack {
                     Button {
-                        Haptics.softTap()
-                        dismiss()
-                        onCancel()
+                        close()
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(NotebookTheme.ink)
                             .frame(width: 42, height: 42)
                             .background(.white.opacity(0.82), in: Circle())
+                            .rotationEffect(.degrees(closeRotation))
                     }
                     .buttonStyle(.plain)
 
@@ -216,6 +219,17 @@ private struct PhotoImportScannerFallback: View {
             withAnimation(.easeInOut(duration: 1.55).repeatForever(autoreverses: true)) {
                 scanLight = true
             }
+        }
+    }
+
+    private func close() {
+        Haptics.softTap()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
+            closeRotation += 90
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            dismiss()
+            onCancel()
         }
     }
 

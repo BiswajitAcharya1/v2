@@ -394,9 +394,15 @@ struct StudyFocusView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Label("only what matters", systemImage: "sparkles")
                     .font(.system(.headline, design: .rounded, weight: .semibold))
-                Text(activePage.content.insight.onlyWhatMatters.isEmpty ? (activePage.content.sections.first?.body ?? activePage.content.cleanedText) : activePage.content.insight.onlyWhatMatters)
-                    .font(.system(.body, design: .rounded))
-                    .lineSpacing(5)
+                GeneratedTextEffect(
+                    text: activePage.content.insight.onlyWhatMatters.isEmpty ? (activePage.content.sections.first?.body ?? activePage.content.cleanedText) : activePage.content.insight.onlyWhatMatters,
+                    font: .system(.body, design: .rounded),
+                    foreground: NotebookTheme.ink,
+                    mutedForeground: NotebookTheme.ink.opacity(0.58),
+                    revealDelayMs: 34,
+                    lineSpacing: 5
+                )
+                .id(activePage.id)
                 HStack {
                     PageChip(text: "recall", systemName: "brain.head.profile")
                     PageChip(text: activePage.studyState.dueLabel, systemName: "calendar")

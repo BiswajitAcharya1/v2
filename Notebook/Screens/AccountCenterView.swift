@@ -5,6 +5,7 @@ struct AccountCenterView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var legalDocument: LegalDocument?
     @State private var editingAvatar = false
+    @State private var showingComfort = false
     @State private var expanded = false
     @State private var heroPulse = false
     @State private var closeRotation = 0.0
@@ -41,6 +42,18 @@ struct AccountCenterView: View {
                     }
 
                     accountSection("preferences") {
+                        Button {
+                            Haptics.open()
+                            showingComfort = true
+                        } label: {
+                            accountRow(
+                                systemName: "text.page",
+                                title: "eye comfort",
+                                detail: "\(store.comfortSettings.comfortScore) comfort  \(store.comfortSettings.enabledFeatures.count) features"
+                            )
+                        }
+                        .buttonStyle(.plain)
+
                         Toggle(
                             "personal voice",
                             isOn: Binding(
@@ -113,6 +126,11 @@ struct AccountCenterView: View {
             .sheet(isPresented: $editingAvatar) {
                 AvatarBuilderView()
                     .presentationDetents([.height(560), .large])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showingComfort) {
+                ComfortStudioView()
+                    .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
             .onAppear {
@@ -418,12 +436,230 @@ private struct AccountTrustRibbon: View {
     }
 }
 
+private struct ComfortStudioView: View {
+    @Environment(NotebookStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var previewPulse = false
+    @State private var closeRotation = 0.0
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LivingPaperBackground(
+                    animated: !store.comfortSettings.reducesMotion,
+                    grainDensity: store.comfortSettings.textureDensity
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: 16) {
+                        comfortHero
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(ComfortPreset.allCases) { preset in
+                                    ComfortPresetButton(
+                                        preset: preset,
+                                        active: store.comfortSettings.enabledFeatures == preset.features
+                                    ) {
+                                        Haptics.selection()
+                                        store.applyComfortPreset(preset)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 2)
+                        }
+
+                        ForEach(ComfortFeatureGroup.allCases) { group in
+                            comfortSection(group)
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationTitle("eye comfort")
+            .toolbarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        close()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(NotebookTheme.ink)
+                            .frame(width: 38, height: 38)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .rotationEffect(.degrees(closeRotation))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .onAppear {
+                guard !store.comfortSettings.reducesMotion else { return }
+                withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+                    previewPulse = true
+                }
+            }
+        }
+    }
+
+    private var comfortHero: some View {
+        GlassSurface(radius: 32, padding: 18, interactive: true) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(NotebookTheme.paper)
+                        .frame(width: 86, height: 86)
+                        .overlay {
+                            PaperGrain(density: store.comfortSettings.textureDensity)
+                                .clipShape(Circle())
+                                .opacity(0.34)
+                        }
+                        .scaleEffect(previewPulse ? 1.03 : 0.98)
+
+                    Image(systemName: "eye")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink.opacity(0.78))
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("paper calm")
+                        .font(.system(.title3, design: .serif, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                    Text("\(store.comfortSettings.enabledFeatures.count) of \(ComfortFeature.allCases.count) comfort features are active")
+                        .font(.system(.footnote, design: .rounded, weight: .medium))
+                        .foregroundStyle(NotebookTheme.muted)
+                    ComfortScoreBar(score: store.comfortSettings.comfortScore)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func comfortSection(_ group: ComfortFeatureGroup) -> some View {
+        GlassSurface(radius: 24, padding: 14, interactive: true) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(group.rawValue)
+                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+
+                ForEach(ComfortFeature.allCases.filter { $0.group == group }) { feature in
+                    ComfortFeatureRow(
+                        feature: feature,
+                        active: store.comfortSettings.isEnabled(feature)
+                    ) {
+                        Haptics.selection()
+                        store.setComfortFeature(feature, enabled: !store.comfortSettings.isEnabled(feature))
+                    }
+                }
+            }
+        }
+    }
+
+    private func close() {
+        Haptics.softTap()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
+            closeRotation += 90
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            dismiss()
+        }
+    }
+}
+
+private struct ComfortScoreBar: View {
+    let score: Int
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(NotebookTheme.ink.opacity(0.12))
+                Capsule()
+                    .fill(NotebookTheme.ink.opacity(0.72))
+                    .frame(width: proxy.size.width * CGFloat(score) / 100)
+            }
+        }
+        .frame(height: 7)
+    }
+}
+
+private struct ComfortPresetButton: View {
+    let preset: ComfortPreset
+    let active: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: preset.symbol)
+                    .font(.system(size: 13, weight: .bold))
+                Text(preset.title)
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            }
+            .foregroundStyle(active ? .white : NotebookTheme.ink)
+            .padding(.horizontal, 15)
+            .frame(height: 44)
+            .background(active ? NotebookTheme.ink : .white.opacity(0.56), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(.white.opacity(active ? 0.18 : 0.62), lineWidth: 0.8)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ComfortFeatureRow: View {
+    let feature: ComfortFeature
+    let active: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: feature.symbol)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(active ? .white : NotebookTheme.ink)
+                    .frame(width: 34, height: 34)
+                    .background(active ? NotebookTheme.ink : .white.opacity(0.58), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(feature.title)
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                    Text(feature.detail)
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(NotebookTheme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+
+                Spacer(minLength: 0)
+
+                ZStack {
+                    Capsule()
+                        .fill(active ? NotebookTheme.ink.opacity(0.82) : NotebookTheme.ink.opacity(0.12))
+                        .frame(width: 44, height: 26)
+                    Circle()
+                        .fill(.white)
+                        .frame(width: 20, height: 20)
+                        .offset(x: active ? 9 : -9)
+                }
+                .animation(.spring(response: 0.32, dampingFraction: 0.78), value: active)
+            }
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct AvatarBuilderView: View {
     @Environment(NotebookStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @State private var draft = AvatarProfile.default
-    @State private var previewPulse = false
-    @State private var previewTilt = false
+    @State private var closeRotation = 0.0
 
     private let symbols = [
         "book.closed.fill", "pencil.and.scribble", "sparkles", "brain.head.profile", "cube.transparent", "graduationcap.fill",
@@ -521,26 +757,20 @@ private struct AvatarBuilderView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        Haptics.softTap()
-                        dismiss()
+                        close()
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(NotebookTheme.ink)
                             .frame(width: 38, height: 38)
                             .background(.ultraThinMaterial, in: Circle())
+                            .rotationEffect(.degrees(closeRotation))
                     }
                     .buttonStyle(.plain)
                 }
             }
             .onAppear {
                 draft = store.user.avatar
-                withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
-                    previewPulse = true
-                }
-                withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) {
-                    previewTilt = true
-                }
             }
         }
     }
@@ -553,23 +783,20 @@ private struct AvatarBuilderView: View {
                         .fill(NotebookTheme.accent(draft.base).opacity(0.16))
                         .frame(width: 196, height: 196)
                         .blur(radius: 24)
-                        .scaleEffect(previewPulse ? 1.08 : 0.94)
 
                     ForEach(0..<3, id: \.self) { index in
                         Circle()
                             .trim(from: 0.08, to: 0.26)
                             .stroke(NotebookTheme.accent(index.isMultiple(of: 2) ? draft.accent : draft.base).opacity(0.34), style: StrokeStyle(lineWidth: 2, lineCap: .round))
                             .frame(width: 164 + CGFloat(index * 18), height: 164 + CGFloat(index * 18))
-                            .rotationEffect(.degrees(previewTilt ? Double(80 + index * 40) : Double(-18 - index * 28)))
+                            .rotationEffect(.degrees(Double(-18 - index * 28)))
                     }
 
-                    ProfileAvatarView(avatar: draft, size: 132, animated: true)
-                        .scaleEffect(previewPulse ? 1.02 : 0.98)
-                        .rotation3DEffect(.degrees(previewTilt ? 7 : -7), axis: (x: 0.2, y: 1, z: 0), perspective: 0.72)
+                    ProfileAvatarView(avatar: draft, size: 132, animated: false)
                 }
 
                 HStack(spacing: 10) {
-                    ProfileAvatarView(avatar: draft, size: 34, animated: true)
+                    ProfileAvatarView(avatar: draft, size: 34, animated: false)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(store.user.name.lowercased())
                             .font(.system(.callout, design: .serif, weight: .semibold))
@@ -635,6 +862,16 @@ private struct AvatarBuilderView: View {
                     Capsule().stroke(.white.opacity(active ? 0.18 : 0.62), lineWidth: 0.8)
                 }
         }
-        .buttonStyle(.plain)
+            .buttonStyle(.plain)
+    }
+
+    private func close() {
+        Haptics.softTap()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
+            closeRotation += 90
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            dismiss()
+        }
     }
 }

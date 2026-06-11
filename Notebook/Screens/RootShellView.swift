@@ -21,6 +21,7 @@ struct RootShellView: View {
         ))
         .animation(.spring(response: 0.72, dampingFraction: 0.84), value: store.isAuthenticated)
         .animation(.spring(response: 0.72, dampingFraction: 0.84), value: store.hasCompletedOnboarding)
+        .comfortDisplay(store.comfortSettings)
         .preferredColorScheme(.light)
     }
 

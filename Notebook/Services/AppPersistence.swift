@@ -12,6 +12,7 @@ struct PersistedNotebookState: Codable {
     var selectedStudyMode: MemorizationMode
     var voiceProfile: VoiceProfile
     var onboardingSubjects: [String]
+    var comfortSettings: ComfortSettings?
 }
 
 struct AppPersistence {
