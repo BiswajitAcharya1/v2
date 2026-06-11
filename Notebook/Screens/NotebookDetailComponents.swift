@@ -1478,10 +1478,10 @@ struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
                 HStack(spacing: pageGap) {
                     leftContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(.leading, singlePage ? 30 : (isWide ? 34 : 18))
-                        .padding(.trailing, singlePage ? 24 : (isWide ? 14 : 10))
-                        .padding(.top, 38)
-                        .padding(.bottom, 18)
+                        .padding(.leading, singlePage ? 22 : (isWide ? 32 : 16))
+                        .padding(.trailing, singlePage ? 18 : (isWide ? 14 : 9))
+                        .padding(.top, 32)
+                        .padding(.bottom, 14)
                         .contentShape(Rectangle())
                         .onTapGesture {
                             onSelect(left)
@@ -1491,9 +1491,9 @@ struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
                         rightContent
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .padding(.leading, isWide ? 12 : 6)
-                            .padding(.trailing, isWide ? 34 : 18)
-                            .padding(.top, 38)
-                            .padding(.bottom, 18)
+                            .padding(.trailing, isWide ? 32 : 16)
+                            .padding(.top, 32)
+                            .padding(.bottom, 14)
                             .opacity(right == nil ? 0.42 : 1)
                             .contentShape(Rectangle())
                             .onTapGesture {
@@ -1965,6 +1965,10 @@ struct ScanProcessingOverlay: View {
 
             VStack(spacing: 20) {
                 ZStack(alignment: .bottom) {
+                    ProcessingModelConstellation(phase: phase, active: sweep)
+                        .frame(width: 254, height: 254)
+                        .opacity(phase == .capturing ? 0.18 : 1)
+
                     ProcessingNotebookPocket(phase: phase, active: fold)
                         .offset(y: phase == .sorted ? 34 : 58)
                         .opacity(phase == .capturing ? 0.48 : 1)
@@ -2061,6 +2065,60 @@ struct ScanProcessingOverlay: View {
         case .sorted:
             "sliding it into your notebook"
         }
+    }
+}
+
+private struct ProcessingModelConstellation: View {
+    let phase: ScanPhase
+    let active: Bool
+
+    private var enabled: Bool {
+        guard let index = ScanPhase.allCases.firstIndex(of: phase) else { return false }
+        return index >= (ScanPhase.allCases.firstIndex(of: .processing) ?? 2)
+    }
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height * 0.48)
+            let alpha = enabled ? 1.0 : 0.34
+            let drift = active ? CGFloat(6) : CGFloat(-6)
+            let points = [
+                CGPoint(x: size.width * 0.22, y: size.height * 0.25 + drift),
+                CGPoint(x: size.width * 0.82, y: size.height * 0.34 - drift * 0.5),
+                CGPoint(x: size.width * 0.76, y: size.height * 0.78 + drift * 0.35),
+                CGPoint(x: size.width * 0.2, y: size.height * 0.72 - drift)
+            ]
+
+            for (index, point) in points.enumerated() {
+                var connection = Path()
+                connection.move(to: center)
+                connection.addQuadCurve(
+                    to: point,
+                    control: CGPoint(
+                        x: (center.x + point.x) / 2 + CGFloat(index.isMultiple(of: 2) ? 18 : -18),
+                        y: (center.y + point.y) / 2 + CGFloat(index == 1 ? -16 : 12)
+                    )
+                )
+                context.stroke(connection, with: .color(.white.opacity(0.2 * alpha)), style: StrokeStyle(lineWidth: 1, lineCap: .round))
+
+                let radius = CGFloat([19, 17, 21, 18][index])
+                let circle = Path(ellipseIn: CGRect(x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2))
+                context.fill(circle, with: .color(.white.opacity(0.12 * alpha)))
+                context.stroke(circle, with: .color(.white.opacity(0.28 * alpha)), lineWidth: 0.8)
+
+                let label = Text(["ocr", "tbl", "3d", "ai"][index])
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.8 * alpha))
+                context.draw(label, at: point)
+            }
+
+            let core = Path(ellipseIn: CGRect(x: center.x - 12, y: center.y - 12, width: 24, height: 24))
+            context.fill(core, with: .color(.white.opacity(0.16 * alpha)))
+            context.stroke(core, with: .color(.white.opacity(0.34 * alpha)), lineWidth: 0.9)
+        }
+        .allowsHitTesting(false)
+        .animation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: active)
+        .animation(.spring(response: 0.56, dampingFraction: 0.82), value: phase)
     }
 }
 

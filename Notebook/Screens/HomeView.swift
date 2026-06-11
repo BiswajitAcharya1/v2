@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var quickScanning = false
     @State private var selectedStudyPage: NotebookPage?
     @State private var courseDraft = ""
+    @State private var courseCloseRotation = 0.0
     @State private var selectedJournalIndex = 0
     @State private var journalDragOffset: CGFloat = 0
     @State private var doodleDrift = false
@@ -60,7 +61,7 @@ struct HomeView: View {
         .toolbarTitleDisplayMode(.inline)
         .sheet(isPresented: $showingCourseComposer) {
             addCourseSheet
-                .presentationDetents([.height(430)])
+                .presentationDetents([.height(492)])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingAccountCenter) {
@@ -740,6 +741,15 @@ struct HomeView: View {
                             .font(.system(.title2, design: .serif, weight: .semibold))
                             .foregroundStyle(NotebookTheme.ink)
                         Spacer()
+                        Button {
+                            closeCourseSheet()
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13, weight: .bold))
+                                .frame(width: 38, height: 38)
+                                .rotationEffect(.degrees(courseCloseRotation))
+                        }
+                        .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
                     }
 
                     HStack(alignment: .center, spacing: 10) {
@@ -760,13 +770,20 @@ struct HomeView: View {
                         .opacity(bestCourseMatch == nil ? 0.42 : 1)
                     }
 
+                    CourseMatchPreview(
+                        draft: courseDraft,
+                        match: bestCourseMatch,
+                        count: courseSuggestions.count
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
+
                     CourseSuggestionCarousel(
                         subjects: courseSuggestions,
                         activeSubject: bestCourseMatch,
                         onSelect: addCourse
                     )
                     .transition(.move(edge: .top).combined(with: .opacity))
-                    .animation(.spring(response: 0.78, dampingFraction: 0.88), value: courseSuggestions)
+                    .animation(.spring(response: 1.04, dampingFraction: 0.9), value: courseSuggestions)
                 }
             }
             .padding(20)
@@ -813,6 +830,16 @@ struct HomeView: View {
         showingCourseComposer = false
     }
 
+    private func closeCourseSheet() {
+        Haptics.softTap()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
+            courseCloseRotation += 90
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            showingCourseComposer = false
+        }
+    }
+
     private func journalScale(for distance: Int) -> CGFloat {
         let depth = min(abs(distance), 2)
         return 1 - CGFloat(depth) * 0.085
@@ -831,6 +858,76 @@ struct HomeView: View {
     }
 }
 
+private struct CourseMatchPreview: View {
+    var draft: String
+    var match: String?
+    var count: Int
+    @State private var glow = false
+
+    private var cleanedDraft: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(match == nil && !cleanedDraft.isEmpty ? NotebookTheme.redRule.opacity(0.14) : NotebookTheme.ink.opacity(0.08))
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(match == nil && !cleanedDraft.isEmpty ? NotebookTheme.redRule : NotebookTheme.ink)
+                    .rotationEffect(.degrees(glow ? 5 : -5))
+            }
+            .frame(width: 34, height: 34)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(NotebookTheme.muted)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 50)
+        .background(.white.opacity(0.44), in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(.white.opacity(glow ? 0.72 : 0.42), lineWidth: 0.8)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
+                glow = true
+            }
+        }
+        .animation(.spring(response: 0.52, dampingFraction: 0.86), value: match)
+        .animation(.spring(response: 0.52, dampingFraction: 0.86), value: cleanedDraft)
+    }
+
+    private var symbol: String {
+        if match != nil { return "checkmark" }
+        if cleanedDraft.isEmpty { return "sparkle.magnifyingglass" }
+        return "line.3.horizontal.decrease.circle"
+    }
+
+    private var title: String {
+        if let match { return "will add \(match)" }
+        if cleanedDraft.isEmpty { return "type a subject" }
+        return "choose a listed course"
+    }
+
+    private var detail: String {
+        if match != nil { return "one tap creates the journal" }
+        if cleanedDraft.isEmpty { return "\(count) suggestions ready" }
+        return count == 0 ? "try biology, math, or computer science" : "\(count) close matches"
+    }
+}
+
 private struct CourseSuggestionCarousel: View {
     var subjects: [String]
     var activeSubject: String?
@@ -843,7 +940,7 @@ private struct CourseSuggestionCarousel: View {
                     CourseSuggestionBook(
                         subject: subject,
                         active: subject == activeSubject,
-                        delay: Double(index) * 0.055
+                        delay: Double(index) * 0.09
                     ) {
                         onSelect(subject)
                     }

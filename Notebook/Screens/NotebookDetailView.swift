@@ -61,6 +61,7 @@ struct NotebookDetailView: View {
                     notebookSearch
                 }
                 pageReader
+                    .layoutPriority(1)
                 if !pages.isEmpty {
                     notebookActionRail
                 }
@@ -68,6 +69,7 @@ struct NotebookDetailView: View {
             .padding(.horizontal, 4)
             .padding(.top, 8)
             .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if isScanning {
                 ScanProcessingOverlay(phase: store.scanPhase)
@@ -145,6 +147,9 @@ struct NotebookDetailView: View {
         }
         .onChange(of: query) {
             pageIndex = 0
+        }
+        .onChange(of: pageIndex) {
+            Haptics.selection()
         }
         .onChange(of: store.scanRouteNotice?.id) {
             guard store.scanRouteNotice != nil else { return }
@@ -309,6 +314,7 @@ struct NotebookDetailView: View {
             }
         }
         .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
     }
 
     private var spreadCount: Int {
@@ -522,7 +528,7 @@ struct NotebookDetailView: View {
                     Spacer()
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 560)
+            .frame(maxWidth: .infinity, minHeight: 620)
         }
     }
 
@@ -557,7 +563,7 @@ struct NotebookDetailView: View {
                     Spacer()
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 560)
+            .frame(maxWidth: .infinity, minHeight: 620)
         }
     }
 

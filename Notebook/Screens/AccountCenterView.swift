@@ -7,6 +7,7 @@ struct AccountCenterView: View {
     @State private var editingAvatar = false
     @State private var expanded = false
     @State private var heroPulse = false
+    @State private var closeRotation = 0.0
 
     var body: some View {
         NavigationStack {
@@ -92,14 +93,14 @@ struct AccountCenterView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        Haptics.softTap()
-                        dismiss()
+                        closeAccount()
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(NotebookTheme.ink)
                             .frame(width: 38, height: 38)
                             .background(.ultraThinMaterial, in: Circle())
+                            .rotationEffect(.degrees(closeRotation))
                     }
                     .buttonStyle(.plain)
                 }
@@ -191,8 +192,25 @@ struct AccountCenterView: View {
                         legalDocument = .privacy
                     }
                 }
+
+                AccountTrustRibbon(
+                    provider: authProviderTitle,
+                    faceID: faceIDDetail,
+                    voice: voiceStatus,
+                    awake: heroPulse
+                )
             }
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func closeAccount() {
+        Haptics.softTap()
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
+            closeRotation += 90
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            dismiss()
         }
     }
 
@@ -351,6 +369,52 @@ private struct AccountQuickAction: View {
             .background(.white.opacity(0.34), in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct AccountTrustRibbon: View {
+    var provider: String
+    var faceID: String
+    var voice: String
+    var awake: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            trustChip(symbol: "key.fill", title: provider)
+            trustChip(symbol: "faceid", title: faceID)
+            trustChip(symbol: "waveform", title: "voice \(voice)")
+        }
+        .padding(7)
+        .background(.white.opacity(0.34), in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(.white.opacity(awake ? 0.72 : 0.46), lineWidth: 0.8)
+        }
+        .scaleEffect(awake ? 1 : 0.985)
+        .animation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true), value: awake)
+    }
+
+    private func trustChip(symbol: String, title: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .bold))
+            Text(shortTitle(title))
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+        }
+        .foregroundStyle(NotebookTheme.ink.opacity(0.72))
+        .frame(maxWidth: .infinity)
+        .frame(height: 30)
+        .background(.white.opacity(0.48), in: Capsule())
+    }
+
+    private func shortTitle(_ title: String) -> String {
+        if title.contains("@") { return "email" }
+        if title.contains("linked") { return "face id" }
+        if title.contains("available") { return "face id" }
+        if title.contains("local") { return "local" }
+        return title
     }
 }
 

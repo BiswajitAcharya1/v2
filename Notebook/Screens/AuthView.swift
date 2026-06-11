@@ -28,7 +28,7 @@ struct AuthView: View {
                 heroStack
                     .scaleEffect(appeared ? 1 : 0.92)
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: notebookOpen ? -18 : -188)
+                    .offset(y: notebookOpen ? -22 : -176)
 
                 if notebookOpen {
                     authPanel
@@ -80,14 +80,14 @@ struct AuthView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
             draggableAuthBook
-                .frame(width: 406, height: 386)
+                .frame(width: 430, height: 414)
             if notebookOpen, let message = store.authMessage, !showingEmail {
                 AuthNotice(message: message)
                     .padding(.horizontal, 28)
                     .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.96)))
             }
         }
-        .frame(height: notebookOpen ? 456 : 366)
+        .frame(height: notebookOpen ? 484 : 386)
     }
 
     private var openProgress: CGFloat {
@@ -120,7 +120,7 @@ struct AuthView: View {
                                 .animation(.spring(response: 0.96, dampingFraction: 0.9).delay(Double(index) * 0.09), value: notebookOpen)
                             }
                         }
-                        .frame(maxWidth: 286)
+                        .frame(maxWidth: 330)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                         .padding(.horizontal, 28)
                         .opacity(Double((openProgress - 0.54) / 0.46))
@@ -129,7 +129,7 @@ struct AuthView: View {
                         .allowsHitTesting(authControlsReady)
                     }
                 }
-                .frame(width: 252 + openProgress * 188, height: 324 + openProgress * 112)
+                .frame(width: 266 + openProgress * 204, height: 342 + openProgress * 126)
                 .rotation3DEffect(.degrees(-6 + openProgress * 13), axis: (x: 1, y: 0.18, z: 0), perspective: 0.72)
                 .offset(x: openProgress * 74, y: openProgress * 16)
                 .shadow(color: .black.opacity(0.12), radius: 16, y: 10)
@@ -137,7 +137,7 @@ struct AuthView: View {
             CompositionCoverFace(
                 subject: nil,
                 cornerRadius: 22,
-                spineWidth: 11,
+                spineWidth: 7,
                 labelWidth: 152,
                 labelHeight: 104,
                 labelOffsetY: 36,
