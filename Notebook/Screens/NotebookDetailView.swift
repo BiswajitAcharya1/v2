@@ -489,6 +489,20 @@ struct NotebookDetailView: View {
                     .opacity(0.82)
                     .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
 
+                Button {
+                    Haptics.softTap()
+                    closeNotebook()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(width: 44, height: 44)
+                        .rotationEffect(.degrees(closeRotation))
+                }
+                .buttonStyle(FloatingCircleButtonStyle(tint: .white.opacity(0.88), foreground: NotebookTheme.ink))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(18)
+                .accessibilityLabel("close notebook")
+
                 VStack(spacing: 18) {
                     Spacer()
 
