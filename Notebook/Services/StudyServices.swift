@@ -149,7 +149,8 @@ struct LocalScanProcessingService: ScanProcessingServing {
             tables: tables,
             models: models,
             insight: insight,
-            confidence: cleaned.isEmpty ? min(ocrResult.confidence, 0.18) : ocrResult.confidence
+            confidence: cleaned.isEmpty ? min(ocrResult.confidence, 0.18) : ocrResult.confidence,
+            sourceEngine: ocrResult.engine
         )
     }
 }

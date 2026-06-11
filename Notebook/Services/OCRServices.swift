@@ -180,10 +180,20 @@ private struct SuryaBlock: Decodable {
 private enum VisionOCRTextScanner {
     static func recognize(in image: UIImage) async -> OCRScanResult {
         let variants = OCRImagePreprocessor.variants(from: image)
-        var best = OCRScanResult(rawText: "", lines: [], tables: [], confidence: 0.12, engine: "apple vision")
+        var results: [OCRScanResult] = []
 
         for variant in variants {
             let result = await recognize(cgImage: variant.image, orientation: variant.orientation, name: variant.name)
+            results.append(result)
+        }
+        let best = bestResult(in: results)
+        let fused = OCRLineFusion.fuse(results)
+        return OCRResultRanker.best(best, fused)
+    }
+
+    private static func bestResult(in results: [OCRScanResult]) -> OCRScanResult {
+        var best = OCRScanResult(rawText: "", lines: [], tables: [], confidence: 0.12, engine: "apple vision")
+        for result in results {
             best = OCRResultRanker.best(best, result)
         }
         return best
@@ -265,18 +275,16 @@ private enum OCRImagePreprocessor {
             return image.cgImage.map { [Variant(name: "original", image: $0, orientation: CGImagePropertyOrientation(image.imageOrientation))] } ?? []
         }
 
-        let filters: [(String, (CIImage) -> CIImage)] = [
-            ("original", { $0 }),
-            ("ink", highContrastInk),
-            ("pencil", faintPencilBoost),
-            ("sharp", sharpenedNotebook)
-        ]
+        var variants: [Variant] = []
+        appendVariant(name: "original", image: base, to: &variants)
+        appendVariant(name: "ink", image: highContrastInk(base), to: &variants)
+        appendVariant(name: "pencil", image: faintPencilBoost(base), to: &variants)
+        return variants
+    }
 
-        return filters.compactMap { name, transform in
-            let output = transform(base)
-            guard let cgImage = context.createCGImage(output, from: output.extent) else { return nil }
-            return Variant(name: name, image: cgImage, orientation: .up)
-        }
+    private static func appendVariant(name: String, image: CIImage, to variants: inout [Variant]) {
+        guard let cgImage = context.createCGImage(image, from: image.extent) else { return }
+        variants.append(Variant(name: name, image: cgImage, orientation: .up))
     }
 
     private static func highContrastInk(_ image: CIImage) -> CIImage {
@@ -310,33 +318,97 @@ private enum OCRImagePreprocessor {
         return unsharp.outputImage ?? gamma.outputImage ?? mono.outputImage ?? image
     }
 
-    private static func sharpenedNotebook(_ image: CIImage) -> CIImage {
-        let color = CIFilter.colorControls()
-        color.inputImage = image
-        color.saturation = 0.08
-        color.contrast = 1.22
-        color.brightness = 0.015
+}
 
-        let unsharp = CIFilter.unsharpMask()
-        unsharp.inputImage = color.outputImage ?? image
-        unsharp.radius = 0.9
-        unsharp.intensity = 0.55
-        return unsharp.outputImage ?? color.outputImage ?? image
+private enum OCRLineFusion {
+    static func fuse(_ results: [OCRScanResult]) -> OCRScanResult {
+        var usable = results.filter { !$0.lines.isEmpty }
+        usable.sort { $0.qualityScore > $1.qualityScore }
+        guard !usable.isEmpty else {
+            return OCRScanResult(rawText: "", lines: [], tables: [], confidence: 0.12, engine: "apple vision fused")
+        }
+
+        var lines: [String] = []
+        var confidenceTotal = 0.0
+        var confidenceWeight = 0.0
+
+        for (resultIndex, result) in usable.prefix(3).enumerated() {
+            let weight = max(0.18, result.confidence - Double(resultIndex) * 0.07)
+            confidenceTotal += result.confidence * weight
+            confidenceWeight += weight
+            for line in result.lines {
+                let cleaned = line.normalizedOCRLine
+                guard cleaned.count >= 2, cleaned.garbageRatio < 0.38 else { continue }
+                if !lines.contains(where: { existing in existing.isNearDuplicate(of: cleaned) }) {
+                    lines.append(cleaned)
+                }
+            }
+        }
+
+        let confidence = min(0.94, max(0.14, confidenceWeight == 0 ? usable[0].confidence : confidenceTotal / confidenceWeight))
+        let engineNames = usable.prefix(3).map(\.engine).joined(separator: " + ")
+        return OCRScanResult(
+            rawText: lines.joined(separator: "\n"),
+            lines: lines,
+            tables: usable.flatMap(\.tables),
+            confidence: confidence,
+            engine: "apple vision fused \(engineNames)"
+        )
     }
 }
 
 private extension String {
     var normalizedOCRLine: String {
-        replacingOccurrences(of: #" {2,}"#, with: " ", options: .regularExpression)
-            .replacingOccurrences(of: " | ", with: " | ")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
+        var text = replacingOccurrences(of: #" {2,}"#, with: " ", options: .regularExpression)
+        text = text.replacingOccurrences(of: " | ", with: " | ")
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.lowercased()
     }
 
     var garbageRatio: Double {
         guard !isEmpty else { return 1 }
-        let useful = filter { $0.isLetter || $0.isNumber || $0.isWhitespace || ".,:;+-=()/%".contains($0) }.count
+        var useful = 0
+        for character in self where character.isUsefulOCRCharacter {
+            useful += 1
+        }
         return 1 - Double(useful) / Double(count)
+    }
+
+    func isNearDuplicate(of other: String) -> Bool {
+        let lhs = normalizedForOCRComparison
+        let rhs = other.normalizedForOCRComparison
+        guard !lhs.isEmpty, !rhs.isEmpty else { return true }
+        if lhs == rhs || lhs.contains(rhs) || rhs.contains(lhs) { return true }
+        let shared = Set(lhs.split(separator: " ")).intersection(Set(rhs.split(separator: " "))).count
+        let denominator = max(1, min(lhs.split(separator: " ").count, rhs.split(separator: " ").count))
+        if Double(shared) / Double(denominator) > 0.72 { return true }
+        guard abs(lhs.count - rhs.count) <= 5, max(lhs.count, rhs.count) <= 44 else { return false }
+        return lhs.ocrEditDistance(to: rhs) <= max(2, min(lhs.count, rhs.count) / 8)
+    }
+
+    private var normalizedForOCRComparison: String {
+        var text = lowercased()
+        text = text.replacingOccurrences(of: #"[^a-z0-9=+\-/% ]"#, with: "", options: .regularExpression)
+        text = text.replacingOccurrences(of: #" {2,}"#, with: " ", options: .regularExpression)
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func ocrEditDistance(to other: String) -> Int {
+        let a = Array(self)
+        let b = Array(other)
+        if a.isEmpty { return b.count }
+        if b.isEmpty { return a.count }
+        var previous = Array(0...b.count)
+        var current = Array(repeating: 0, count: b.count + 1)
+        for i in 1...a.count {
+            current[0] = i
+            for j in 1...b.count {
+                let cost = a[i - 1] == b[j - 1] ? 0 : 1
+                current[j] = Swift.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
+            }
+            swap(&previous, &current)
+        }
+        return previous[b.count]
     }
 
     func htmlToPlainText() -> String {
@@ -380,6 +452,17 @@ private extension String {
             return String(self[range])
         }
     }
+}
+
+private extension Character {
+    var isUsefulOCRCharacter: Bool {
+        if isLetter || isNumber || isWhitespace { return true }
+        return OCRAllowedMarks.characters.contains(self)
+    }
+}
+
+private enum OCRAllowedMarks {
+    static let characters = Set(".,:;+-=()/%")
 }
 
 private extension Array where Element == VNRecognizedTextObservation {

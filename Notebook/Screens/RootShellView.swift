@@ -206,10 +206,11 @@ private struct SetupFlowView: View {
                     Button(action: addSubject) {
                         Image(systemName: "plus")
                             .font(.system(size: 18, weight: .bold))
-                            .frame(width: 50, height: 50)
+                            .frame(width: 54, height: 54)
                     }
                     .buttonStyle(FloatingCircleButtonStyle())
                     .disabled(bestSubjectMatch == nil)
+                    .opacity(bestSubjectMatch == nil ? 0.42 : 1)
                 }
 
                 if !subjectSuggestions.isEmpty {
@@ -222,8 +223,11 @@ private struct SetupFlowView: View {
                                     Text(subject)
                                         .font(.system(.subheadline, design: .rounded, weight: .semibold))
                                     Spacer()
-                                    Image(systemName: "return")
+                                    Image(systemName: "plus")
                                         .font(.system(size: 12, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 26, height: 26)
+                                        .background(NotebookTheme.ink, in: Circle())
                             }
                                 .foregroundStyle(NotebookTheme.ink)
                                 .padding(.horizontal, 14)

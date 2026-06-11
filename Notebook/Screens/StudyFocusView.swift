@@ -18,6 +18,7 @@ struct StudyFocusView: View {
     @State private var showingExamBlueprint = false
     @State private var showingPageAsk = false
     @State private var selectedModelDrill: DetectedModel?
+    @State private var selectedBridgePage: NotebookPage?
     @State private var recallIndex = 0
     @State private var recallRevealed = false
     @State private var recallDrag: CGSize = .zero
@@ -45,6 +46,14 @@ struct StudyFocusView: View {
         store.forgettingForecast(for: activePage)
     }
 
+    private var inkReplayPlan: InkReplayPlan {
+        store.inkReplayPlan(for: activePage)
+    }
+
+    private var conceptBridge: ConceptBridgeMap {
+        store.conceptBridge(for: activePage)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -52,6 +61,7 @@ struct StudyFocusView: View {
                 quickActions
                 examPulsePanel
                 forgettingForecastPanel
+                conceptBridgePanel
                 smartLanes
                 insightCard
                 studyPathRail
@@ -133,6 +143,9 @@ struct StudyFocusView: View {
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
+        }
+        .navigationDestination(item: $selectedBridgePage) { page in
+            StudyFocusView(page: page)
         }
         .onAppear {
             speechSynthesizer.delegate = speechDelegate
@@ -437,6 +450,16 @@ struct StudyFocusView: View {
         }
     }
 
+    @ViewBuilder
+    private var conceptBridgePanel: some View {
+        if !conceptBridge.nodes.isEmpty {
+            ConceptBridgePanel(map: conceptBridge) { node in
+                Haptics.open()
+                selectedBridgePage = store.page(with: node.pageID)
+            }
+        }
+    }
+
     private func performExamPulseAction(_ action: ExamPulseAction) {
         Haptics.open()
         switch action.kind {
@@ -508,6 +531,15 @@ struct StudyFocusView: View {
                     HandwritingGauge(title: "read", value: handwriting.legibility)
                     HandwritingGauge(title: "space", value: handwriting.spacing)
                     HandwritingGauge(title: "shape", value: handwriting.structure)
+                }
+
+                InkReplayCoach(plan: inkReplayPlan) {
+                    Haptics.open()
+                    if (handwriting.signature?.correctionNeed ?? max(0, 1 - handwriting.legibility)) > 0.42 {
+                        store.polishPageForStudy(pageID: activePage.id)
+                    } else {
+                        showingPracticeDrill = true
+                    }
                 }
 
                 if let signature = handwriting.signature {
@@ -1396,6 +1428,165 @@ private struct ForecastNode: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(point.title)
+    }
+}
+
+private struct ConceptBridgePanel: View {
+    let map: ConceptBridgeMap
+    var onPick: (ConceptBridgeNode) -> Void
+    @State private var awake = false
+    @State private var pressedID: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(NotebookTheme.ink)
+                    Circle()
+                        .trim(from: 0.08, to: max(0.16, map.score))
+                        .stroke(.white.opacity(0.38), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .rotationEffect(.degrees(awake ? 138 : -32))
+                        .padding(6)
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 38, height: 38)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("bridge")
+                        .font(.system(.headline, design: .serif, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                    Text(map.title)
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.muted)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                ZStack {
+                    BridgeThread(count: map.nodes.count, awake: awake)
+                        .frame(height: 76)
+                        .padding(.horizontal, 34)
+
+                    HStack(spacing: 12) {
+                        ForEach(Array(map.nodes.enumerated()), id: \.element.id) { index, node in
+                            ConceptBridgeNodeBubble(node: node, active: pressedID == node.id, awake: awake, index: index) {
+                                press(node)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
+            .scrollClipDisabled()
+        }
+        .padding(13)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(.white.opacity(0.62), lineWidth: 0.8)
+        }
+        .shadow(color: .black.opacity(0.07), radius: 13, y: 8)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+                awake = true
+            }
+        }
+    }
+
+    private func press(_ node: ConceptBridgeNode) {
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.72)) {
+            pressedID = node.id
+        }
+        onPick(node)
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(160))
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                pressedID = nil
+            }
+        }
+    }
+}
+
+private struct BridgeThread: View {
+    let count: Int
+    var awake: Bool
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            guard count > 1 else { return }
+            let spacing = size.width / CGFloat(max(1, count - 1))
+            var path = Path()
+            for index in 0..<count {
+                let drift = awake ? CGFloat(cos(Double(index) * 0.85) * 2.4) : 0
+                let x = CGFloat(index) * spacing
+                let y = size.height * (index.isMultiple(of: 2) ? 0.4 : 0.6) + drift
+                let point = CGPoint(x: x, y: y)
+                if index == 0 {
+                    path.move(to: point)
+                } else {
+                    path.addQuadCurve(to: point, control: CGPoint(x: x - spacing * 0.5, y: size.height * 0.5))
+                }
+            }
+            context.stroke(path, with: .color(NotebookTheme.ink.opacity(0.13)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+        }
+    }
+}
+
+private struct ConceptBridgeNodeBubble: View {
+    let node: ConceptBridgeNode
+    var active: Bool
+    var awake: Bool
+    var index: Int
+    var action: () -> Void
+
+    private var size: CGFloat {
+        52 + CGFloat(node.weight) * 15
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(NotebookTheme.accent(node.tint).opacity(0.16))
+                        .blur(radius: 1.2)
+                    Circle()
+                        .fill(.white.opacity(active ? 0.78 : 0.55))
+                    Circle()
+                        .trim(from: 0.08, to: 0.08 + min(0.82, node.weight * 0.82))
+                        .stroke(NotebookTheme.accent(node.tint), style: StrokeStyle(lineWidth: 2.3, lineCap: .round))
+                        .rotationEffect(.degrees(awake ? 124 + Double(index * 18) : -24))
+                        .padding(7)
+                    Image(systemName: node.symbol)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(NotebookTheme.ink)
+                }
+                .frame(width: size, height: size)
+                .scaleEffect(active ? 0.94 : (awake ? 1.02 : 0.98))
+                .offset(y: index.isMultiple(of: 2) ? -2 : 3)
+
+                VStack(spacing: 1) {
+                    Text(node.title)
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.62)
+                    Text(node.detail)
+                        .font(.system(size: 9, weight: .semibold, design: .rounded))
+                        .foregroundStyle(NotebookTheme.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                .frame(width: 76)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(node.title)
     }
 }
 
@@ -2422,6 +2613,139 @@ private struct HandwritingGauge: View {
                 animated = true
             }
         }
+    }
+}
+
+private struct InkReplayCoach: View {
+    let plan: InkReplayPlan
+    var action: () -> Void
+    @State private var awake = false
+    @State private var pressed = false
+
+    var body: some View {
+        Button {
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.72)) {
+                pressed = true
+            }
+            action()
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(160))
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                    pressed = false
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(NotebookTheme.accent(plan.tint).opacity(0.16))
+                    Circle()
+                        .trim(from: 0, to: awake ? max(0.08, plan.score) : 0.08)
+                        .stroke(NotebookTheme.accent(plan.tint), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Image(systemName: "scribble.variable")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(NotebookTheme.ink)
+                }
+                .frame(width: 48, height: 48)
+                .scaleEffect(pressed ? 0.94 : (awake ? 1.03 : 0.98))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 7) {
+                        Text(plan.title)
+                            .font(.system(.subheadline, design: .serif, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.ink)
+                        Text(plan.detail)
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(NotebookTheme.muted)
+                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .frame(height: 22)
+                            .background(.white.opacity(0.4), in: Capsule())
+                    }
+
+                    GeometryReader { proxy in
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(.white.opacity(0.32))
+                            ForEach(plan.strokes) { stroke in
+                                InkReplayStrokeShape(stroke: stroke)
+                                    .trim(from: 0, to: awake ? 1 : 0.04)
+                                    .stroke(
+                                        NotebookTheme.ink.opacity(0.58),
+                                        style: StrokeStyle(lineWidth: stroke.weight, lineCap: .round, lineJoin: .round)
+                                    )
+                                    .animation(
+                                        .easeInOut(duration: 1.3)
+                                            .delay(stroke.delay)
+                                            .repeatForever(autoreverses: true),
+                                        value: awake
+                                    )
+                            }
+                            InkReplayScanLine(active: awake)
+                                .fill(NotebookTheme.accent(plan.tint).opacity(0.24))
+                                .frame(width: 42, height: proxy.size.height)
+                                .blur(radius: 8)
+                                .offset(x: awake ? proxy.size.width * 0.38 : -proxy.size.width * 0.38)
+                        }
+                    }
+                    .frame(height: 54)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .background(.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(.white.opacity(0.62), lineWidth: 0.8)
+            }
+            .shadow(color: NotebookTheme.accent(plan.tint).opacity(0.1), radius: 12, y: 7)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(plan.title)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.1).repeatForever(autoreverses: true)) {
+                awake = true
+            }
+        }
+    }
+}
+
+private struct InkReplayStrokeShape: Shape {
+    let stroke: InkReplayStroke
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(
+            x: rect.minX + rect.width * CGFloat(stroke.start.x),
+            y: rect.minY + rect.height * CGFloat(stroke.start.y)
+        ))
+        path.addQuadCurve(
+            to: CGPoint(
+                x: rect.minX + rect.width * CGFloat(stroke.end.x),
+                y: rect.minY + rect.height * CGFloat(stroke.end.y)
+            ),
+            control: CGPoint(
+                x: rect.minX + rect.width * CGFloat(stroke.control.x),
+                y: rect.minY + rect.height * CGFloat(stroke.control.y)
+            )
+        )
+        return path
+    }
+}
+
+private struct InkReplayScanLine: Shape {
+    var active: Bool
+
+    var animatableData: Double {
+        get { active ? 1 : 0 }
+        set { active = newValue > 0.5 }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        RoundedRectangle(cornerRadius: rect.height / 2, style: .continuous).path(in: rect)
     }
 }
 

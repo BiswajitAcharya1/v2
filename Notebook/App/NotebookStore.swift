@@ -361,6 +361,12 @@ final class NotebookStore {
                     if let startedAt = self.voiceRecordingStartedAt {
                         self.voiceRecordingElapsed = now.timeIntervalSince(startedAt)
                     }
+                    if !self.voiceRecognitionAvailable, let activePrompt = self.recordingPrompt {
+                        let targetSpeechDuration = self.targetSpeechDuration(for: activePrompt)
+                        if self.voiceActiveSpeechDuration >= targetSpeechDuration, elapsed > 1.0 {
+                            self.scheduleVoicePromptFinishBySpeech(prompt: activePrompt)
+                        }
+                    }
                 }
             }
             voiceTapInstalled = true
@@ -448,7 +454,7 @@ final class NotebookStore {
                 return
             }
         } else {
-            let targetSpeechDuration = max(0.9, min(2.4, Double(prompt.normalizedSpeechWords.count) * 0.24))
+            let targetSpeechDuration = targetSpeechDuration(for: prompt)
             guard capturedSpeechDuration >= targetSpeechDuration else {
                 authMessage = "keep reading until the voice meter stays active."
                 try? FileManager.default.removeItem(at: url)
@@ -540,6 +546,26 @@ final class NotebookStore {
             pendingVoiceFinishTask = nil
             finishVoicePrompt()
         }
+    }
+
+    private func scheduleVoicePromptFinishBySpeech(prompt: String) {
+        guard pendingVoiceFinishTask == nil else { return }
+        let targetSpeechDuration = targetSpeechDuration(for: prompt)
+        pendingVoiceFinishTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(520))
+            guard isRecordingVoice,
+                  !voiceRecognitionAvailable,
+                  voiceActiveSpeechDuration >= targetSpeechDuration else {
+                pendingVoiceFinishTask = nil
+                return
+            }
+            pendingVoiceFinishTask = nil
+            finishVoicePrompt()
+        }
+    }
+
+    private func targetSpeechDuration(for prompt: String) -> TimeInterval {
+        max(0.9, min(2.4, Double(prompt.normalizedSpeechWords.count) * 0.24))
     }
 
     private func stopLiveVoiceCapture(cancelRecognition: Bool) {
@@ -682,6 +708,117 @@ final class NotebookStore {
             persist()
             return
         }
+    }
+
+    @discardableResult
+    func repairScanLayout(pageID: NotebookPage.ID) -> Bool {
+        for notebookIndex in notebooks.indices {
+            guard let pageIndex = notebooks[notebookIndex].pages.firstIndex(where: { $0.id == pageID }) else { continue }
+            var page = notebooks[notebookIndex].pages[pageIndex]
+            var content = page.content
+            let repairedText = repairedScanText(from: content)
+            guard !repairedText.isEmpty else { return false }
+
+            content.cleanedText = repairedText
+            content.sections = rebuiltStudySections(from: content).sections
+            content.formulas = repairedFormulas(from: content)
+            content.keywords = repairedKeywords(from: content, subject: notebooks[notebookIndex].subject)
+            content.insight.onlyWhatMatters = rebuiltStudySections(from: content).focus
+            content.insight.nextBestStep = "review the repaired page, then tap one model or prompt."
+            content.insight.clarityScore = min(1, max(content.insight.clarityScore + 0.16, 0.68))
+            content.insight.retentionRisk = max(0.05, content.insight.retentionRisk - 0.1)
+            content.insight.handwriting = polishedHandwriting(content.insight.handwriting)
+            content.insight.cleanupSuggestions = Array(Set(content.insight.cleanupSuggestions + ["scan layout repaired."]))
+            for feature in ["repaired", "cleaned"] where !content.insight.detectedFeatures.contains(feature) {
+                content.insight.detectedFeatures.append(feature)
+            }
+            if !content.sourceEngine.contains("repaired") {
+                content.sourceEngine = "\(content.sourceEngine) repaired".trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if content.confidence < 0.72 {
+                content.confidence = min(0.72, content.confidence + 0.08)
+            }
+            if content.models.isEmpty, shouldAutoGenerateStudyModel(from: content) {
+                content.models.insert(pageStudyModel(content: content, pageTitle: page.title), at: 0)
+                if !content.insight.detectedFeatures.contains("models") {
+                    content.insight.detectedFeatures.append("models")
+                }
+            }
+            page.content = content
+            page.studyState.difficulty = max(0.08, page.studyState.difficulty - 0.05)
+            withAnimation(.spring(response: 0.58, dampingFraction: 0.82)) {
+                notebooks[notebookIndex].pages[pageIndex] = page
+                notebooks[notebookIndex].lastActivity = "scan repaired"
+                notebooks[notebookIndex].progress = min(1, notebooks[notebookIndex].progress + 0.035)
+            }
+            persist()
+            return true
+        }
+        return false
+    }
+
+    private func repairedScanText(from content: ExtractedContent) -> String {
+        let combinedText = content.cleanedText + "\n" + content.rawText
+        let lineBreaks = CharacterSet.newlines
+        let trimSet = CharacterSet.whitespacesAndNewlines
+        let regexOptions = String.CompareOptions.regularExpression
+        var rawLines: [String] = []
+        for rawLine in combinedText.components(separatedBy: lineBreaks) {
+            let line = rawLine.trimmingCharacters(in: trimSet).lowercased()
+            guard line.count >= 2 else { continue }
+            let alphanumericCount = line.filter { $0.isLetter || $0.isNumber }.count
+            guard alphanumericCount >= 2 else { continue }
+            let usefulCount = line.filter { character in
+                character.isLetter || character.isNumber || character.isWhitespace || ".,:;+-=()/%".contains(character)
+            }.count
+            let usefulRatio = Double(usefulCount) / Double(max(line.count, 1))
+            guard usefulRatio > 0.62 else { continue }
+            rawLines.append(line)
+        }
+        var repaired: [String] = []
+        for line in rawLines {
+            let normalized = line
+                .replacingOccurrences(of: #" {2,}"#, with: " ", options: regexOptions)
+                .replacingOccurrences(of: #"^[|\-\s]+"#, with: "", options: regexOptions)
+                .trimmingCharacters(in: trimSet)
+            guard !normalized.isEmpty else { continue }
+            if !repaired.contains(where: { existing in
+                existing == normalized || existing.contains(normalized) || normalized.contains(existing)
+            }) {
+                repaired.append(normalized)
+            }
+        }
+        return repaired.prefix(42).joined(separator: "\n")
+    }
+
+    private func repairedFormulas(from content: ExtractedContent) -> [String] {
+        let formulaLines = content.cleanedText
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { line in
+                line.contains("=") || line.contains("lim") || line.contains("->") || line.contains("→") || line.contains("∫")
+            }
+        var seen = Set<String>()
+        return (content.formulas + formulaLines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .prefix(8)
+            .map(\.self)
+    }
+
+    private func repairedKeywords(from content: ExtractedContent, subject: String) -> [String] {
+        let blocked: Set<String> = ["the", "and", "for", "with", "from", "this", "that", "notes", "page", "study", "into", "onto", "will", "what"]
+        var seen = Set<String>()
+        let words = content.cleanedText
+            .lowercased()
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
+            .filter { $0.count > 3 && !blocked.contains($0) }
+        return ([subject.lowercased()] + content.keywords + words)
+            .map { $0.trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines)).lowercased() }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .prefix(10)
+            .map(\.self)
     }
 
     private func rebuiltStudySections(from content: ExtractedContent) -> (sections: [StudySection], text: String, focus: String) {
@@ -955,7 +1092,8 @@ final class NotebookStore {
             keywords: keywords.isEmpty ? [notebooks[notebookIndex].subject] : keywords,
             formulas: words.filter { $0.contains("=") },
             sections: [StudySection(title: "notes", body: cleaned)],
-            confidence: 1
+            confidence: 1,
+            sourceEngine: "typed"
         )
         let page = NotebookPage(
             title: "\(notebooks[notebookIndex].subject) notes",
@@ -1373,6 +1511,137 @@ final class NotebookStore {
         return ForgettingForecast(score: min(1, max(baseRisk, score)), title: title, points: ranked)
     }
 
+    func inkReplayPlan(for page: NotebookPage) -> InkReplayPlan {
+        let handwriting = page.content.insight.handwriting
+        let signature = handwriting.signature
+        let rhythm = signature?.rhythm ?? max(0.18, handwriting.structure)
+        let correction = signature?.correctionNeed ?? max(0, 1 - handwriting.legibility)
+        let readiness = signature?.studyReadiness ?? handwriting.legibility
+        let score = min(1, max(readiness, (handwriting.legibility + handwriting.spacing + handwriting.structure) / 3))
+        let title: String
+        let tint: ColorToken
+        if correction > 0.56 {
+            title = "repair"
+            tint = .amber
+        } else if score > 0.72 {
+            title = "clean"
+            tint = .green
+        } else {
+            title = "steady"
+            tint = .blue
+        }
+
+        let detail = signature?.nextStroke.isEmpty == false
+            ? signature?.nextStroke ?? handwriting.pace.rawValue
+            : handwriting.pace.rawValue
+        let density = min(1, max(0.08, handwriting.inkDensity))
+        let spacing = min(1, max(0.18, handwriting.spacing))
+        let count = 5 + Int(round(rhythm * 3))
+        let strokes = (0..<count).map { index in
+            let phase = Double(index) / Double(max(count - 1, 1))
+            let baseline = 0.24 + phase * 0.5
+            let wobble = (1 - spacing) * 0.12
+            return InkReplayStroke(
+                id: "stroke-\(index)",
+                start: CGPointUnit(x: 0.08 + phase * 0.1, y: baseline + wobble * sin(Double(index))),
+                control: CGPointUnit(x: 0.38 + phase * 0.18, y: baseline - 0.18 * rhythm + wobble * cos(Double(index) * 0.7)),
+                end: CGPointUnit(x: 0.82 + phase * 0.08, y: baseline + 0.08 * (1 - rhythm)),
+                weight: 1.2 + density * 4.2 + correction * 1.1,
+                delay: Double(index) * (0.045 + (1 - rhythm) * 0.035)
+            )
+        }
+
+        return InkReplayPlan(
+            score: score,
+            title: title,
+            detail: detail.lowercased(),
+            tint: tint,
+            strokes: strokes
+        )
+    }
+
+    func conceptBridge(for page: NotebookPage) -> ConceptBridgeMap {
+        let sourceTokens = conceptTokens(for: page)
+        let sourceSet = Set(sourceTokens)
+        let sourceFormulas = Set(page.content.formulas.map { $0.lowercased() })
+        let sourceModels = Set(page.content.models.flatMap { ($0.nodes ?? $0.terms).map { $0.lowercased() } })
+        let candidates = notebooks.flatMap { notebook in
+            notebook.pages.compactMap { candidate -> ConceptBridgeNode? in
+                guard candidate.id != page.id else { return nil }
+                let candidateTokens = conceptTokens(for: candidate)
+                let overlap = sourceSet.intersection(candidateTokens)
+                let formulaOverlap = sourceFormulas.intersection(candidate.content.formulas.map { $0.lowercased() })
+                let modelOverlap = sourceModels.intersection(candidate.content.models.flatMap { ($0.nodes ?? $0.terms).map { $0.lowercased() } })
+                let tableBoost = (!page.content.tables.isEmpty && !candidate.content.tables.isEmpty) ? 0.12 : 0
+                let reviewBoost = min(0.18, candidate.content.insight.retentionRisk * 0.16 + candidate.studyState.difficulty * 0.08)
+                let modelBoost = modelOverlap.isEmpty ? 0 : 0.22
+                let formulaBoost = formulaOverlap.isEmpty ? 0 : 0.18
+                let lexicalScore = min(0.62, Double(overlap.count) * 0.1)
+                let score = min(1, lexicalScore + formulaBoost + modelBoost + tableBoost + reviewBoost)
+                guard score > 0.16 else { return nil }
+                let relation: ConceptBridgeRelation
+                let symbol: String
+                if !modelOverlap.isEmpty || !candidate.content.models.isEmpty && score > 0.42 {
+                    relation = .model
+                    symbol = candidate.content.models.first?.reconstruction?.shape.symbol ?? "cube.transparent"
+                } else if !formulaOverlap.isEmpty || !candidate.content.formulas.isEmpty && !page.content.formulas.isEmpty {
+                    relation = .formula
+                    symbol = "function"
+                } else if tableBoost > 0 {
+                    relation = .table
+                    symbol = "tablecells"
+                } else if reviewBoost > 0.11 {
+                    relation = .review
+                    symbol = "brain.head.profile"
+                } else {
+                    relation = .keyword
+                    symbol = "link"
+                }
+                let shared = overlap.first ?? formulaOverlap.first ?? modelOverlap.first ?? candidate.title.lowercased()
+                return ConceptBridgeNode(
+                    id: "bridge-\(candidate.id.uuidString)",
+                    pageID: candidate.id,
+                    notebookID: notebook.id,
+                    relation: relation,
+                    title: candidate.title.lowercased(),
+                    detail: shared.lowercased(),
+                    symbol: symbol,
+                    tint: notebook.accent,
+                    weight: score
+                )
+            }
+        }
+
+        let ranked = candidates
+            .sorted { first, second in
+                if first.weight == second.weight { return first.title < second.title }
+                return first.weight > second.weight
+            }
+            .prefix(5)
+            .map(\.self)
+        let score = ranked.isEmpty ? 0 : ranked.reduce(0) { $0 + $1.weight } / Double(ranked.count)
+        let title = ranked.isEmpty ? "solo" : (score > 0.56 ? "linked" : "nearby")
+        return ConceptBridgeMap(score: score, title: title, nodes: ranked)
+    }
+
+    private func conceptTokens(for page: NotebookPage) -> [String] {
+        let modelTerms = page.content.models.flatMap { ($0.nodes ?? $0.terms) + $0.terms }
+        let tableTerms = page.content.tables.flatMap { [$0.title] + $0.headers + $0.rows.flatMap { $0 } }
+        let sectionTerms = page.content.sections.flatMap { section in
+            [section.title] + section.body
+                .lowercased()
+                .split { !$0.isLetter && !$0.isNumber }
+                .map(String.init)
+        }
+        let raw = page.content.keywords + page.content.formulas + modelTerms + tableTerms + sectionTerms
+        let blocked: Set<String> = ["the", "and", "for", "with", "from", "this", "that", "notes", "page", "study", "into", "onto"]
+        var seen = Set<String>()
+        return raw
+            .map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines)) }
+            .filter { $0.count > 2 && !blocked.contains($0) && $0.rangeOfCharacter(from: .letters) != nil }
+            .filter { seen.insert($0).inserted }
+    }
+
     func bestModelPage(in notebookID: SubjectNotebook.ID? = nil) -> NotebookPage? {
         let pages = notebooks
             .filter { notebookID == nil || $0.id == notebookID }
@@ -1699,6 +1968,111 @@ final class NotebookStore {
             .map(\.self)
         let score = ranked.isEmpty ? 0 : ranked.reduce(0) { $0 + $1.weight } / Double(ranked.count)
         return StudyMemoryMap(score: min(1, score), nodes: ranked)
+    }
+
+    func presentationRunway(in notebookID: SubjectNotebook.ID? = nil) -> PresentationRunway {
+        let scopedNotebooks = notebooks.filter { notebookID == nil || $0.id == notebookID }
+        guard !scopedNotebooks.isEmpty else { return .empty }
+
+        let pages = scopedNotebooks.flatMap(\.pages)
+        let pageCount = pages.count
+        let modelCount = pages.reduce(0) { $0 + $1.content.models.count }
+        let tableCount = pages.reduce(0) { $0 + $1.content.tables.count }
+        let reviewPage = reviewQueue(limit: 1).first
+        let modelPage = bestModelPage(in: notebookID)
+        let modelReadinessScore = modelPage.map { modelReadiness(for: $0).score } ?? 0
+        let avatarReady = user.avatar != .default || authSession != nil
+        let searchableTerms = Set(pages.flatMap { $0.content.keywords + $0.content.formulas }).count
+        let emptyNotebook = scopedNotebooks.first { $0.pages.isEmpty }
+
+        let scanWeight = pageCount == 0 ? 0.16 : min(1, 0.28 + Double(pageCount) * 0.1)
+        let sortWeight = pageCount == 0 ? 0.08 : min(1, 0.36 + Double(scopedNotebooks.filter { !$0.pages.isEmpty }.count) * 0.12)
+        let modelWeight = max(modelCount > 0 ? 0.78 : 0.2, modelReadinessScore)
+        let reviewWeight = reviewPage.map { min(1, 0.34 + $0.content.insight.retentionRisk * 0.42 + $0.studyState.difficulty * 0.2) } ?? 0.18
+        let searchWeight = searchableTerms == 0 ? 0.12 : min(1, 0.32 + Double(searchableTerms) * 0.025)
+        let avatarWeight = avatarReady ? 0.72 : 0.24
+
+        let steps = [
+            PresentationRunwayStep(
+                id: "scan",
+                kind: .scan,
+                title: pageCount == 0 ? "scan" : "capture",
+                detail: emptyNotebook?.subject ?? "\(pageCount) pages",
+                symbol: "viewfinder",
+                tint: emptyNotebook?.accent ?? .graphite,
+                weight: scanWeight,
+                isReady: pageCount > 0
+            ),
+            PresentationRunwayStep(
+                id: "sort",
+                kind: .sort,
+                title: "sort",
+                detail: "\(scopedNotebooks.filter { !$0.pages.isEmpty }.count) journals",
+                symbol: "sparkle.magnifyingglass",
+                tint: .green,
+                weight: sortWeight,
+                isReady: pageCount > 0
+            ),
+            PresentationRunwayStep(
+                id: "model",
+                kind: .model,
+                title: modelCount > 0 ? "models" : "rebuild",
+                detail: modelCount > 0 ? "\(modelCount) objects" : (tableCount > 0 ? "\(tableCount) tables" : "diagram"),
+                symbol: modelPage.map { modelReadiness(for: $0).symbol } ?? "cube.transparent",
+                tint: .blue,
+                weight: modelWeight,
+                isReady: modelCount > 0 || modelReadinessScore > 0.52
+            ),
+            PresentationRunwayStep(
+                id: "review",
+                kind: .review,
+                title: "review",
+                detail: reviewPage?.studyState.dueLabel ?? "after scan",
+                symbol: "brain.head.profile",
+                tint: .plum,
+                weight: reviewWeight,
+                isReady: reviewPage != nil
+            ),
+            PresentationRunwayStep(
+                id: "search",
+                kind: .search,
+                title: "find",
+                detail: searchableTerms == 0 ? "after scan" : "\(searchableTerms) terms",
+                symbol: "magnifyingglass",
+                tint: .amber,
+                weight: searchWeight,
+                isReady: searchableTerms > 0
+            ),
+            PresentationRunwayStep(
+                id: "avatar",
+                kind: .avatar,
+                title: "avatar",
+                detail: avatarReady ? user.avatar.detail.rawValue : "make yours",
+                symbol: user.avatar.symbol,
+                tint: user.avatar.base,
+                weight: avatarWeight,
+                isReady: avatarReady
+            )
+        ]
+
+        let score = steps.reduce(0) { $0 + $1.weight } / Double(max(steps.count, 1))
+        let title: String
+        let detail: String
+        if pageCount == 0 {
+            title = "first scan"
+            detail = emptyNotebook?.subject ?? "choose a journal"
+        } else if modelWeight >= 0.58 && modelCount == 0 {
+            title = "make object"
+            detail = modelPage?.title.lowercased() ?? "diagram ready"
+        } else if let reviewPage {
+            title = "ready"
+            detail = reviewPage.title.lowercased()
+        } else {
+            title = "shelf ready"
+            detail = "\(pageCount) pages"
+        }
+
+        return PresentationRunway(score: score, title: title, detail: detail, steps: steps)
     }
 
     private func strongestKeywords(from pages: [NotebookPage]) -> [(word: String, count: Int, pageID: NotebookPage.ID?, notebookID: SubjectNotebook.ID?, tint: ColorToken)] {

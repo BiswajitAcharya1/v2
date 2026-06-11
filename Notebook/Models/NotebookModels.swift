@@ -100,6 +100,7 @@ struct ExtractedContent: Identifiable, Hashable, Codable {
     var models: [DetectedModel] = []
     var insight: SmartPageInsight = .empty
     var confidence: Double
+    var sourceEngine: String
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -112,6 +113,7 @@ struct ExtractedContent: Identifiable, Hashable, Codable {
         case models
         case insight
         case confidence
+        case sourceEngine
     }
 
     init(
@@ -124,7 +126,8 @@ struct ExtractedContent: Identifiable, Hashable, Codable {
         tables: [DetectedTable] = [],
         models: [DetectedModel] = [],
         insight: SmartPageInsight = .empty,
-        confidence: Double
+        confidence: Double,
+        sourceEngine: String = "local"
     ) {
         self.id = id
         self.cleanedText = cleanedText
@@ -136,6 +139,7 @@ struct ExtractedContent: Identifiable, Hashable, Codable {
         self.models = models
         self.insight = insight
         self.confidence = confidence
+        self.sourceEngine = sourceEngine.lowercased()
     }
 
     init(from decoder: Decoder) throws {
@@ -150,6 +154,7 @@ struct ExtractedContent: Identifiable, Hashable, Codable {
         models = try container.decodeIfPresent([DetectedModel].self, forKey: .models) ?? []
         insight = try container.decodeIfPresent(SmartPageInsight.self, forKey: .insight) ?? .empty
         confidence = try container.decode(Double.self, forKey: .confidence)
+        sourceEngine = try container.decodeIfPresent(String.self, forKey: .sourceEngine) ?? "local"
     }
 }
 
@@ -304,6 +309,28 @@ struct HandwritingSignature: Hashable, Codable {
     )
 }
 
+struct InkReplayPlan: Hashable {
+    var score: Double
+    var title: String
+    var detail: String
+    var tint: ColorToken
+    var strokes: [InkReplayStroke]
+}
+
+struct InkReplayStroke: Identifiable, Hashable {
+    var id: String
+    var start: CGPointUnit
+    var control: CGPointUnit
+    var end: CGPointUnit
+    var weight: Double
+    var delay: Double
+}
+
+struct CGPointUnit: Hashable {
+    var x: Double
+    var y: Double
+}
+
 struct StudyLane: Identifiable, Hashable, Codable {
     var id = UUID()
     var title: String
@@ -444,6 +471,35 @@ struct StudyMemoryMap: Hashable {
     static let empty = StudyMemoryMap(score: 0, nodes: [])
 }
 
+struct PresentationRunway: Hashable {
+    var score: Double
+    var title: String
+    var detail: String
+    var steps: [PresentationRunwayStep]
+
+    static let empty = PresentationRunway(score: 0, title: "ready", detail: "add a course", steps: [])
+}
+
+struct PresentationRunwayStep: Identifiable, Hashable {
+    var id: String
+    var kind: PresentationRunwayKind
+    var title: String
+    var detail: String
+    var symbol: String
+    var tint: ColorToken
+    var weight: Double
+    var isReady: Bool
+}
+
+enum PresentationRunwayKind: String, Hashable {
+    case scan
+    case sort
+    case model
+    case review
+    case search
+    case avatar
+}
+
 struct StudyMemoryNode: Identifiable, Hashable {
     var id: String
     var kind: StudyMemoryNodeKind
@@ -528,6 +584,32 @@ struct ForgettingForecastPoint: Identifiable, Hashable {
     var tint: ColorToken
     var weight: Double
     var action: ExamPulseKind
+}
+
+struct ConceptBridgeMap: Hashable {
+    var score: Double
+    var title: String
+    var nodes: [ConceptBridgeNode]
+}
+
+struct ConceptBridgeNode: Identifiable, Hashable {
+    var id: String
+    var pageID: NotebookPage.ID
+    var notebookID: SubjectNotebook.ID?
+    var relation: ConceptBridgeRelation
+    var title: String
+    var detail: String
+    var symbol: String
+    var tint: ColorToken
+    var weight: Double
+}
+
+enum ConceptBridgeRelation: String, Hashable {
+    case keyword
+    case formula
+    case model
+    case table
+    case review
 }
 
 struct ModelReconstruction: Hashable, Codable {
