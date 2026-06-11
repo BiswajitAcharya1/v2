@@ -46,6 +46,9 @@ enum AvatarDetail: String, CaseIterable, Identifiable, Hashable, Codable {
     case prism
     case wave
     case grid
+    case constellation
+    case bloom
+    case contour
 
     var id: String { rawValue }
 }
@@ -73,6 +76,17 @@ struct ScanJob: Identifiable, Hashable, Codable {
     var id = UUID()
     var targetSubject: String?
     var phase: ScanPhase
+}
+
+struct ScanRouteNotice: Identifiable, Hashable {
+    var id = UUID()
+    var fromSubject: String
+    var toSubject: String
+    var pageCount: Int
+
+    var moved: Bool {
+        fromSubject != toSubject
+    }
 }
 
 struct ExtractedContent: Identifiable, Hashable, Codable {
@@ -254,6 +268,7 @@ struct HandwritingAnalysis: Hashable, Codable {
     var pressure: WritingPressure
     var noteStyle: NoteStyle
     var coaching: String
+    var signature: HandwritingSignature? = nil
 
     static let empty = HandwritingAnalysis(
         legibility: 0,
@@ -264,6 +279,28 @@ struct HandwritingAnalysis: Hashable, Codable {
         pressure: .balanced,
         noteStyle: .linear,
         coaching: ""
+    )
+}
+
+struct HandwritingSignature: Hashable, Codable {
+    var rhythm: Double
+    var consistency: Double
+    var correctionNeed: Double
+    var studyReadiness: Double
+    var identity: String
+    var nextStroke: String
+    var predictedIssue: String
+    var strengths: [String]
+
+    static let empty = HandwritingSignature(
+        rhythm: 0,
+        consistency: 0,
+        correctionNeed: 0,
+        studyReadiness: 0,
+        identity: "steady",
+        nextStroke: "",
+        predictedIssue: "",
+        strengths: []
     )
 }
 
@@ -314,6 +351,183 @@ struct DetectedModel: Identifiable, Hashable, Codable {
     var terms: [String]
     var nodes: [String]? = nil
     var reconstruction: ModelReconstruction? = nil
+}
+
+struct ModelReadiness: Hashable {
+    var score: Double
+    var reason: String
+    var action: String
+    var symbol: String
+    var tint: ColorToken
+
+    static let empty = ModelReadiness(
+        score: 0,
+        reason: "scan first",
+        action: "scan",
+        symbol: "viewfinder",
+        tint: .graphite
+    )
+}
+
+struct StudyAutopilotPlan: Hashable {
+    var kind: StudyAutopilotKind
+    var pageID: NotebookPage.ID?
+    var notebookID: SubjectNotebook.ID?
+    var title: String
+    var detail: String
+    var symbol: String
+    var tint: ColorToken
+    var score: Double
+    var steps: [StudyAutopilotStep]
+
+    static let empty = StudyAutopilotPlan(
+        kind: .scan,
+        pageID: nil,
+        notebookID: nil,
+        title: "scan",
+        detail: "add notes",
+        symbol: "viewfinder",
+        tint: .graphite,
+        score: 0.16,
+        steps: []
+    )
+}
+
+enum StudyAutopilotKind: String, Hashable {
+    case scan
+    case clean
+    case model
+    case review
+    case study
+    case add
+}
+
+struct StudyAutopilotStep: Identifiable, Hashable {
+    var id = UUID()
+    var title: String
+    var symbol: String
+    var done: Bool
+}
+
+struct StudyDailyBrief: Hashable {
+    var score: Double
+    var title: String
+    var items: [StudyBriefItem]
+
+    static let empty = StudyDailyBrief(score: 0, title: "ready", items: [])
+}
+
+struct StudyBriefItem: Identifiable, Hashable {
+    var id = UUID()
+    var kind: StudyBriefKind
+    var pageID: NotebookPage.ID?
+    var notebookID: SubjectNotebook.ID?
+    var title: String
+    var value: String
+    var symbol: String
+    var tint: ColorToken
+    var score: Double
+}
+
+enum StudyBriefKind: String, Hashable {
+    case scan
+    case clean
+    case model
+    case review
+    case search
+}
+
+struct StudyMemoryMap: Hashable {
+    var score: Double
+    var nodes: [StudyMemoryNode]
+
+    static let empty = StudyMemoryMap(score: 0, nodes: [])
+}
+
+struct StudyMemoryNode: Identifiable, Hashable {
+    var id: String
+    var kind: StudyMemoryNodeKind
+    var pageID: NotebookPage.ID?
+    var notebookID: SubjectNotebook.ID?
+    var title: String
+    var detail: String
+    var symbol: String
+    var tint: ColorToken
+    var weight: Double
+}
+
+enum StudyMemoryNodeKind: String, Hashable {
+    case keyword
+    case model
+    case review
+    case notebook
+    case formula
+    case table
+}
+
+struct ModelForgePlan: Hashable {
+    var score: Double
+    var title: String
+    var detail: String
+    var symbol: String
+    var tint: ColorToken
+    var isReady: Bool
+    var steps: [ModelForgeStep]
+}
+
+struct ModelForgeStep: Identifiable, Hashable {
+    var id: String
+    var title: String
+    var symbol: String
+    var tint: ColorToken
+    var progress: Double
+    var isComplete: Bool
+}
+
+struct ExamPulse: Hashable {
+    var score: Double
+    var title: String
+    var prompt: String
+    var symbol: String
+    var tint: ColorToken
+    var actions: [ExamPulseAction]
+}
+
+struct ExamPulseAction: Identifiable, Hashable {
+    var id: String
+    var kind: ExamPulseKind
+    var title: String
+    var detail: String
+    var prompt: String
+    var symbol: String
+    var tint: ColorToken
+    var weight: Double
+}
+
+enum ExamPulseKind: String, Hashable {
+    case recall
+    case model
+    case formula
+    case table
+    case ask
+    case drill
+}
+
+struct ForgettingForecast: Hashable {
+    var score: Double
+    var title: String
+    var points: [ForgettingForecastPoint]
+}
+
+struct ForgettingForecastPoint: Identifiable, Hashable {
+    var id: String
+    var title: String
+    var detail: String
+    var prompt: String
+    var symbol: String
+    var tint: ColorToken
+    var weight: Double
+    var action: ExamPulseKind
 }
 
 struct ModelReconstruction: Hashable, Codable {

@@ -21,6 +21,8 @@ struct NotebookDetailView: View {
     @State private var didAutoOpenScanner = false
     @State private var chromeEntered = false
     @State private var actionRailAwake = false
+    @State private var selectedInkPage: NotebookPage?
+    @State private var focusedTerm: PageTermFocus?
 
     let notebook: SubjectNotebook
 
@@ -70,12 +72,34 @@ struct NotebookDetailView: View {
             if isScanning {
                 ScanProcessingOverlay(phase: store.scanPhase)
             }
+
+            if let notice = store.scanRouteNotice {
+                ScanRouteToast(notice: notice)
+                    .padding(.horizontal, 22)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 72)
+                    .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.96)))
+            }
         }
         .navigationTitle("")
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(item: $selectedPage) { page in
             StudyFocusView(page: page)
+        }
+        .sheet(item: $selectedInkPage) { page in
+            InkCoachSheet(page: page) {
+                Haptics.success()
+                store.polishPageForStudy(pageID: page.id)
+                selectedInkPage = nil
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $focusedTerm) { focus in
+            TermLensSheet(focus: focus)
+                .presentationDetents([.height(360), .medium])
+                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingCamera) {
             DocumentScannerView { images in
@@ -116,6 +140,15 @@ struct NotebookDetailView: View {
         }
         .onChange(of: query) {
             pageIndex = 0
+        }
+        .onChange(of: store.scanRouteNotice?.id) {
+            guard store.scanRouteNotice != nil else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3.2))
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.84)) {
+                    store.scanRouteNotice = nil
+                }
+            }
         }
     }
 
@@ -272,6 +305,58 @@ struct NotebookDetailView: View {
                 Haptics.selection()
                 selectedPage = page
             }
+            SmartPageActionDock(
+                page: page,
+                scale: scale,
+                cardCount: store.flashcards(for: page).count,
+                textScale: textScale,
+                onBoost: {
+                    Haptics.success()
+                    store.preparePageForStudy(pageID: page.id)
+                },
+                onStudy: {
+                    Haptics.open()
+                    selectedPage = page
+                },
+                onModel: {
+                    Haptics.success()
+                    store.generateStudyModel(for: page.id)
+                },
+                onInk: {
+                    Haptics.open()
+                    selectedInkPage = page
+                },
+                onResize: {
+                    Haptics.selection()
+                    withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
+                        textScale = textScale >= 1.32 ? 0.92 : textScale + 0.14
+                    }
+                }
+            )
+            ModelForgeStrip(plan: store.modelForgePlan(for: page), scale: scale) {
+                Haptics.success()
+                if page.content.models.isEmpty {
+                    store.generateStudyModel(for: page.id)
+                }
+                selectedPage = store.page(with: page.id) ?? page
+            }
+            PageCaptureDeck(
+                page: page,
+                cardCount: store.flashcards(for: page).count,
+                scale: scale,
+                onInk: {
+                    Haptics.open()
+                    selectedInkPage = page
+                },
+                onModel: {
+                    Haptics.success()
+                    store.generateStudyModel(for: page.id)
+                },
+                onStudy: {
+                    Haptics.open()
+                    selectedPage = page
+                }
+            )
 
             if isEditing && currentPage?.id == page.id {
                 TextEditor(text: $editedText)
@@ -288,26 +373,43 @@ struct NotebookDetailView: View {
                                     Text(section.title)
                                         .font(.system(size: 15 * scale, weight: .semibold, design: .serif))
                                         .foregroundStyle(NotebookTheme.ink.opacity(0.76))
-                                    Text(section.body)
-                                        .font(.system(size: 16 * scale, weight: .regular, design: .rounded))
-                                        .foregroundStyle(NotebookTheme.ink)
-                                        .lineSpacing(6)
+                                    InteractiveStudyText(
+                                        text: section.body,
+                                        keywords: page.content.keywords,
+                                        formulas: page.content.formulas,
+                                        scale: scale
+                                    ) { term in
+                                        Haptics.selection()
+                                        focusedTerm = PageTermFocus(term: term, page: page)
+                                    }
                                 }
                             }
                         } else {
-                            Text(page.content.cleanedText)
-                                .font(.system(size: 16 * scale, weight: .regular, design: .rounded))
-                                .foregroundStyle(NotebookTheme.ink)
-                                .lineSpacing(6)
+                            InteractiveStudyText(
+                                text: page.content.cleanedText,
+                                keywords: page.content.keywords,
+                                formulas: page.content.formulas,
+                                scale: scale
+                            ) { term in
+                                Haptics.selection()
+                                focusedTerm = PageTermFocus(term: term, page: page)
+                            }
                         }
 
                         ForEach(page.content.formulas, id: \.self) { formula in
-                            Text(formula)
-                                .font(.system(size: 17 * scale, weight: .semibold, design: .monospaced))
-                                .foregroundStyle(NotebookTheme.ink)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            Button {
+                                Haptics.selection()
+                                focusedTerm = PageTermFocus(term: formula, page: page)
+                            } label: {
+                                Text(formula)
+                                    .font(.system(size: 17 * scale, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(NotebookTheme.ink)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
                         }
 
                         ForEach(page.content.tables) { table in
@@ -577,6 +679,234 @@ struct NotebookDetailView: View {
     }
 }
 
+private struct PageTermFocus: Identifiable, Hashable {
+    let id = UUID()
+    var term: String
+    var page: NotebookPage
+}
+
+private struct TermLensSheet: View {
+    @Environment(NotebookStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    let focus: PageTermFocus
+    @State private var answer = ""
+    @State private var awake = false
+
+    private var livePage: NotebookPage {
+        store.page(with: focus.page.id) ?? focus.page
+    }
+
+    var body: some View {
+        ZStack {
+            NotebookTheme.field.ignoresSafeArea()
+            LivingPaperBackground().ignoresSafeArea().opacity(0.35)
+
+            VStack(spacing: 14) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(NotebookTheme.ink)
+                        Image(systemName: symbol)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(width: 52, height: 52)
+                    .rotation3DEffect(.degrees(awake ? 10 : -8), axis: (x: 0.2, y: 1, z: 0), perspective: 0.8)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(focus.term.lowercased())
+                            .font(.system(.title3, design: .serif, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.ink)
+                            .lineLimit(2)
+                        Text("page lens")
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.muted)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Button {
+                        Haptics.softTap()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
+                }
+
+                NotebookPaperView(cornerRadius: 24) {
+                    Text(answer)
+                        .font(.system(.body, design: .rounded, weight: .regular))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .lineSpacing(5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                }
+                .frame(minHeight: 140)
+
+                HStack(spacing: 10) {
+                    lensButton(symbol: "wand.and.rays", label: "prepare") {
+                        Haptics.success()
+                        store.preparePageForStudy(pageID: focus.page.id)
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                            answer = store.answer("explain \(focus.term)", for: livePage)
+                        }
+                    }
+
+                    lensButton(symbol: "rectangle.stack.fill", label: "cards") {
+                        Haptics.selection()
+                        answer = store.flashcards(for: livePage)
+                            .first { $0.front.localizedCaseInsensitiveContains(focus.term) || $0.back.localizedCaseInsensitiveContains(focus.term) }?
+                            .back ?? store.explain(focus.term)
+                    }
+
+                    lensButton(symbol: "sparkles", label: "ask") {
+                        Haptics.selection()
+                        withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                            answer = store.answer("what should i know about \(focus.term)", for: livePage)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+        }
+        .onAppear {
+            answer = store.answer("explain \(focus.term)", for: livePage)
+            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+                awake = true
+            }
+        }
+    }
+
+    private var symbol: String {
+        if focus.term.contains("=") { return "function" }
+        if focus.term.count > 42 { return "text.quote" }
+        return "sparkle.magnifyingglass"
+    }
+
+    private func lensButton(symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 7) {
+                Image(systemName: symbol)
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(width: 42, height: 42)
+                    .background(.white.opacity(0.48), in: Circle())
+                Text(label)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(NotebookTheme.ink)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(.white.opacity(0.3), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(.white.opacity(0.5), lineWidth: 0.7)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct InteractiveStudyText: View {
+    let text: String
+    let keywords: [String]
+    let formulas: [String]
+    let scale: Double
+    var onFocus: (String) -> Void
+    @State private var awake = false
+
+    private var lines: [String] {
+        text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var terms: [String] {
+        var seen = Set<String>()
+        let visibleKeywords = keywords.filter { keyword in
+            text.localizedCaseInsensitiveContains(keyword) && seen.insert(keyword.lowercased()).inserted
+        }
+        let visibleFormulas = formulas.filter { formula in
+            text.localizedCaseInsensitiveContains(formula) && seen.insert(formula.lowercased()).inserted
+        }
+        return Array((visibleKeywords + visibleFormulas).prefix(8))
+    }
+
+    private var importantLineIndexes: Set<Int> {
+        Set(lines.enumerated().compactMap { index, line in
+            let hasKeyword = keywords.contains { line.localizedCaseInsensitiveContains($0) }
+            let hasFormula = formulas.contains { line.localizedCaseInsensitiveContains($0) }
+            return (hasKeyword || hasFormula || line.count > 48) && line.count < 140 ? index : nil
+        }.prefix(4))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            if !terms.isEmpty {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 6)], alignment: .leading, spacing: 6) {
+                    ForEach(terms, id: \.self) { term in
+                        Button {
+                            onFocus(term)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: term.contains("=") ? "function" : "tag.fill")
+                                    .font(.system(size: 9 * scale, weight: .bold))
+                                Text(term.lowercased())
+                                    .font(.system(size: 10 * scale, weight: .semibold, design: .rounded))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                            }
+                            .foregroundStyle(NotebookTheme.ink.opacity(0.76))
+                            .padding(.horizontal, 8)
+                            .frame(height: 28)
+                            .background(.white.opacity(0.4), in: Capsule())
+                            .overlay {
+                                Capsule().stroke(.white.opacity(0.48), lineWidth: 0.6)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                    if importantLineIndexes.contains(index) {
+                        Button {
+                            onFocus(line)
+                        } label: {
+                            Text(line)
+                                .font(.system(size: 16 * scale, weight: .regular, design: .rounded))
+                                .foregroundStyle(NotebookTheme.ink)
+                                .lineSpacing(6)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(.white.opacity(awake ? 0.28 : 0.18), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        Text(line)
+                            .font(.system(size: 16 * scale, weight: .regular, design: .rounded))
+                            .foregroundStyle(NotebookTheme.ink)
+                            .lineSpacing(6)
+                    }
+                }
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.3).repeatForever(autoreverses: true)) {
+                awake = true
+            }
+        }
+    }
+}
+
 private struct NotebookDetailAtmosphere: View {
     let accent: Color
 
@@ -626,6 +956,773 @@ private struct PageSignalDot: View {
         .background(.white.opacity(0.44), in: Capsule())
         .overlay {
             Capsule().stroke(.white.opacity(0.5), lineWidth: 0.6)
+        }
+    }
+}
+
+private struct ScanRouteToast: View {
+    let notice: ScanRouteNotice
+    @State private var awake = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(NotebookTheme.ink)
+                SpeckledCompositionTexture()
+                    .clipShape(Circle())
+                    .opacity(0.26)
+                Image(systemName: notice.moved ? "arrow.turn.up.right" : "checkmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 42, height: 42)
+            .rotation3DEffect(.degrees(awake ? 8 : -8), axis: (x: 0.2, y: 1, z: 0), perspective: 0.8)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(notice.moved ? "filed in \(notice.toSubject)" : "saved in \(notice.toSubject)")
+                    .font(.system(.subheadline, design: .serif, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .lineLimit(1)
+                Text("\(notice.pageCount) \(notice.pageCount == 1 ? "page" : "pages")")
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(NotebookTheme.muted)
+            }
+
+            Spacer(minLength: 0)
+
+            MiniRouteNotebook(active: awake)
+                .frame(width: 44, height: 54)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.62), lineWidth: 0.8)
+        }
+        .shadow(color: .black.opacity(0.1), radius: 16, y: 9)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
+                awake = true
+            }
+        }
+    }
+}
+
+private struct MiniRouteNotebook: View {
+    let active: Bool
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(NotebookTheme.ink)
+                .overlay {
+                    SpeckledCompositionTexture()
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .opacity(0.72)
+                }
+                .overlay(alignment: .leading) {
+                    UnevenRoundedRectangle(
+                        cornerRadii: .init(topLeading: 8, bottomLeading: 8),
+                        style: .continuous
+                    )
+                    .fill(.black.opacity(0.86))
+                    .frame(width: 7)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(.white.opacity(0.42), lineWidth: 0.8)
+                }
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(.white)
+                .frame(width: 22, height: 16)
+                .offset(x: 14, y: -10)
+        }
+        .rotationEffect(.degrees(active ? 2.5 : -2.5))
+        .scaleEffect(active ? 1.03 : 0.98)
+    }
+}
+
+private struct SmartPageActionDock: View {
+    let page: NotebookPage
+    let scale: Double
+    let cardCount: Int
+    let textScale: Double
+    var onBoost: () -> Void
+    var onStudy: () -> Void
+    var onModel: () -> Void
+    var onInk: () -> Void
+    var onResize: () -> Void
+    @State private var entered = false
+    @State private var shimmer = false
+
+    private var insight: SmartPageInsight {
+        page.content.insight
+    }
+
+    private var styleSymbol: String {
+        switch insight.handwriting.noteStyle {
+        case .linear: "text.alignleft"
+        case .diagram: "cube.transparent"
+        case .table: "tablecells"
+        case .formula: "function"
+        case .mixed: "sparkles.rectangle.stack"
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 9) {
+                IntelligenceScorePill(
+                    symbol: styleSymbol,
+                    value: "\(Int((insight.clarityScore * 100).rounded()))",
+                    label: "clarity",
+                    tint: NotebookTheme.accent(.green),
+                    scale: scale
+                )
+                IntelligenceScorePill(
+                    symbol: "pencil.and.scribble",
+                    value: "\(Int((insight.handwriting.legibility * 100).rounded()))",
+                    label: "writing",
+                    tint: NotebookTheme.accent(.blue),
+                    scale: scale
+                )
+                IntelligenceScorePill(
+                    symbol: "cube.transparent",
+                    value: "\(page.content.models.count)",
+                    label: "models",
+                    tint: NotebookTheme.accent(.plum),
+                    scale: scale
+                )
+            }
+
+            HStack(spacing: 10) {
+                actionButton(symbol: "wand.and.rays", tint: NotebookTheme.accent(.amber), action: onBoost)
+                    .accessibilityLabel("prepare page")
+
+                actionButton(symbol: "sparkles", tint: NotebookTheme.ink, action: onStudy)
+                    .accessibilityLabel("study page")
+
+                actionButton(symbol: "waveform.path.ecg", tint: NotebookTheme.accent(.blue), action: onInk)
+                    .accessibilityLabel("handwriting coach")
+
+                actionButton(symbol: page.content.models.isEmpty ? "cube.transparent" : "arkit", tint: NotebookTheme.accent(.plum), action: onModel)
+                    .accessibilityLabel("generate model")
+
+                if let reconstruction = page.content.models.first?.reconstruction {
+                    MiniModelOrbit(reconstruction: reconstruction)
+                        .frame(width: 58, height: 38)
+                        .transition(.scale(scale: 0.82).combined(with: .opacity))
+                }
+
+                actionButton(symbol: "textformat.size", tint: NotebookTheme.accent(.amber), action: onResize)
+                    .accessibilityLabel("resize text")
+                    .accessibilityValue("\(Int((textScale * 100).rounded())) percent")
+
+                HStack(spacing: 6) {
+                    Image(systemName: "rectangle.stack.fill")
+                        .font(.system(size: 11 * scale, weight: .bold))
+                    Text("\(cardCount)")
+                        .font(.system(size: 12 * scale, weight: .semibold, design: .rounded))
+                }
+                .foregroundStyle(NotebookTheme.ink.opacity(0.74))
+                .frame(height: 38)
+                .padding(.horizontal, 12)
+                .background(.white.opacity(0.44), in: Capsule())
+                .overlay {
+                    Capsule().stroke(.white.opacity(0.5), lineWidth: 0.7)
+                }
+
+                Spacer(minLength: 0)
+
+                if !insight.nextBestStep.isEmpty {
+                    Text(insight.nextBestStep)
+                        .font(.system(size: 11 * scale, weight: .semibold, design: .rounded))
+                        .foregroundStyle(NotebookTheme.ink.opacity(0.7))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.68)
+                        .padding(.horizontal, 12)
+                        .frame(height: 38)
+                        .background(.white.opacity(0.32), in: Capsule())
+                        .overlay {
+                            Capsule().stroke(.white.opacity(shimmer ? 0.66 : 0.34), lineWidth: 0.7)
+                        }
+                }
+            }
+        }
+        .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.white.opacity(0.28))
+                .overlay(alignment: shimmer ? .trailing : .leading) {
+                    Capsule()
+                        .fill(.white.opacity(0.22))
+                        .frame(width: 80, height: 58)
+                        .blur(radius: 16)
+                        .offset(x: shimmer ? 24 : -24)
+                }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.58), lineWidth: 0.8)
+        }
+        .scaleEffect(entered ? 1 : 0.97)
+        .opacity(entered ? 1 : 0)
+        .onAppear {
+            withAnimation(.spring(response: 0.58, dampingFraction: 0.84)) {
+                entered = true
+            }
+            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
+                shimmer = true
+            }
+        }
+    }
+
+    private func actionButton(symbol: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 14 * scale, weight: .bold))
+                .frame(width: 38, height: 38)
+        }
+        .buttonStyle(FloatingCircleButtonStyle(tint: tint, foreground: .white))
+    }
+}
+
+private struct MiniModelOrbit: View {
+    let reconstruction: ModelReconstruction
+    @State private var active = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            let anchors = Array(reconstruction.anchors.prefix(5))
+            ZStack {
+                Capsule()
+                    .fill(.white.opacity(0.36))
+                    .overlay {
+                        Capsule().stroke(.white.opacity(0.56), lineWidth: 0.7)
+                    }
+
+                Canvas(rendersAsynchronously: true) { context, size in
+                    let radius = min(size.width, size.height) * 0.34
+                    for index in anchors.indices {
+                        let phase = Double(index) / Double(max(anchors.count, 1))
+                        let angle = phase * .pi * 2 + (active ? 0.32 : -0.32)
+                        let point = CGPoint(
+                            x: center.x + cos(angle) * radius,
+                            y: center.y + sin(angle) * radius * 0.58
+                        )
+                        var path = Path()
+                        path.move(to: center)
+                        path.addLine(to: point)
+                        context.stroke(path, with: .color(NotebookTheme.ink.opacity(0.14)), lineWidth: 0.8)
+                        context.fill(
+                            Path(ellipseIn: CGRect(x: point.x - 2.4, y: point.y - 2.4, width: 4.8, height: 4.8)),
+                            with: .color(NotebookTheme.ink.opacity(0.56))
+                        )
+                    }
+                }
+
+                Image(systemName: reconstruction.shape.symbol)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .frame(width: 24, height: 24)
+                    .background(.white.opacity(0.62), in: Circle())
+                    .rotation3DEffect(.degrees(active ? 12 : -12), axis: (x: 0.15, y: 1, z: 0), perspective: 0.8)
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
+                    active = true
+                }
+            }
+        }
+        .accessibilityLabel("model ready")
+    }
+}
+
+private struct ModelForgeStrip: View {
+    let plan: ModelForgePlan
+    let scale: Double
+    var action: () -> Void
+    @State private var awake = false
+    @State private var pressed = false
+
+    var body: some View {
+        Button {
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.72)) {
+                pressed = true
+            }
+            action()
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(160))
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                    pressed = false
+                }
+            }
+        } label: {
+            HStack(spacing: 11) {
+                ZStack {
+                    Circle()
+                        .fill(NotebookTheme.accent(plan.tint).opacity(0.15))
+                    Circle()
+                        .trim(from: 0, to: max(0.08, min(1, plan.score)))
+                        .stroke(NotebookTheme.accent(plan.tint), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .rotationEffect(.degrees(awake ? -72 : -96))
+                    Image(systemName: plan.symbol)
+                        .font(.system(size: 15 * scale, weight: .bold))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .rotation3DEffect(.degrees(awake ? 9 : -9), axis: (x: 0.2, y: 1, z: 0), perspective: 0.82)
+                }
+                .frame(width: 52, height: 52)
+                .scaleEffect(pressed ? 0.93 : (awake ? 1.025 : 0.98))
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 7) {
+                        Text(plan.title)
+                            .font(.system(size: 15 * scale, weight: .semibold, design: .serif))
+                            .foregroundStyle(NotebookTheme.ink)
+                            .lineLimit(1)
+                        Text(plan.detail)
+                            .font(.system(size: 10 * scale, weight: .semibold, design: .rounded))
+                            .foregroundStyle(NotebookTheme.ink.opacity(0.66))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.62)
+                            .padding(.horizontal, 8)
+                            .frame(height: 23)
+                            .background(.white.opacity(0.38), in: Capsule())
+                    }
+
+                    HStack(spacing: 8) {
+                        ForEach(Array(plan.steps.enumerated()), id: \.element.id) { index, step in
+                            ModelForgeStepDot(step: step, scale: scale, awake: awake, index: index)
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                ZStack {
+                    Circle()
+                        .fill(plan.isReady ? NotebookTheme.ink : NotebookTheme.accent(plan.tint))
+                    Image(systemName: plan.isReady ? "play.fill" : "sparkles")
+                        .font(.system(size: 12 * scale, weight: .bold))
+                        .foregroundStyle(.white)
+                        .rotationEffect(.degrees(pressed ? 18 : 0))
+                }
+                .frame(width: 38, height: 38)
+            }
+            .padding(10)
+            .background(.white.opacity(0.42), in: Capsule())
+            .overlay {
+                Capsule().stroke(.white.opacity(0.64), lineWidth: 0.8)
+            }
+            .shadow(color: NotebookTheme.accent(plan.tint).opacity(0.1), radius: 12, y: 7)
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(pressed ? 0.985 : 1)
+        .accessibilityLabel(plan.title)
+        .onAppear {
+            withAnimation(.spring(response: 0.72, dampingFraction: 0.84).delay(0.06)) {
+                awake = true
+            }
+        }
+    }
+}
+
+private struct ModelForgeStepDot: View {
+    let step: ModelForgeStep
+    let scale: Double
+    var awake: Bool
+    var index: Int
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ZStack {
+                Circle()
+                    .fill(step.isComplete ? NotebookTheme.accent(step.tint) : .white.opacity(0.46))
+                Circle()
+                    .trim(from: 0.08, to: 0.08 + min(0.84, max(0.08, step.progress * 0.84)))
+                    .stroke(step.isComplete ? .white.opacity(0.5) : NotebookTheme.accent(step.tint), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+                    .rotationEffect(.degrees(awake ? 118 + Double(index * 22) : -20))
+                    .padding(4)
+                Image(systemName: step.symbol)
+                    .font(.system(size: 9 * scale, weight: .bold))
+                    .foregroundStyle(step.isComplete ? .white : NotebookTheme.ink)
+            }
+            .frame(width: 30, height: 30)
+            .offset(y: awake ? 0 : 4)
+
+            Text(step.title)
+                .font(.system(size: 9 * scale, weight: .semibold, design: .rounded))
+                .foregroundStyle(NotebookTheme.ink.opacity(0.62))
+                .lineLimit(1)
+                .frame(width: 42)
+        }
+    }
+}
+
+private struct InkCoachSheet: View {
+    let page: NotebookPage
+    var onPolish: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var awake = false
+
+    private var handwriting: HandwritingAnalysis {
+        page.content.insight.handwriting
+    }
+
+    private var alerts: [String] {
+        let combined = page.content.insight.confusionAlerts + page.content.insight.cleanupSuggestions
+        return Array(combined.prefix(5))
+    }
+
+    var body: some View {
+        ZStack {
+            NotebookTheme.field.ignoresSafeArea()
+            LivingPaperBackground().ignoresSafeArea().opacity(0.42)
+
+            VStack(spacing: 16) {
+                HStack(spacing: 12) {
+                    InkFingerprint(handwriting: handwriting, active: awake)
+                        .frame(width: 86, height: 86)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("ink coach")
+                            .font(.system(.title2, design: .serif, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.ink)
+                        Text(handwriting.coaching.isEmpty ? "page is ready to study." : handwriting.coaching)
+                            .font(.system(.footnote, design: .rounded, weight: .medium))
+                            .foregroundStyle(NotebookTheme.ink.opacity(0.68))
+                            .lineLimit(3)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Button {
+                        Haptics.softTap()
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.76), foreground: NotebookTheme.ink))
+                }
+
+                VStack(spacing: 10) {
+                    InkMetricRow(label: "legibility", value: handwriting.legibility, symbol: "eye")
+                    InkMetricRow(label: "spacing", value: handwriting.spacing, symbol: "arrow.left.and.right")
+                    InkMetricRow(label: "structure", value: handwriting.structure, symbol: "square.stack.3d.up")
+                    InkMetricRow(label: "ink", value: handwriting.inkDensity, symbol: "drop.fill")
+                }
+
+                HStack(spacing: 10) {
+                    InkTrait(symbol: handwriting.noteStyle.symbolForInk, text: handwriting.noteStyle.rawValue)
+                    InkTrait(symbol: "speedometer", text: handwriting.pace.rawValue)
+                    InkTrait(symbol: "scribble.variable", text: handwriting.pressure.rawValue)
+                }
+
+                if let signature = handwriting.signature {
+                    InkSignatureCard(signature: signature)
+                }
+
+                if !alerts.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(alerts, id: \.self) { alert in
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(NotebookTheme.ink.opacity(0.18))
+                                    .frame(width: 6, height: 6)
+                                Text(alert)
+                                    .font(.system(.caption, design: .rounded, weight: .medium))
+                                    .foregroundStyle(NotebookTheme.ink.opacity(0.72))
+                                    .lineLimit(2)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(.white.opacity(0.36), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(.white.opacity(0.55), lineWidth: 0.8)
+                    }
+                }
+
+                Button {
+                    onPolish()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "wand.and.rays")
+                            .font(.system(size: 17, weight: .bold))
+                        Text("clean page")
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 58)
+                }
+                .buttonStyle(PillButtonStyle(tint: NotebookTheme.ink, foreground: .white))
+
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+                awake = true
+            }
+        }
+    }
+}
+
+private struct InkFingerprint: View {
+    let handwriting: HandwritingAnalysis
+    let active: Bool
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let rings = 7
+            for index in 0..<rings {
+                let progress = Double(index) / Double(max(rings - 1, 1))
+                let radius = size.width * (0.17 + CGFloat(progress) * 0.32)
+                var path = Path()
+                let segments = 90
+                for step in 0...segments {
+                    let phase = Double(step) / Double(segments)
+                    let angle = phase * .pi * 2
+                    let wave = sin(angle * (2.4 + handwriting.structure * 3.0) + Double(index) + (active ? 0.45 : -0.45))
+                    let pressure = 1 + wave * (0.045 + handwriting.inkDensity * 0.07)
+                    let point = CGPoint(
+                        x: center.x + cos(angle) * radius * pressure,
+                        y: center.y + sin(angle) * radius * pressure * (0.78 + handwriting.spacing * 0.16)
+                    )
+                    if step == 0 {
+                        path.move(to: point)
+                    } else {
+                        path.addLine(to: point)
+                    }
+                }
+                context.stroke(
+                    path,
+                    with: .color(NotebookTheme.ink.opacity(0.16 + handwriting.legibility * 0.08)),
+                    style: StrokeStyle(lineWidth: 1 + handwriting.inkDensity * 1.4, lineCap: .round, lineJoin: .round)
+                )
+            }
+
+            context.fill(
+                Path(ellipseIn: CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14)),
+                with: .color(NotebookTheme.ink.opacity(0.22))
+            )
+        }
+        .padding(8)
+        .background(.white.opacity(0.42), in: Circle())
+        .overlay {
+            Circle().stroke(.white.opacity(0.62), lineWidth: 0.8)
+        }
+        .rotation3DEffect(.degrees(active ? 8 : -8), axis: (x: 0.2, y: 1, z: 0), perspective: 0.8)
+    }
+}
+
+private struct InkMetricRow: View {
+    let label: String
+    let value: Double
+    let symbol: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(NotebookTheme.ink)
+                .frame(width: 30, height: 30)
+                .background(.white.opacity(0.46), in: Circle())
+
+            Text(label)
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(NotebookTheme.ink)
+                .frame(width: 78, alignment: .leading)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(NotebookTheme.ink.opacity(0.08))
+                    Capsule()
+                        .fill(NotebookTheme.ink.opacity(0.52))
+                        .frame(width: proxy.size.width * min(1, max(0, value)))
+                }
+            }
+            .frame(height: 8)
+
+            Text("\(Int((value * 100).rounded()))")
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(NotebookTheme.ink.opacity(0.58))
+                .frame(width: 30, alignment: .trailing)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 48)
+        .background(.white.opacity(0.32), in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.5), lineWidth: 0.7)
+        }
+    }
+}
+
+private struct InkTrait: View {
+    let symbol: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .bold))
+            Text(text)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+        }
+        .foregroundStyle(NotebookTheme.ink.opacity(0.74))
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .background(.white.opacity(0.38), in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.52), lineWidth: 0.7)
+        }
+    }
+}
+
+private struct InkSignatureCard: View {
+    let signature: HandwritingSignature
+    @State private var awake = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(readinessColor.opacity(0.16))
+                    Circle()
+                        .trim(from: 0, to: awake ? max(0.08, signature.studyReadiness) : 0.08)
+                        .stroke(readinessColor, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(NotebookTheme.ink)
+                }
+                .frame(width: 48, height: 48)
+                .rotation3DEffect(.degrees(awake ? 8 : -8), axis: (x: 0.2, y: 1, z: 0), perspective: 0.8)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(signature.identity)
+                        .font(.system(.headline, design: .serif, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                    Text(signature.predictedIssue)
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(NotebookTheme.muted)
+                        .lineLimit(2)
+                }
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                signatureMetric("rhythm", signature.rhythm, NotebookTheme.accent(.blue))
+                signatureMetric("steady", signature.consistency, NotebookTheme.accent(.green))
+                signatureMetric("ready", signature.studyReadiness, readinessColor)
+            }
+
+            HStack(spacing: 6) {
+                ForEach(signature.strengths.prefix(3), id: \.self) { strength in
+                    InkTrait(symbol: "checkmark", text: strength)
+                }
+            }
+        }
+        .padding(14)
+        .background(.white.opacity(0.36), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.58), lineWidth: 0.8)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+                awake = true
+            }
+        }
+    }
+
+    private func signatureMetric(_ title: String, _ value: Double, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(NotebookTheme.muted)
+            Capsule()
+                .fill(color.opacity(0.16))
+                .frame(height: 7)
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(color.opacity(0.82))
+                        .frame(width: 68 * max(0.08, min(1, value)), height: 7)
+                }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var readinessColor: Color {
+        if signature.studyReadiness > 0.72 { return NotebookTheme.accent(.green) }
+        if signature.correctionNeed > 0.48 { return NotebookTheme.accent(.amber) }
+        return NotebookTheme.ink
+    }
+}
+
+private extension NoteStyle {
+    var symbolForInk: String {
+        switch self {
+        case .linear: "text.alignleft"
+        case .diagram: "cube.transparent"
+        case .table: "tablecells"
+        case .formula: "function"
+        case .mixed: "sparkles.rectangle.stack"
+        }
+    }
+}
+
+private struct IntelligenceScorePill: View {
+    let symbol: String
+    let value: String
+    let label: String
+    let tint: Color
+    let scale: Double
+    @State private var awake = false
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.18))
+                Image(systemName: symbol)
+                    .font(.system(size: 11 * scale, weight: .bold))
+            }
+            .frame(width: 28, height: 28)
+            .rotation3DEffect(.degrees(awake ? 7 : -7), axis: (x: 0.2, y: 1, z: 0), perspective: 0.7)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.system(size: 14 * scale, weight: .semibold, design: .rounded))
+                Text(label)
+                    .font(.system(size: 9 * scale, weight: .medium, design: .rounded))
+                    .foregroundStyle(NotebookTheme.ink.opacity(0.5))
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(NotebookTheme.ink)
+        .padding(.leading, 7)
+        .padding(.trailing, 10)
+        .frame(maxWidth: .infinity, minHeight: 42)
+        .background(.white.opacity(0.38), in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.5), lineWidth: 0.7)
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
+                awake = true
+            }
         }
     }
 }
@@ -701,6 +1798,201 @@ private struct PageInsightStrip: View {
         case "balanced page": "circle.grid.cross"
         default: "tag.fill"
         }
+    }
+}
+
+private struct PageCaptureDeck: View {
+    let page: NotebookPage
+    let cardCount: Int
+    let scale: Double
+    var onInk: () -> Void
+    var onModel: () -> Void
+    var onStudy: () -> Void
+    @State private var awake = false
+
+    private var insight: SmartPageInsight {
+        page.content.insight
+    }
+
+    private var primaryModel: DetectedModel? {
+        page.content.models.first
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            if !insight.onlyWhatMatters.isEmpty {
+                Button {
+                    onStudy()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "sparkle.magnifyingglass")
+                            .font(.system(size: 14 * scale, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(NotebookTheme.ink, in: Circle())
+                            .rotation3DEffect(.degrees(awake ? 10 : -8), axis: (x: 0.2, y: 1, z: 0), perspective: 0.8)
+
+                        Text(insight.onlyWhatMatters)
+                            .font(.system(size: 13 * scale, weight: .semibold, design: .serif))
+                            .foregroundStyle(NotebookTheme.ink)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(12)
+                    .background(.white.opacity(0.38), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .stroke(.white.opacity(0.56), lineWidth: 0.8)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 9) {
+                CaptureMetricOrb(
+                    symbol: "eye",
+                    label: "ink",
+                    value: insight.handwriting.legibility,
+                    tint: NotebookTheme.accent(.blue),
+                    awake: awake,
+                    action: onInk
+                )
+                CaptureMetricOrb(
+                    symbol: primaryModel == nil ? "cube.transparent" : "arkit",
+                    label: "model",
+                    value: primaryModel == nil ? 0 : primaryModel?.reconstruction?.confidence ?? 0.62,
+                    tint: NotebookTheme.accent(.plum),
+                    awake: awake,
+                    action: onModel
+                )
+                CaptureMetricOrb(
+                    symbol: "rectangle.stack.fill",
+                    label: "\(cardCount)",
+                    value: min(1, Double(cardCount) / 10.0),
+                    tint: NotebookTheme.accent(.green),
+                    awake: awake,
+                    action: onStudy
+                )
+                CaptureMetricOrb(
+                    symbol: "exclamationmark.triangle.fill",
+                    label: "risk",
+                    value: 1 - insight.retentionRisk,
+                    tint: NotebookTheme.accent(.amber),
+                    awake: awake,
+                    action: onStudy
+                )
+            }
+
+            if !page.content.tables.isEmpty || primaryModel != nil || !page.content.formulas.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        if !page.content.tables.isEmpty {
+                            captureChip(symbol: "tablecells", text: "\(page.content.tables.count)")
+                        }
+                        if !page.content.formulas.isEmpty {
+                            captureChip(symbol: "function", text: "\(page.content.formulas.count)")
+                        }
+                        if let model = primaryModel {
+                            captureChip(symbol: model.reconstruction?.shape.symbol ?? "cube.transparent", text: model.reconstruction?.shape.rawValue ?? "model")
+                        }
+                        ForEach(insight.memoryHooks.prefix(2), id: \.self) { hook in
+                            captureChip(symbol: "pin.fill", text: hook)
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
+        }
+        .padding(12)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.white.opacity(0.22))
+                .overlay(alignment: awake ? .trailing : .leading) {
+                    Capsule()
+                        .fill(.white.opacity(0.2))
+                        .frame(width: 72, height: 116)
+                        .blur(radius: 18)
+                        .offset(x: awake ? 22 : -22)
+                }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(.white.opacity(0.5), lineWidth: 0.8)
+        }
+        .scaleEffect(awake ? 1 : 0.97)
+        .opacity(awake ? 1 : 0)
+        .onAppear {
+            withAnimation(.spring(response: 0.68, dampingFraction: 0.84)) {
+                awake = true
+            }
+        }
+    }
+
+    private func captureChip(symbol: String, text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 10 * scale, weight: .bold))
+            Text(text)
+                .font(.system(size: 10 * scale, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.66)
+        }
+        .foregroundStyle(NotebookTheme.ink.opacity(0.76))
+        .padding(.horizontal, 9)
+        .frame(height: 30)
+        .background(.white.opacity(0.38), in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.48), lineWidth: 0.6)
+        }
+    }
+}
+
+private struct CaptureMetricOrb: View {
+    let symbol: String
+    let label: String
+    let value: Double
+    let tint: Color
+    let awake: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.selection()
+            action()
+        } label: {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .stroke(NotebookTheme.ink.opacity(0.08), lineWidth: 5)
+                    Circle()
+                        .trim(from: 0, to: min(1, max(0, value)))
+                        .stroke(tint.opacity(0.86), style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Image(systemName: symbol)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(NotebookTheme.ink)
+                }
+                .frame(width: 42, height: 42)
+                .rotation3DEffect(.degrees(awake ? 8 : -7), axis: (x: 0.15, y: 1, z: 0), perspective: 0.8)
+
+                Text(label)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(NotebookTheme.ink.opacity(0.68))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(.white.opacity(0.34), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(.white.opacity(0.48), lineWidth: 0.7)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }
 
@@ -1559,6 +2851,7 @@ private struct DetectedModelView: View {
     @State private var selectedNode: String?
     @State private var awake = false
     @State private var renderMode: ModelRenderMode = .orbit
+    @State private var modelTilt: CGSize = .zero
 
     private var nodes: [String] {
         let modelNodes = model.nodes ?? []
@@ -1634,7 +2927,26 @@ private struct DetectedModelView: View {
 
                 InteractiveModelMap(nodes: nodes, reconstruction: reconstruction, selectedNode: $selectedNode, awake: awake, mode: renderMode)
                     .frame(height: renderMode == .mesh ? 212 : 188)
-                    .rotation3DEffect(.degrees(awake ? 0 : 16), axis: (x: 1, y: 0, z: 0), perspective: 0.8)
+                    .rotation3DEffect(.degrees(awake ? Double(modelTilt.height / -18) : 16), axis: (x: 1, y: 0, z: 0), perspective: 0.8)
+                    .rotation3DEffect(.degrees(Double(modelTilt.width / 18)), axis: (x: 0, y: 1, z: 0), perspective: 0.8)
+                    .scaleEffect(modelTilt == .zero ? 1 : 1.018)
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                if modelTilt == .zero {
+                                    Haptics.softTap()
+                                }
+                                modelTilt = CGSize(
+                                    width: max(min(value.translation.width, 80), -80),
+                                    height: max(min(value.translation.height, 80), -80)
+                                )
+                            }
+                            .onEnded { _ in
+                                withAnimation(.spring(response: 0.45, dampingFraction: 0.76)) {
+                                    modelTilt = .zero
+                                }
+                            }
+                    )
 
                 Text(selectedNode.map { "\($0) links to \(relatedNode(after: $0))." } ?? reconstruction.interactionHint)
                     .font(.system(.caption, design: .rounded, weight: .medium))

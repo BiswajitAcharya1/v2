@@ -21,6 +21,7 @@ protocol NoteUnderstandingServing {
     func classify(_ content: ExtractedContent) async -> String
     func makeFlashcards(from content: ExtractedContent) -> [Flashcard]
     func explain(_ term: String) -> String
+    func answer(_ question: String, from content: ExtractedContent) -> String
 }
 
 @MainActor
@@ -215,6 +216,16 @@ private enum NoteIntelligenceAnalyzer {
         let angles = examAngles(keywords: keywords, formulas: formulas, tables: tables, models: models)
         let alerts = confusionAlerts(confidence: confidence, risk: risk, legibility: legibility, formulas: formulas, models: models)
         let cleanup = cleanupSuggestions(spacing: spacing, structure: structureScore, pace: pace, pressure: pressure, tables: tables, models: models)
+        let signature = handwritingSignature(
+            legibility: legibility,
+            spacing: spacing,
+            structure: structureScore,
+            confidence: confidence,
+            profile: profile,
+            averageLineLength: averageLineLength,
+            shortLineRatio: shortLineRatio,
+            style: style
+        )
         let features = detectedFeatures(
             keywords: keywords,
             formulas: formulas,
@@ -237,7 +248,8 @@ private enum NoteIntelligenceAnalyzer {
                 pace: pace,
                 pressure: pressure,
                 noteStyle: style,
-                coaching: coaching
+                coaching: coaching,
+                signature: signature
             ),
             studyLanes: lanes,
             recallPrompts: prompts,
@@ -247,6 +259,75 @@ private enum NoteIntelligenceAnalyzer {
             confusionAlerts: alerts,
             cleanupSuggestions: cleanup,
             detectedFeatures: features
+        )
+    }
+
+    private static func handwritingSignature(
+        legibility: Double,
+        spacing: Double,
+        structure: Double,
+        confidence: Double,
+        profile: ImageStructureAnalyzer.Profile,
+        averageLineLength: Double,
+        shortLineRatio: Double,
+        style: NoteStyle
+    ) -> HandwritingSignature {
+        let rhythm = max(0.04, min(1, 1 - abs(averageLineLength - 46) / 72))
+        let consistency = max(0.04, min(1, spacing * 0.34 + legibility * 0.34 + profile.balance * 0.18 + (1 - shortLineRatio) * 0.14))
+        let correctionNeed = max(0.03, min(0.97, (1 - legibility) * 0.46 + (1 - spacing) * 0.22 + profile.edgeDensity * 0.18 + (confidence < 0.52 ? 0.14 : 0)))
+        let studyReadiness = max(0.04, min(1, legibility * 0.38 + consistency * 0.28 + structure * 0.22 + (1 - correctionNeed) * 0.12))
+        let identity: String
+        if style == .diagram || style == .mixed {
+            identity = "visual mapper"
+        } else if rhythm > 0.76 && consistency > 0.66 {
+            identity = "clean rhythm"
+        } else if profile.inkDensity > 0.3 {
+            identity = "heavy ink"
+        } else if shortLineRatio > 0.58 {
+            identity = "quick fragments"
+        } else {
+            identity = "steady notes"
+        }
+        let nextStroke: String
+        if legibility < 0.48 {
+            nextStroke = "rewrite keywords wider"
+        } else if spacing < 0.45 {
+            nextStroke = "add space between ideas"
+        } else if structure < 0.38 {
+            nextStroke = "box headings before review"
+        } else if correctionNeed > 0.48 {
+            nextStroke = "clean one weak line"
+        } else {
+            nextStroke = "study without rewriting"
+        }
+        let predictedIssue: String
+        if confidence < 0.44 {
+            predictedIssue = "ocr may miss names or formulas"
+        } else if profile.edgeDensity > 0.34 {
+            predictedIssue = "dense sketch may hide labels"
+        } else if spacing < 0.42 {
+            predictedIssue = "ideas may blend during review"
+        } else if style == .formula {
+            predictedIssue = "symbols need a worked example"
+        } else {
+            predictedIssue = "low risk"
+        }
+        var strengths: [String] = []
+        if legibility > 0.68 { strengths.append("readable") }
+        if spacing > 0.62 { strengths.append("spaced") }
+        if structure > 0.5 { strengths.append("structured") }
+        if profile.balance > 0.58 { strengths.append("balanced") }
+        if style == .diagram || style == .mixed { strengths.append("visual") }
+        if strengths.isEmpty { strengths = ["captured", "recoverable"] }
+        return HandwritingSignature(
+            rhythm: rhythm,
+            consistency: consistency,
+            correctionNeed: correctionNeed,
+            studyReadiness: studyReadiness,
+            identity: identity,
+            nextStroke: nextStroke,
+            predictedIssue: predictedIssue,
+            strengths: Array(strengths.prefix(4))
         )
     }
 
@@ -573,6 +654,67 @@ struct LocalNoteUnderstandingService: NoteUnderstandingServing {
 
     func explain(_ term: String) -> String {
         "\(term) is the smallest piece to understand first. connect it to the example on the page, then test it with one recall question."
+    }
+
+    func answer(_ question: String, from content: ExtractedContent) -> String {
+        let cleanedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleanedQuestion.isEmpty else {
+            return content.insight.nextBestStep.isEmpty ? "ask about a term, formula, table, or model from this page." : content.insight.nextBestStep
+        }
+
+        let questionWords = Set(cleanedQuestion
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+            .filter { $0.count > 2 })
+        let section = bestSection(in: content, matching: questionWords)
+        var answerParts: [String] = []
+
+        if let section {
+            answerParts.append(section.body)
+        } else if !content.insight.onlyWhatMatters.isEmpty {
+            answerParts.append(content.insight.onlyWhatMatters)
+        } else {
+            answerParts.append(content.cleanedText.components(separatedBy: .newlines).prefix(3).joined(separator: "\n"))
+        }
+
+        if cleanedQuestion.contains("formula"), let formula = content.formulas.first {
+            answerParts.append("use \(formula) and make one fresh example.")
+        }
+        if cleanedQuestion.contains("table"), let table = content.tables.first {
+            answerParts.append("the table compares \(table.headers.prefix(4).joined(separator: ", ")).")
+        }
+        if cleanedQuestion.contains("model") || cleanedQuestion.contains("diagram"),
+           let model = content.models.first {
+            let nodes = (model.nodes ?? model.terms).prefix(5).joined(separator: ", ")
+            answerParts.append(nodes.isEmpty ? model.summary : "rebuild \(model.title) through \(nodes).")
+        }
+        if let keyword = content.keywords.first(where: { cleanedQuestion.contains($0) }) {
+            answerParts.append("test yourself by explaining \(keyword) without looking.")
+        }
+
+        let unique = answerParts
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+            .reduce(into: [String]()) { result, part in
+                if !result.contains(part) {
+                    result.append(part)
+                }
+            }
+        return unique.prefix(4).joined(separator: "\n\n")
+    }
+
+    private func bestSection(in content: ExtractedContent, matching words: Set<String>) -> StudySection? {
+        guard !words.isEmpty else { return content.sections.first }
+        return content.sections.max { first, second in
+            score(first, words: words, keywords: content.keywords) < score(second, words: words, keywords: content.keywords)
+        }
+    }
+
+    private func score(_ section: StudySection, words: Set<String>, keywords: [String]) -> Int {
+        let haystack = "\(section.title) \(section.body)".lowercased()
+        let wordScore = words.reduce(0) { total, word in total + (haystack.contains(word) ? 2 : 0) }
+        let keywordScore = keywords.reduce(0) { total, keyword in total + (haystack.contains(keyword) ? 1 : 0) }
+        return wordScore + keywordScore
     }
 }
 

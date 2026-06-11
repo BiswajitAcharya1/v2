@@ -35,19 +35,21 @@ struct SAM3DObjectReconstructionAdapter: ObjectReconstructionServing {
             "circuit", "graph", "map", "cycle", "system", "force", "lens", "organ"
         ]
         let terms = objectTerms.filter { joined.contains($0) }
-        let nodes = Array((keywords + terms).filter { $0.count > 2 }.prefix(6))
+        let diagramNodes = ReconstructionTextAnalyzer.diagramNodes(from: lines, keywords: keywords)
+        let nodes = Array((diagramNodes + keywords + terms).filter { $0.count > 2 }.prefix(7))
         let profile = ImageStructureAnalyzer.profile(in: image)
         let structureNodes = ["outline", profile.complexityLabel, "labels", "edges", "relations", "study focus"]
         let finalNodes = nodes.isEmpty ? structureNodes : Array((nodes + structureNodes).prefix(6))
+        let shape = ReconstructionTextAnalyzer.shape(from: lines, profile: profile)
         return [DetectedModel(
             title: terms.first.map { "\($0) region" } ?? "diagram region",
-            summary: "vellum isolated the strongest visual region and turned its outlines, labels, and connections into a tappable study model.",
+            summary: "vellum isolated the strongest visual region and rebuilt its labels, arrows, edges, and note anchors into a tappable study model.",
             terms: finalNodes,
             nodes: finalNodes,
             reconstruction: ModelReconstructionFactory.make(
                 source: "sam 3d objects local",
                 confidence: max(0.42, min(0.96, profile.signal + 0.38)),
-                shape: profile.edgeDensity > 0.28 ? .mesh : .orbit,
+                shape: shape,
                 nodes: finalNodes,
                 hint: "drag the model, then tap each anchor in order."
             )
@@ -109,18 +111,20 @@ struct TripoSRObjectReconstructionAdapter: ObjectReconstructionServing {
         let joined = lines.joined(separator: " ").lowercased()
         let profile = ImageStructureAnalyzer.profile(in: image)
         let objectWords = ["cell", "atom", "molecule", "circuit", "lens", "organ", "shape", "structure", "model", "diagram", "figure"]
-        let terms = Array((keywords + objectWords.filter { joined.contains($0) }).filter { $0.count > 2 }.prefix(6))
+        let diagramNodes = ReconstructionTextAnalyzer.diagramNodes(from: lines, keywords: keywords)
+        let terms = Array((diagramNodes + keywords + objectWords.filter { joined.contains($0) }).filter { $0.count > 2 }.prefix(7))
         let geometryNodes = ["front plane", "depth cue", profile.complexityLabel, "label anchors", "rotation", "memory hook"]
         let nodes = terms.isEmpty ? geometryNodes : Array((terms + geometryNodes).prefix(6))
+        let shape = ReconstructionTextAnalyzer.shape(from: lines, profile: profile)
         return [DetectedModel(
-            title: "interactive 3d study object",
-            summary: "the diagram geometry was converted into a rotatable study object with depth cues and linked note labels.",
+            title: ReconstructionTextAnalyzer.title(from: lines, fallback: "interactive 3d study object"),
+            summary: "the diagram geometry was converted into a rotatable study object with depth cues, scan labels, and linked note anchors.",
             terms: terms,
             nodes: nodes,
             reconstruction: ModelReconstructionFactory.make(
                 source: "triposr local",
                 confidence: max(0.44, min(0.94, profile.signal + 0.34)),
-                shape: joined.contains("cycle") || joined.contains("flow") ? .cycle : .mesh,
+                shape: shape == .orbit ? .mesh : shape,
                 nodes: nodes,
                 hint: "swipe the surface to see the depth cues from the scan."
             )
@@ -216,6 +220,60 @@ private struct ReconstructionResponse: Decodable {
     var title: String?
     var summary: String?
     var nodes: [String]?
+}
+
+private enum ReconstructionTextAnalyzer {
+    static func diagramNodes(from lines: [String], keywords: [String]) -> [String] {
+        let separators = CharacterSet(charactersIn: "→->:=|,;()[]{}")
+        var candidates: [String] = []
+        for line in lines {
+            let lower = line.lowercased()
+            let isStructureLine = lower.contains("->")
+                || lower.contains("→")
+                || lower.contains(":")
+                || lower.contains("=")
+                || lower.contains("diagram")
+                || lower.contains("model")
+                || lower.contains("table")
+            guard isStructureLine || candidates.count < 3 else { continue }
+            let tokens = lower
+                .components(separatedBy: separators)
+                .flatMap { $0.components(separatedBy: .whitespacesAndNewlines) }
+                .map { $0.trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines)) }
+                .filter { token in
+                    token.count > 2
+                        && !["the", "and", "with", "from", "into", "that", "this", "notes", "page"].contains(token)
+                }
+            candidates.append(contentsOf: tokens)
+        }
+        var seen = Set<String>()
+        return (candidates + keywords)
+            .filter { seen.insert($0).inserted }
+            .prefix(8)
+            .map(\.self)
+    }
+
+    static func shape(from lines: [String], profile: ImageStructureAnalyzer.Profile) -> ModelShape {
+        let text = lines.joined(separator: " ").lowercased()
+        if text.contains("table") || text.contains("chart") || text.contains("matrix") { return .table }
+        if text.contains("cycle") || text.contains("loop") || text.contains("flow") || text.contains("→") || text.contains("->") { return .cycle }
+        if text.contains("layer") || text.contains("stack") || text.contains("levels") { return .stack }
+        if profile.edgeDensity > 0.24 || profile.signal > 0.34 { return .mesh }
+        return .orbit
+    }
+
+    static func title(from lines: [String], fallback: String) -> String {
+        let candidates = lines
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        if let heading = candidates.first(where: { $0.count <= 44 && ($0.contains("diagram") || $0.contains("model") || $0.contains("cycle")) }) {
+            return heading
+        }
+        if let short = candidates.first(where: { $0.count >= 4 && $0.count <= 34 }) {
+            return "\(short) model"
+        }
+        return fallback
+    }
 }
 
 enum ImageStructureAnalyzer {
