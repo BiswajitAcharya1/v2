@@ -4,6 +4,7 @@ struct CompositionNotebookCard: View {
     let notebook: SubjectNotebook
     var namespace: Namespace.ID?
     var onOpen: (() -> Void)?
+    var onCustomize: (() -> Void)?
 
     @State private var dragOffset: CGSize = .zero
     @State private var isPressed = false
@@ -21,7 +22,7 @@ struct CompositionNotebookCard: View {
                 CompositionCoverFace(
                     subject: notebook.subject,
                     cornerRadius: 20,
-                    spineWidth: 6.75,
+                    spineWidth: 12,
                     labelWidth: 142,
                     labelHeight: 108,
                     labelOffsetY: 30,
@@ -66,6 +67,13 @@ struct CompositionNotebookCard: View {
                             Haptics.open()
                             onOpen?()
                         }
+                    }
+            )
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.42)
+                    .onEnded { _ in
+                        Haptics.open()
+                        onCustomize?()
                     }
             )
             .onAppear {
@@ -219,11 +227,12 @@ struct CompositionCoverFace: View {
         let accent = NotebookTheme.accent(coverColor)
         switch coverStyle {
         case .marbled:
+            let base = coverColor == .graphite ? NotebookTheme.ink : accent
             return LinearGradient(
                 colors: [
-                    Color(red: 0.04, green: 0.04, blue: 0.038),
-                    Color(red: 0.115, green: 0.115, blue: 0.105),
-                    Color(red: 0.045, green: 0.045, blue: 0.04)
+                    base.opacity(0.98),
+                    base.opacity(0.72),
+                    NotebookTheme.ink.opacity(0.9)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -242,7 +251,7 @@ struct CompositionCoverFace: View {
             )
         case .paper:
             return LinearGradient(
-                colors: [NotebookTheme.paper, Color(red: 0.9, green: 0.91, blue: 0.87)],
+                colors: [NotebookTheme.paper, accent.opacity(0.18), Color(red: 0.9, green: 0.91, blue: 0.87)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -433,7 +442,7 @@ struct NotebookLogo: View {
         CompositionCoverFace(
             subject: nil,
             cornerRadius: 18,
-            spineWidth: 7,
+            spineWidth: 12,
             labelWidth: 102,
             labelHeight: 88,
             labelOffsetY: 30

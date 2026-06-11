@@ -55,6 +55,7 @@ final class NotebookStore {
     @ObservationIgnored private var voiceActiveSpeechDuration: TimeInterval = 0
     @ObservationIgnored private var lastVoiceActivityTick: Date?
     @ObservationIgnored private var lastVoiceMeterUIUpdateAt: Date?
+    @ObservationIgnored private var editPersistTask: Task<Void, Never>?
 
     var pinnedNotebooks: [SubjectNotebook] {
         notebooks.filter(\.isPinned)
@@ -133,6 +134,22 @@ final class NotebookStore {
             authMessage = nil
         }
         persist()
+    }
+
+    func deleteAccount() {
+        withAnimation(.spring(response: 0.62, dampingFraction: 0.84)) {
+            user = NotebookUser(name: "student", gradeLevel: "11")
+            notebooks = []
+            authSession = nil
+            isAuthenticated = false
+            hasCompletedOnboarding = false
+            setupStep = .voiceRecording
+            selectedStudyMode = .longTerm
+            voiceProfile = VoiceProfile()
+            onboardingSubjects = []
+            authMessage = nil
+        }
+        persistence.clear()
     }
 
     func finishOnboarding() {
@@ -731,8 +748,17 @@ final class NotebookStore {
             guard let pageIndex = notebooks[notebookIndex].pages.firstIndex(where: { $0.id == pageID }) else { continue }
             notebooks[notebookIndex].pages[pageIndex].content.cleanedText = text.lowercased()
             notebooks[notebookIndex].lastActivity = "edited notes"
-            persist()
+            scheduleEditPersist()
             return
+        }
+    }
+
+    private func scheduleEditPersist() {
+        editPersistTask?.cancel()
+        editPersistTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(520))
+            guard !Task.isCancelled else { return }
+            persist()
         }
     }
 

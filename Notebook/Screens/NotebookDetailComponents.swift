@@ -2000,10 +2000,6 @@ struct ScanProcessingOverlay: View {
 
             VStack(spacing: 20) {
                 ZStack(alignment: .bottom) {
-                    ProcessingModelConstellation(phase: phase, active: sweep)
-                        .frame(width: 254, height: 254)
-                        .opacity(phase == .capturing ? 0.18 : 1)
-
                     ProcessingNotebookPocket(phase: phase, active: fold)
                         .offset(y: phase == .sorted ? 34 : 58)
                         .opacity(phase == .capturing ? 0.48 : 1)
@@ -2038,8 +2034,6 @@ struct ScanProcessingOverlay: View {
                 }
 
                 ScanPhaseRail(current: phase)
-                ScanIntelligenceRibbon(phase: phase, active: sweep)
-                ScanModelStackRibbon(phase: phase)
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 26)
@@ -2099,9 +2093,9 @@ struct ScanProcessingOverlay: View {
         case .capturing:
             "locking the page edges"
         case .processing:
-            "surya reads ink while sam 3d and triposr rebuild diagrams"
+            "turning the page into clean notes"
         case .organizing:
-            "gemma files the page by subject"
+            "placing it in the right journal"
         case .sorted:
             "sliding it into your notebook"
         }
@@ -2304,9 +2298,9 @@ struct ScanIntelligenceRibbon: View {
 
     private let steps: [(ScanPhase, String, String)] = [
         (.capturing, "viewfinder", "capture"),
-        (.processing, "text.viewfinder", "ocr"),
-        (.organizing, "tablecells", "tables"),
-        (.sorted, "cube.transparent", "models")
+        (.processing, "text.viewfinder", "read"),
+        (.organizing, "tablecells", "clean"),
+        (.sorted, "tray.and.arrow.down.fill", "filed")
     ]
 
     var body: some View {

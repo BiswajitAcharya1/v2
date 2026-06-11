@@ -9,6 +9,7 @@ struct AccountCenterView: View {
     @State private var expanded = false
     @State private var heroPulse = false
     @State private var closeRotation = 0.0
+    @State private var exitPressed = false
 
     var body: some View {
         NavigationStack {
@@ -25,8 +26,8 @@ struct AccountCenterView: View {
 
                     accountSection("study") {
                         accountRow(systemName: "rectangle.stack.fill", title: "\(flashcardCount) flashcards", detail: "ready from scanned pages")
-                        accountRow(systemName: "cube.transparent", title: "\(modelCount) models", detail: "interactive diagrams found")
                         accountRow(systemName: "text.magnifyingglass", title: "\(keywordCount) keywords", detail: "searchable across journals")
+                        accountRow(systemName: "gamecontroller.fill", title: "\(reviewCount) review moves", detail: "earned from study sessions")
                     }
 
                     accountSection("insights") {
@@ -79,26 +80,19 @@ struct AccountCenterView: View {
                         legalButton(.privacy)
                     }
 
-                    Button {
-                        Haptics.warning()
-                        dismiss()
-                        store.signOut()
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .font(.system(size: 16, weight: .bold))
-                            Text("sign out")
-                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    HStack(spacing: 10) {
+                        accountExitButton(title: "sign out", symbol: "rectangle.portrait.and.arrow.right", destructive: false) {
+                            store.signOut()
                         }
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(NotebookTheme.ink, in: Capsule())
+                        accountExitButton(title: "delete account", symbol: "trash.fill", destructive: true) {
+                            store.deleteAccount()
+                        }
                     }
-                    .buttonStyle(.plain)
                     .padding(.top, 4)
                 }
                 .padding(20)
+                .scaleEffect(exitPressed ? 0.96 : 1)
+                .opacity(exitPressed ? 0.72 : 1)
             }
             .background(LivingPaperBackground().ignoresSafeArea())
             .navigationTitle("account")
@@ -230,6 +224,36 @@ struct AccountCenterView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
             dismiss()
         }
+    }
+
+    private func accountExitButton(title: String, symbol: String, destructive: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.warning()
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.8)) {
+                exitPressed = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                dismiss()
+                action()
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .bold))
+                Text(title)
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.74)
+            }
+            .foregroundStyle(destructive ? NotebookTheme.ink : .white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(destructive ? .white.opacity(0.72) : NotebookTheme.ink, in: Capsule())
+            .overlay {
+                Capsule().stroke(.white.opacity(0.58), lineWidth: 0.8)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var accountSubtitle: String {

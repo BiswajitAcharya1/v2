@@ -176,7 +176,7 @@ struct ScanView: View {
         switch store.scanPhase {
         case .framing: "place the page inside the frame"
         case .capturing: "holding the edges"
-        case .processing: "reading the handwriting"
+        case .processing: "cleaning the page"
         case .organizing: "placing the page"
         case .sorted: "saved to notebook"
         }

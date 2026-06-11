@@ -59,16 +59,9 @@ struct StudyFocusView: View {
             VStack(alignment: .leading, spacing: 22) {
                 header
                 quickActions
-                examPulsePanel
-                forgettingForecastPanel
-                conceptBridgePanel
                 smartLanes
                 insightCard
-                studyPathRail
                 recallStack
-                modelWorkbench
-                handwritingCard
-                coachBoard
                 recallPrompts
                 tapToStudy
                 flashcards
@@ -77,32 +70,6 @@ struct StudyFocusView: View {
             .padding(20)
         }
         .background(LivingPaperBackground().ignoresSafeArea())
-        .safeAreaInset(edge: .top, spacing: 0) {
-            StudyCommandIsland(
-                pulse: examPulse,
-                expanded: $commandIslandExpanded,
-                isReading: isReading,
-                sprintActive: sprintActive,
-                sprintRemaining: sprintRemaining,
-                onPrimary: {
-                    if let first = examPulse.actions.first {
-                        performExamPulseAction(first)
-                    }
-                },
-                onSpeak: {
-                    toggleReading()
-                },
-                onSprint: {
-                    toggleSprint()
-                },
-                onPick: { action in
-                    performExamPulseAction(action)
-                }
-            )
-            .padding(.horizontal, 20)
-            .padding(.top, 6)
-            .padding(.bottom, 8)
-        }
         .navigationTitle("")
         .toolbarTitleDisplayMode(.inline)
         .sheet(item: $selectedTerm) { term in
@@ -202,33 +169,9 @@ struct StudyFocusView: View {
                     toggleSprint()
                 }
 
-                StudyQuickButton(symbol: "graduationcap.fill", text: nil) {
-                    Haptics.open()
-                    showingExamBlueprint = true
-                }
-
                 StudyQuickButton(symbol: "text.bubble.fill", text: nil) {
                     Haptics.open()
                     showingPageAsk = true
-                }
-
-                StudyQuickButton(symbol: "rectangle.stack.fill", text: nil) {
-                    Haptics.selection()
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
-                        recallIndex = 0
-                        recallRevealed = false
-                        recallDrag = .zero
-                    }
-                }
-
-                StudyQuickButton(symbol: "questionmark.bubble.fill", text: nil) {
-                    Haptics.selection()
-                    selectedTerm = StudyTerm(text: (activePage.content.insight.quickQuestions.first ?? activePage.content.insight.recallPrompts.first) ?? "what matters most?")
-                }
-
-                StudyQuickButton(symbol: "target", text: nil) {
-                    Haptics.open()
-                    showingPracticeDrill = true
                 }
             }
             .padding(10)
@@ -750,27 +693,18 @@ struct StudyFocusView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Text("read aloud")
                     .font(.system(.headline, design: .rounded, weight: .semibold))
-                HStack(spacing: 14) {
-                    ForEach(PlaybackStyle.allCases) { style in
-                        Button {
-                            Haptics.open()
-                            if isReading {
-                                speechSynthesizer.stopSpeaking(at: .immediate)
-                                isReading = false
-                            } else {
-                                isReading = true
-                                Task { @MainActor in
-                                    playback = await store.readAloud(activePage, style: style)
-                                    await play(activePage.content.cleanedText, style: style, playback: playback)
-                                }
-                            }
-                        } label: {
-                            VoiceStyleButton(style: style, active: isReading)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                Button {
+                    toggleReading()
+                } label: {
+                    Label(isReading ? "stop reading" : "read page", systemImage: isReading ? "stop.fill" : "speaker.wave.2.fill")
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(NotebookTheme.ink, in: Capsule())
                 }
-                Text(playback?.summary ?? (isReading ? "reading now" : "choose a playback style"))
+                .buttonStyle(.plain)
+                Text(playback?.summary ?? (isReading ? "reading now" : "focused review voice"))
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(NotebookTheme.muted)
             }
@@ -2497,7 +2431,7 @@ private enum PracticeDrillGenerator {
                 prompt: "which formula belongs here?",
                 answer: formula,
                 options: options(answer: formula, pool: pool),
-                reason: "vellum found this formula in the scanned notes."
+                reason: "folio found this formula in the scanned notes."
             ))
         }
 

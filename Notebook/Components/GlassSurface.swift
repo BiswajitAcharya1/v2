@@ -348,9 +348,9 @@ enum LegalDocument: String, Identifiable {
     var summary: String {
         switch self {
         case .terms:
-            "clear rules for using vellum as a study notebook."
+            "clear rules for using folio as a study notebook."
         case .privacy:
-            "how vellum handles notes, account data, scans, and voice setup."
+            "how folio handles notes, account data, scans, and voice setup."
         }
     }
 
@@ -359,14 +359,14 @@ enum LegalDocument: String, Identifiable {
         case .terms:
             [
                 ("your account", "use accurate sign up information, keep your password private, and only use accounts you are allowed to access."),
-                ("your notes", "you keep ownership of notes you scan or type. vellum organizes them so you can study, search, listen, and review."),
+                ("your notes", "you keep ownership of notes you scan or type. folio organizes them so you can study, search, listen, and review."),
                 ("ai study tools", "ai explanations, flashcards, and only what matters are study aids. check important answers against your class materials."),
                 ("acceptable use", "do not upload content you do not have the right to use, try to break the app, or use another person's account."),
                 ("changes", "features may improve over time. when terms change, the app should make the updated version easy to review.")
             ]
         case .privacy:
             [
-                ("data we save", "vellum stores your account session, subjects, notebooks, scanned pages, written notes, study state, and optional voice samples on device."),
+                ("data we save", "folio stores your account session, subjects, notebooks, scanned pages, written notes, study state, and optional voice samples on device."),
                 ("scans and text", "scanned notes are processed to extract readable text, tables, diagrams, and subject labels so pages can be filed into notebooks."),
                 ("voice setup", "voice recording is optional. if you use it, the app stores short samples and transcripts so reading features can personalize playback."),
                 ("sign in", "email sign in is stored on device. apple and google connect once credentials are added."),

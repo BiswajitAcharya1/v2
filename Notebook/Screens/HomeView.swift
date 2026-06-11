@@ -29,12 +29,7 @@ struct HomeView: View {
                 header
                 journalCarousel
                 if revealDetailSurfaces {
-                    memoryMapRibbon
                     dailyBriefStrip
-                    presentationRunwayPanel
-                    autopilotCapsule
-                    modelReadinessCapsule
-                    modelReadyToast
                     reviewPulseStrip
                 }
             }
@@ -191,6 +186,11 @@ struct HomeView: View {
                                             selectedJournalIndex = index
                                         }
                                     }
+                                } onCustomize: {
+                                    withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+                                        selectedJournalIndex = index
+                                        stylingNotebook = store.notebook(with: notebook.id) ?? notebook
+                                    }
                                 }
                                 .frame(width: cardWidth)
                             }
@@ -234,23 +234,6 @@ struct HomeView: View {
                 journalIndexRail
                     .padding(.top, 502)
 
-                if let activeNotebook {
-                    Button {
-                        Haptics.open()
-                        stylingNotebook = activeNotebook
-                    } label: {
-                        Image(systemName: "paintpalette.fill")
-                            .font(.system(size: 15, weight: .bold))
-                            .frame(width: 46, height: 46)
-                    }
-                    .buttonStyle(FloatingCircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(.top, 16)
-                    .padding(.trailing, 22)
-                    .opacity(entered ? 1 : 0)
-                    .offset(y: entered ? 0 : -8)
-                    .accessibilityLabel("customize notebook")
-                }
             }
         }
         .frame(height: 550)
@@ -989,7 +972,7 @@ private struct NotebookStyleSheet: View {
                     CompositionCoverFace(
                         subject: liveNotebook.subject,
                         cornerRadius: 18,
-                        spineWidth: 7.25,
+                        spineWidth: 12,
                         labelWidth: 106,
                         labelHeight: 82,
                         labelOffsetY: 24,
@@ -1112,9 +1095,9 @@ private struct CourseSuggestionBook: View {
                 CompositionCoverFace(
                     subject: subject,
                     cornerRadius: 16,
-                    spineWidth: 7,
-                    labelWidth: 70,
-                    labelHeight: 56,
+                    spineWidth: 10,
+                    labelWidth: 58,
+                    labelHeight: 46,
                     labelOffsetY: 16,
                     paperGrainDensity: 44
                 )
@@ -2144,7 +2127,7 @@ private struct HomeDoodleLayer: View {
     }
 
     private func drawFormula(in context: inout GraphicsContext, at point: CGPoint, color: Color) {
-        let text = Text("f(x)  notes")
+        let text = Text("scan  study")
             .font(.system(size: 14, weight: .semibold, design: .serif))
             .foregroundStyle(color)
         context.draw(text, at: point)

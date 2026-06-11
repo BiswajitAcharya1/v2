@@ -120,7 +120,7 @@ struct AuthView: View {
                                 .animation(.spring(response: 0.96, dampingFraction: 0.9).delay(Double(index) * 0.09), value: notebookOpen)
                             }
                         }
-                        .frame(maxWidth: 330)
+                        .frame(maxWidth: 292)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                         .padding(.horizontal, 28)
                         .opacity(Double((openProgress - 0.54) / 0.46))
@@ -137,7 +137,7 @@ struct AuthView: View {
             CompositionCoverFace(
                 subject: nil,
                 cornerRadius: 22,
-                spineWidth: 7,
+                spineWidth: 12,
                 labelWidth: 152,
                 labelHeight: 104,
                 labelOffsetY: 36,
@@ -382,8 +382,8 @@ struct AuthView: View {
                         .minimumScaleFactor(0.78)
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 10)
                 .frame(maxWidth: .infinity)
                 .background(.white.opacity(0.68), in: Capsule())
                 .overlay {
@@ -511,15 +511,6 @@ struct AuthView: View {
                     }
                 }
 
-                AuthKeyboardPreview(
-                    typedCount: username.count + email.count + password.count + confirmPassword.count,
-                    compact: isSignIn
-                )
-                .frame(height: isSignIn ? 70 : 84)
-                .padding(.top, 2)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-
                 if let message = store.authMessage {
                     Text(message)
                         .font(.system(.footnote, design: .rounded, weight: .medium))
@@ -643,110 +634,6 @@ private struct AuthField: View {
             text: $text,
             keyboardType: keyboardType
         )
-    }
-}
-
-private struct AuthKeyboardPreview: View {
-    var typedCount: Int
-    var compact: Bool
-    @State private var glow = false
-
-    private let rows = [
-        ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
-        ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
-        ["z", "x", "c", "v", "b", "n", "m"]
-    ]
-
-    var body: some View {
-        GeometryReader { proxy in
-            let keyGap = max(3, proxy.size.width * 0.012)
-            let keyHeight = max(16, proxy.size.height * (compact ? 0.22 : 0.24))
-
-            VStack(spacing: keyGap) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
-                    HStack(spacing: keyGap) {
-                        ForEach(Array(row.enumerated()), id: \.offset) { keyIndex, key in
-                            keyCap(
-                                key,
-                                active: activeKey(row: rowIndex, index: keyIndex),
-                                height: keyHeight
-                            )
-                        }
-                    }
-                    .padding(.horizontal, rowInset(rowIndex, width: proxy.size.width))
-                }
-                HStack(spacing: keyGap) {
-                    keyCap("123", active: typedCount.isMultiple(of: 11) && typedCount > 0, height: keyHeight, width: proxy.size.width * 0.16)
-                    keyCap("space", active: typedCount.isMultiple(of: 7) && typedCount > 0, height: keyHeight, width: proxy.size.width * 0.44)
-                    keyCap("go", active: typedCount.isMultiple(of: 5) && typedCount > 0, height: keyHeight, width: proxy.size.width * 0.16)
-                }
-                .padding(.horizontal, proxy.size.width * 0.12)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .fill(NotebookTheme.paper.opacity(0.3))
-                    }
-                    .overlay(alignment: glow ? .bottomTrailing : .topLeading) {
-                        Circle()
-                            .fill(.white.opacity(0.28))
-                            .frame(width: 86, height: 86)
-                            .blur(radius: 20)
-                            .offset(x: glow ? 24 : -18, y: glow ? 16 : -16)
-                    }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(.white.opacity(0.58), lineWidth: 0.8)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        }
-        .opacity(0.86)
-        .scaleEffect(typedCount > 0 ? 1 : 0.985)
-        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: typedCount)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
-                glow = true
-            }
-        }
-    }
-
-    private func keyCap(_ title: String, active: Bool, height: CGFloat, width: CGFloat? = nil) -> some View {
-        Text(title)
-            .font(.system(size: title.count > 1 ? 9.5 : 10.5, weight: .semibold, design: .rounded))
-            .foregroundStyle(active ? .white : NotebookTheme.ink.opacity(0.72))
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-            .frame(maxWidth: width == nil ? .infinity : nil)
-            .frame(width: width, height: height)
-            .background(active ? NotebookTheme.ink.opacity(0.82) : .white.opacity(0.54), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(.white.opacity(active ? 0.3 : 0.54), lineWidth: 0.7)
-            }
-            .scaleEffect(active ? 1.08 : 1)
-            .shadow(color: .black.opacity(active ? 0.09 : 0.035), radius: active ? 5 : 2, y: active ? 3 : 1)
-            .animation(.spring(response: 0.28, dampingFraction: 0.72), value: active)
-    }
-
-    private func rowInset(_ row: Int, width: CGFloat) -> CGFloat {
-        switch row {
-        case 1: width * 0.045
-        case 2: width * 0.12
-        default: 0
-        }
-    }
-
-    private func activeKey(row: Int, index: Int) -> Bool {
-        guard typedCount > 0 else { return false }
-        let allKeysBeforeRow = rows.prefix(row).reduce(0) { $0 + $1.count }
-        let keyIndex = allKeysBeforeRow + index
-        return keyIndex == typedCount % rows.flatMap { $0 }.count
     }
 }
 

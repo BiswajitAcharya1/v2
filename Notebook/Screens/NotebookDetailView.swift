@@ -59,14 +59,8 @@ struct NotebookDetailView: View {
 
             VStack(spacing: 8) {
                 notebookChrome
-                if !liveNotebook.pages.isEmpty {
-                    notebookSearch
-                }
                 pageReader
                     .layoutPriority(1)
-                if !pages.isEmpty {
-                    notebookActionRail
-                }
             }
             .padding(.horizontal, 4)
             .padding(.top, 8)
@@ -197,6 +191,17 @@ struct NotebookDetailView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
                     .id(currentPage.id)
             }
+
+            if !liveNotebook.pages.isEmpty {
+                ShareLink(item: shareNotebookText) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .frame(width: 38, height: 38)
+                        .background(.white.opacity(0.62), in: Circle())
+                }
+                .accessibilityLabel("share notebook")
+            }
         }
         .padding(6)
         .background(.ultraThinMaterial, in: Capsule())
@@ -263,6 +268,15 @@ struct NotebookDetailView: View {
         return "page \(left)"
     }
 
+    private var shareNotebookText: String {
+        let body = liveNotebook.pages
+            .map { page in
+                "\(page.title.lowercased())\n\(page.content.cleanedText)"
+            }
+            .joined(separator: "\n\n")
+        return "\(liveNotebook.subject.lowercased()) notebook\n\n\(body)"
+    }
+
     private var pageReader: some View {
         ZStack {
             if currentPage != nil {
@@ -320,134 +334,55 @@ struct NotebookDetailView: View {
         let scale = compact ? textScale * 0.82 : textScale
         return VStack(alignment: .leading, spacing: 12) {
             pageHeader(page, index: index, scale: scale)
-            PageInsightStrip(insight: page.content.insight, scale: scale) { prompt in
-                Haptics.selection()
-                selectedPage = page
-            }
-            SmartPageActionDock(
-                page: page,
-                scale: scale,
-                cardCount: store.flashcards(for: page).count,
-                textScale: textScale,
-                onBoost: {
-                    Haptics.success()
-                    store.preparePageForStudy(pageID: page.id)
-                },
-                onStudy: {
+            TextEditor(text: editableText(for: page))
+                .font(.system(size: 16 * scale, weight: .regular, design: .rounded))
+                .scrollContentBackground(.hidden)
+                .foregroundStyle(NotebookTheme.ink)
+                .tint(NotebookTheme.ink)
+                .lineSpacing(5)
+                .frame(minHeight: 460, maxHeight: .infinity)
+
+            HStack(spacing: 10) {
+                pageAction(symbol: "speaker.wave.2.fill", label: "read") {
                     Haptics.open()
                     selectedPage = page
-                },
-                onModel: {
-                    Haptics.success()
-                    store.generateStudyModel(for: page.id)
-                },
-                onInk: {
+                }
+                pageAction(symbol: "sparkles", label: "study") {
                     Haptics.open()
-                    selectedInkPage = page
-                },
-                onResize: {
+                    selectedPage = page
+                }
+                pageAction(symbol: "textformat.size", label: "size") {
                     Haptics.selection()
                     withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
                         textScale = textScale >= 1.32 ? 0.92 : textScale + 0.14
                     }
                 }
-            )
-            ModelForgeStrip(plan: store.modelForgePlan(for: page), scale: scale) {
-                Haptics.success()
-                if page.content.models.isEmpty {
-                    store.generateStudyModel(for: page.id)
-                }
-                selectedPage = store.page(with: page.id) ?? page
             }
-            PageCaptureDeck(
-                page: page,
-                cardCount: store.flashcards(for: page).count,
-                scale: scale,
-                onInk: {
-                    Haptics.open()
-                    selectedInkPage = page
-                },
-                onModel: {
-                    Haptics.success()
-                    store.generateStudyModel(for: page.id)
-                },
-                onStudy: {
-                    Haptics.open()
-                    selectedPage = page
-                },
-                onRepair: {
-                    Haptics.success()
-                    store.repairScanLayout(pageID: page.id)
-                }
-            )
-
-            if isEditing && currentPage?.id == page.id {
-                TextEditor(text: $editedText)
-                    .font(.system(size: 16 * scale, weight: .regular, design: .rounded))
-                    .scrollContentBackground(.hidden)
-                    .foregroundStyle(NotebookTheme.ink)
-                    .frame(minHeight: 360, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        if page.content.sections.count > 1 {
-                            ForEach(page.content.sections) { section in
-                                VStack(alignment: .leading, spacing: 7) {
-                                    Text(section.title)
-                                        .font(.system(size: 15 * scale, weight: .semibold, design: .serif))
-                                        .foregroundStyle(NotebookTheme.ink.opacity(0.76))
-                                    InteractiveStudyText(
-                                        text: section.body,
-                                        keywords: page.content.keywords,
-                                        formulas: page.content.formulas,
-                                        scale: scale
-                                    ) { term in
-                                        Haptics.selection()
-                                        focusedTerm = PageTermFocus(term: term, page: page)
-                                    }
-                                }
-                            }
-                        } else {
-                            InteractiveStudyText(
-                                text: page.content.cleanedText,
-                                keywords: page.content.keywords,
-                                formulas: page.content.formulas,
-                                scale: scale
-                            ) { term in
-                                Haptics.selection()
-                                focusedTerm = PageTermFocus(term: term, page: page)
-                            }
-                        }
-
-                        ForEach(page.content.formulas, id: \.self) { formula in
-                            Button {
-                                Haptics.selection()
-                                focusedTerm = PageTermFocus(term: formula, page: page)
-                            } label: {
-                                Text(formula)
-                                    .font(.system(size: 17 * scale, weight: .semibold, design: .monospaced))
-                                    .foregroundStyle(NotebookTheme.ink)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        ForEach(page.content.tables) { table in
-                            DetectedTableView(table: table)
-                        }
-
-                        ForEach(page.content.models) { model in
-                            DetectedModelView(model: model)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(minHeight: 360, maxHeight: .infinity)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func editableText(for page: NotebookPage) -> Binding<String> {
+        Binding(
+            get: {
+                store.page(with: page.id)?.content.cleanedText ?? page.content.cleanedText
+            },
+            set: { newValue in
+                store.updatePageText(pageID: page.id, text: newValue)
+            }
+        )
+    }
+
+    private func pageAction(symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(label, systemImage: symbol)
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(NotebookTheme.ink)
+                .padding(.horizontal, 12)
+                .frame(height: 38)
+                .background(.white.opacity(0.56), in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private func pageHeader(_ page: NotebookPage, index: Int, scale: Double) -> some View {
@@ -463,16 +398,6 @@ struct NotebookDetailView: View {
             }
 
             Spacer(minLength: 8)
-
-            HStack(spacing: 5) {
-                PageSignalDot(symbol: "text.viewfinder", count: page.content.keywords.count)
-                if !page.content.tables.isEmpty {
-                    PageSignalDot(symbol: "tablecells", count: page.content.tables.count)
-                }
-                if !page.content.models.isEmpty {
-                    PageSignalDot(symbol: "cube.transparent", count: page.content.models.count)
-                }
-            }
         }
         .padding(.bottom, 2)
     }
@@ -570,14 +495,12 @@ struct NotebookDetailView: View {
                         .font(.system(.title3, design: .serif, weight: .semibold))
                         .foregroundStyle(NotebookTheme.ink)
                     Button {
-                        Haptics.softTap()
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
-                            query = ""
-                        }
+                        clearSearch()
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .bold))
                             .frame(width: 54, height: 54)
+                            .rotationEffect(.degrees(searchCloseRotation))
                     }
                     .buttonStyle(FloatingCircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
                     Spacer()

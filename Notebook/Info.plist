@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>vellum</string>
+	<string>folio</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -25,15 +25,15 @@
 	<key>NSAccentColorName</key>
 	<string>AccentColor</string>
 	<key>NSCameraUsageDescription</key>
-	<string>vellum uses the camera to scan study pages.</string>
+	<string>folio uses the camera to scan study pages.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>vellum uses face id to verify password reset requests.</string>
+	<string>folio uses face id to verify password reset requests.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>vellum uses the microphone for optional voice personalization.</string>
+	<string>folio uses the microphone for optional voice personalization.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>vellum can import a note photo when the simulator has no camera.</string>
+	<string>folio can import a note photo when the simulator has no camera.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>vellum transcribes your optional voice setup recording.</string>
+	<string>folio transcribes your optional voice setup recording.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
