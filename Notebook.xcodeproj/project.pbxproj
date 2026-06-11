@@ -21,7 +21,6 @@
 		10000000000000000000010C /* ScanView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000C /* ScanView.swift */; };
 		10000000000000000000010D /* NotebookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000D /* NotebookDetailView.swift */; };
 		10000000000000000000010E /* StudyFocusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000E /* StudyFocusView.swift */; };
-		10000000000000000000010F /* VoiceOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000000F /* VoiceOnboardingView.swift */; };
 		100000000000000000000110 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000010 /* Assets.xcassets */; };
 		100000000000000000000112 /* AppPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000012 /* AppPersistence.swift */; };
 		100000000000000000000113 /* DocumentScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* DocumentScannerView.swift */; };
@@ -56,7 +55,6 @@
 		10000000000000000000000C /* ScanView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanView.swift; sourceTree = "<group>"; };
 		10000000000000000000000D /* NotebookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookDetailView.swift; sourceTree = "<group>"; };
 		10000000000000000000000E /* StudyFocusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudyFocusView.swift; sourceTree = "<group>"; };
-		10000000000000000000000F /* VoiceOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceOnboardingView.swift; sourceTree = "<group>"; };
 		100000000000000000000010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		100000000000000000000012 /* AppPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPersistence.swift; sourceTree = "<group>"; };
 		100000000000000000000013 /* DocumentScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentScannerView.swift; sourceTree = "<group>"; };
@@ -180,7 +178,6 @@
 					100000000000000000000025 /* NotebookDetailComponents.swift */,
 					100000000000000000000029 /* ScanProcessingConstellation.swift */,
 					10000000000000000000000E /* StudyFocusView.swift */,
-				10000000000000000000000F /* VoiceOnboardingView.swift */,
 			);
 			path = Screens;
 			sourceTree = "<group>";
@@ -281,7 +278,6 @@
 				10000000000000000000010C /* ScanView.swift in Sources */,
 				10000000000000000000010D /* NotebookDetailView.swift in Sources */,
 				10000000000000000000010E /* StudyFocusView.swift in Sources */,
-				10000000000000000000010F /* VoiceOnboardingView.swift in Sources */,
 				100000000000000000000112 /* AppPersistence.swift in Sources */,
 				100000000000000000000113 /* DocumentScannerView.swift in Sources */,
 				100000000000000000000114 /* Haptics.swift in Sources */,
@@ -424,6 +420,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = K9QT25YK23;
+				ENABLE_ON_DEMAND_RESOURCES = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Notebook/Info.plist;
@@ -457,6 +454,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = K9QT25YK23;
+				ENABLE_ON_DEMAND_RESOURCES = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Notebook/Info.plist;

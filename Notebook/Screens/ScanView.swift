@@ -10,8 +10,12 @@ struct ScanView: View {
         NavigationStack {
             ZStack {
                 LinearGradient(
-                    colors: [Color(red: 0.08, green: 0.08, blue: 0.075), Color(red: 0.28, green: 0.27, blue: 0.24)],
-                    startPoint: .top,
+                    colors: [
+                        Color(red: 0.045, green: 0.047, blue: 0.044),
+                        Color(red: 0.16, green: 0.155, blue: 0.14),
+                        Color(red: 0.08, green: 0.078, blue: 0.072)
+                    ],
+                    startPoint: .topLeading,
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
@@ -24,7 +28,7 @@ struct ScanView: View {
                     }
                 }
 
-                VStack(spacing: 18) {
+                VStack(spacing: 22) {
                     Spacer()
                     phasePanel
                     captureButton
@@ -59,9 +63,17 @@ struct ScanView: View {
 
     private func scannerStage(seconds: TimeInterval) -> some View {
         ZStack {
+            RoundedRectangle(cornerRadius: 42, style: .continuous)
+                .fill(.white.opacity(0.045))
+                .frame(width: 336, height: 466)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 42, style: .continuous)
+                        .stroke(.white.opacity(0.08), lineWidth: 1)
+                }
+
             RoundedRectangle(cornerRadius: 30, style: .continuous)
                 .fill(NotebookTheme.paper.opacity(0.92))
-                .frame(width: 292, height: 410)
+                .frame(width: 278, height: 394)
                 .rotationEffect(.degrees(pageFlying ? -9 : 1.5))
                 .offset(y: pageFlying ? -210 : -16)
                 .scaleEffect(pageFlying ? 0.54 : 1)
@@ -74,12 +86,12 @@ struct ScanView: View {
                 .shadow(color: .black.opacity(0.26), radius: 22, y: 16)
 
             EdgeGuide(seconds: seconds, phase: store.scanPhase)
-                .frame(width: 318, height: 438)
+                .frame(width: 306, height: 422)
                 .offset(y: -16)
 
             if store.scanPhase != .framing {
                 CaptureGlow(seconds: seconds)
-                    .frame(width: 292, height: 410)
+                    .frame(width: 278, height: 394)
                     .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
                     .offset(y: -16)
                     .transition(.opacity.combined(with: .scale))
@@ -90,41 +102,61 @@ struct ScanView: View {
     }
 
     private var phasePanel: some View {
-        GlassSurface(radius: 24, padding: 18, interactive: true) {
-            VStack(spacing: 12) {
-                HStack(spacing: 11) {
-                    ZStack {
-                        Circle()
-                            .fill(.white.opacity(0.18))
-                        Image(systemName: icon(for: store.scanPhase))
-                            .font(.system(size: 16, weight: .bold))
-                    }
-                    .frame(width: 40, height: 40)
+        VStack(spacing: 10) {
+            HStack(spacing: 11) {
+                Image(systemName: icon(for: store.scanPhase))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .frame(width: 34, height: 34)
+                    .background(.white.opacity(0.86), in: Circle())
+                    .contentTransition(.symbolEffect(.replace))
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(store.scanPhase.caption)
-                            .font(.system(.headline, design: .rounded, weight: .semibold))
-                        Text(phaseDetail)
-                            .font(.system(.caption, design: .rounded, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(store.scanPhase.caption)
+                        .font(.system(.headline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Text(phaseDetail)
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.66))
+                        .lineLimit(2)
                 }
-                .foregroundStyle(.white)
 
-                ScannerPhaseRail(activePhase: store.scanPhase)
-                ScannerModelRibbon(activePhase: store.scanPhase)
+                Spacer(minLength: 0)
             }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(.white.opacity(0.14))
+                    Capsule()
+                        .fill(.white.opacity(0.84))
+                        .frame(width: proxy.size.width * progress)
+                }
+            }
+            .frame(height: 5)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(.white.opacity(0.22), lineWidth: 0.8)
+        }
+        .animation(.spring(response: 0.48, dampingFraction: 0.84), value: store.scanPhase)
+    }
+
+    private var progress: CGFloat {
+        guard let index = ScanPhase.allCases.firstIndex(of: store.scanPhase) else { return 0.2 }
+        return CGFloat(index + 1) / CGFloat(ScanPhase.allCases.count)
     }
 
     private var phaseDetail: String {
         switch store.scanPhase {
-        case .framing: "line up the page. capture as many sheets as you need."
-        case .capturing: "visionkit locks page edges and keeps the scan native."
-        case .processing: "surya reads handwriting while sam and triposr inspect diagrams."
-        case .organizing: "gemma classifies the notes and page structure."
-        case .sorted: "the notebook is ready."
+        case .framing: "place the page inside the frame"
+        case .capturing: "holding the edges"
+        case .processing: "reading the handwriting"
+        case .organizing: "placing the page"
+        case .sorted: "saved to notebook"
         }
     }
 
@@ -149,89 +181,13 @@ struct ScanView: View {
     private func icon(for phase: ScanPhase) -> String {
         switch phase {
         case .framing: "viewfinder"
-        case .capturing: "sparkles"
-        case .processing: "wand.and.rays"
-        case .organizing: "tray.and.arrow.down.fill"
-        case .sorted: "checkmark.seal.fill"
+        case .capturing: "camera.aperture"
+        case .processing: "text.viewfinder"
+        case .organizing: "tray.and.arrow.down"
+        case .sorted: "checkmark"
         }
     }
 
-}
-
-private struct ScannerModelRibbon: View {
-    var activePhase: ScanPhase
-
-    private let models: [(ScanPhase, String, String)] = [
-        (.capturing, "doc.viewfinder", "visionkit"),
-        (.processing, "text.viewfinder", "surya"),
-        (.processing, "scope", "sam 3d"),
-        (.processing, "cube.transparent", "triposr"),
-        (.organizing, "sparkle.magnifyingglass", "gemma")
-    ]
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(models, id: \.2) { model in
-                    HStack(spacing: 6) {
-                        Image(systemName: model.1)
-                            .font(.system(size: 11, weight: .bold))
-                        Text(model.2)
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    }
-                    .foregroundStyle(.white.opacity(isActive(model.0) ? 0.96 : 0.44))
-                    .padding(.horizontal, 10)
-                    .frame(height: 30)
-                    .background(.white.opacity(isActive(model.0) ? 0.18 : 0.08), in: Capsule())
-                    .overlay {
-                        Capsule().stroke(.white.opacity(isActive(model.0) ? 0.3 : 0.12), lineWidth: 0.7)
-                    }
-                    .scaleEffect(activePhase == model.0 ? 1.02 : 1)
-                    .animation(.spring(response: 0.38, dampingFraction: 0.78), value: activePhase)
-                }
-            }
-            .padding(.horizontal, 2)
-        }
-        .mask {
-            LinearGradient(colors: [.clear, .white, .white, .clear], startPoint: .leading, endPoint: .trailing)
-        }
-    }
-
-    private func isActive(_ target: ScanPhase) -> Bool {
-        guard let current = ScanPhase.allCases.firstIndex(of: activePhase),
-              let target = ScanPhase.allCases.firstIndex(of: target) else { return false }
-        return target <= current
-    }
-}
-
-private struct ScannerPhaseRail: View {
-    var activePhase: ScanPhase
-
-    var body: some View {
-        HStack(spacing: 7) {
-            ForEach(ScanPhase.allCases) { phase in
-                let active = stepIsActive(phase)
-                Capsule()
-                    .fill(active ? .white : .white.opacity(0.18))
-                    .frame(width: activePhase == phase ? 34 : 8, height: 6)
-                    .overlay {
-                        if activePhase == phase {
-                            Capsule()
-                                .fill(.white.opacity(0.36))
-                                .blur(radius: 4)
-                        }
-                    }
-                    .animation(.spring(response: 0.42, dampingFraction: 0.76), value: activePhase)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func stepIsActive(_ phase: ScanPhase) -> Bool {
-        guard let current = ScanPhase.allCases.firstIndex(of: activePhase),
-              let target = ScanPhase.allCases.firstIndex(of: phase) else { return false }
-        return target <= current
-    }
 }
 
 private struct FloatingScanButton: View {
@@ -242,10 +198,10 @@ private struct FloatingScanButton: View {
         ZStack {
             ForEach(0..<3, id: \.self) { index in
                 Circle()
-                    .stroke(.white.opacity(isRunning ? 0.18 : 0.08), lineWidth: 1)
-                    .frame(width: 86 + CGFloat(index * 18), height: 86 + CGFloat(index * 18))
-                    .scaleEffect(isRunning ? 1.08 + CGFloat(index) * 0.04 : 0.92)
-                    .opacity(isRunning ? 1 - Double(index) * 0.24 : 0.45)
+                    .stroke(.white.opacity(isRunning ? 0.16 : 0.06), lineWidth: 1)
+                    .frame(width: 82 + CGFloat(index * 16), height: 82 + CGFloat(index * 16))
+                    .scaleEffect(isRunning ? 1.05 + CGFloat(index) * 0.035 : 0.94)
+                    .opacity(isRunning ? 0.72 - Double(index) * 0.16 : 0.34)
             }
 
             Circle()
@@ -261,14 +217,14 @@ private struct FloatingScanButton: View {
                         endRadius: 86
                     )
                 )
-                .frame(width: 80, height: 80)
+                .frame(width: 76, height: 76)
                 .overlay {
                     Circle().stroke(.white.opacity(0.86), lineWidth: 1)
                 }
-                .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
+                .shadow(color: .black.opacity(0.2), radius: 16, y: 10)
 
             Image(systemName: isRunning ? "arrow.counterclockwise" : icon)
-                .font(.system(size: 25, weight: .bold))
+                .font(.system(size: 23, weight: .semibold))
                 .foregroundStyle(NotebookTheme.ink)
                 .rotationEffect(.degrees(isRunning ? 180 : 0))
                 .contentTransition(.symbolEffect(.replace))
@@ -283,9 +239,9 @@ private struct FloatingScanButton: View {
     private var icon: String {
         switch phase {
         case .framing: "camera.viewfinder"
-        case .capturing: "sparkles"
-        case .processing: "wand.and.rays"
-        case .organizing: "tray.and.arrow.down.fill"
+        case .capturing: "camera.aperture"
+        case .processing: "text.viewfinder"
+        case .organizing: "tray.and.arrow.down"
         case .sorted: "checkmark"
         }
     }
@@ -297,7 +253,7 @@ private struct ScanAtmosphere: View {
 
     var body: some View {
         Canvas(rendersAsynchronously: true) { context, size in
-            for index in 0..<12 {
+            for index in 0..<7 {
                 let y = size.height * CGFloat(index) / 11
                 let drift = CGFloat(sin(seconds * 0.42 + Double(index))) * 18
                 var path = Path()
@@ -309,12 +265,12 @@ private struct ScanAtmosphere: View {
                 )
                 context.stroke(
                     path,
-                    with: .color(.white.opacity(phase == .framing ? 0.045 : 0.075)),
-                    style: StrokeStyle(lineWidth: index.isMultiple(of: 3) ? 1.2 : 0.7, lineCap: .round)
+                    with: .color(.white.opacity(phase == .framing ? 0.035 : 0.055)),
+                    style: StrokeStyle(lineWidth: index.isMultiple(of: 3) ? 1 : 0.6, lineCap: .round)
                 )
             }
 
-            for index in 0..<20 {
+            for index in 0..<9 {
                 let x = size.width * CGFloat((index * 37) % 101) / 100
                 let y = size.height * CGFloat((index * 53) % 97) / 100
                 let pulse = CGFloat((sin(seconds * 0.9 + Double(index)) + 1) / 2)

@@ -36,6 +36,8 @@ private struct SetupFlowView: View {
     @Environment(NotebookStore.self) private var store
     @State private var subjectDraft = ""
     @State private var subjects: [String] = []
+    @State private var recordTaskActive = false
+    @State private var retakeRotation = 0.0
     private let prompts = [
         "today i will study with calm focus.",
         "explain this page like a patient tutor.",
@@ -127,6 +129,23 @@ private struct SetupFlowView: View {
                     level: store.voiceRecordingLevel
                 )
 
+                if let transcript = store.latestVoiceTranscript, store.isRecordingVoice {
+                    HStack(spacing: 8) {
+                        Image(systemName: "quote.bubble.fill")
+                            .font(.system(size: 11, weight: .bold))
+                        Text(transcript)
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.72)
+                    }
+                    .foregroundStyle(NotebookTheme.ink.opacity(0.74))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.96)))
+                }
+
                 VoiceProgress(count: store.voiceProfile.samples.count, total: prompts.count, recording: store.isRecordingVoice, preparing: store.isPreparingVoiceRecording)
                 VoiceRecordingReadout(
                     elapsed: store.voiceRecordingElapsed,
@@ -148,21 +167,22 @@ private struct SetupFlowView: View {
                 HStack(spacing: 14) {
                     Button {
                         Haptics.softTap()
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.72)) {
+                            retakeRotation -= 90
+                        }
                         store.retakeVoicePrompt()
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
                             .font(.system(size: 18, weight: .bold))
                             .frame(width: 56, height: 56)
+                            .rotationEffect(.degrees(retakeRotation))
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.muted.opacity(0.6), foreground: NotebookTheme.ink))
                     .disabled(store.voiceProfile.samples.isEmpty || store.isRecordingVoice || store.isPreparingVoiceRecording)
                     .opacity(store.voiceProfile.samples.isEmpty || store.isRecordingVoice || store.isPreparingVoiceRecording ? 0.38 : 1)
 
                     Button {
-                        Haptics.open()
-                        Task {
-                            await store.recordVoicePrompt(currentVoicePrompt)
-                        }
+                        recordCurrentPrompt()
                     } label: {
                         ZStack {
                             Circle()
@@ -175,10 +195,24 @@ private struct SetupFlowView: View {
                         }
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
-                    .disabled(store.isPreparingVoiceRecording)
-                    .scaleEffect(store.isPreparingVoiceRecording ? 0.96 : 1)
+                    .disabled(store.isPreparingVoiceRecording || recordTaskActive)
+                    .scaleEffect(store.isPreparingVoiceRecording || recordTaskActive ? 0.96 : 1)
                     .accessibilityLabel(store.isRecordingVoice ? "finish recording" : "start recording")
                 }
+            }
+        }
+    }
+
+    private func recordCurrentPrompt() {
+        guard !recordTaskActive else { return }
+        Haptics.open()
+        Task {
+            await MainActor.run {
+                recordTaskActive = true
+            }
+            await store.recordVoicePrompt(currentVoicePrompt)
+            await MainActor.run {
+                recordTaskActive = false
             }
         }
     }
@@ -198,7 +232,7 @@ private struct SetupFlowView: View {
     }
 
     private var voiceRecordSymbol: String {
-        if store.isPreparingVoiceRecording { return "ellipsis" }
+        if store.isPreparingVoiceRecording || recordTaskActive { return "ellipsis" }
         return store.isRecordingVoice ? "waveform" : "mic.fill"
     }
 
@@ -209,7 +243,7 @@ private struct SetupFlowView: View {
                     .font(.system(.title2, design: .serif, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
 
-                HStack(spacing: 10) {
+                HStack(alignment: .bottom, spacing: 10) {
                     GooeyInput(
                         label: "subject",
                         systemName: "magnifyingglass",

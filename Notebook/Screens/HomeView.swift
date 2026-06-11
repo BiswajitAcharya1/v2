@@ -752,7 +752,7 @@ struct HomeView: View {
                         .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
                     }
 
-                    HStack(alignment: .center, spacing: 10) {
+                    HStack(alignment: .bottom, spacing: 10) {
                         GooeyInput(
                             label: "course",
                             systemName: "magnifyingglass",

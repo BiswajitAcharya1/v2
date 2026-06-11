@@ -42,9 +42,11 @@ private extension OCRScanResult {
     var qualityScore: Double {
         let lineScore = min(0.22, Double(lines.count) * 0.018)
         let textScore = min(0.18, Double(rawText.count) / 900)
+        let wordScore = min(0.12, rawText.wordLikeRatio * 0.12)
         let tableScore = tables.isEmpty ? 0 : min(0.08, Double(tables.count) * 0.03)
         let garbagePenalty = rawText.garbageRatio * 0.28
-        return confidence * 0.62 + lineScore + textScore + tableScore - garbagePenalty
+        let repetitionPenalty = rawText.repeatedGlyphPenalty * 0.16
+        return confidence * 0.58 + lineScore + textScore + wordScore + tableScore - garbagePenalty - repetitionPenalty
     }
 }
 
@@ -183,7 +185,12 @@ private enum VisionOCRTextScanner {
         var results: [OCRScanResult] = []
 
         for variant in variants {
-            let result = await recognize(cgImage: variant.image, orientation: variant.orientation, name: variant.name)
+            let result = await recognize(
+                cgImage: variant.image,
+                orientation: variant.orientation,
+                name: variant.name,
+                minimumTextHeight: variant.minimumTextHeight
+            )
             results.append(result)
         }
         let best = bestResult(in: results)
@@ -199,20 +206,23 @@ private enum VisionOCRTextScanner {
         return best
     }
 
-    private static func recognize(cgImage: CGImage, orientation: CGImagePropertyOrientation, name: String) async -> OCRScanResult {
+    private static func recognize(
+        cgImage: CGImage,
+        orientation: CGImagePropertyOrientation,
+        name: String,
+        minimumTextHeight: Float
+    ) async -> OCRScanResult {
         await withCheckedContinuation { continuation in
             let request = VNRecognizeTextRequest { request, _ in
                 let observations = (request.results as? [VNRecognizedTextObservation] ?? [])
                     .sortedForReadingOrder()
                 let candidates = observations.compactMap { observation -> VNRecognizedText? in
-                    observation.topCandidates(3).first { candidate in
-                        candidate.string.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
-                    }
+                    OCRCandidateRanker.bestCandidate(from: observation.topCandidates(6))
                 }
                 let lines = candidates
                     .map(\.string)
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).normalizedOCRLine }
-                    .filter { !$0.isEmpty }
+                    .filter { !$0.isEmpty && $0.garbageRatio < 0.48 }
                 let averageConfidence = candidates.isEmpty
                     ? 0.14
                     : Double(candidates.reduce(Float(0)) { $0 + $1.confidence }) / Double(candidates.count)
@@ -228,7 +238,7 @@ private enum VisionOCRTextScanner {
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
             request.recognitionLanguages = ["en-US"]
-            request.minimumTextHeight = 0.008
+            request.minimumTextHeight = minimumTextHeight
             request.customWords = OCRVocabulary.studentNotebookWords
 
             let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
@@ -249,13 +259,42 @@ private enum VisionOCRTextScanner {
     }
 }
 
+private enum OCRCandidateRanker {
+    static func bestCandidate(from candidates: [VNRecognizedText]) -> VNRecognizedText? {
+        candidates
+            .filter { $0.string.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 }
+            .max { score($0) < score($1) }
+    }
+
+    private static func score(_ candidate: VNRecognizedText) -> Double {
+        let text = candidate.string.normalizedOCRLine
+        guard !text.isEmpty else { return -1 }
+        let usefulScore = 1 - text.garbageRatio
+        let wordScore = text.wordLikeRatio
+        let vocabularyScore = text.containsStudentNotebookWord ? 1.0 : 0.0
+        let lengthScore = min(0.08, Double(text.count) / 220)
+        let repetitionPenalty = text.repeatedGlyphPenalty
+        return Double(candidate.confidence) * 0.56
+            + usefulScore * 0.18
+            + wordScore * 0.14
+            + vocabularyScore * 0.08
+            + lengthScore
+            - repetitionPenalty * 0.22
+    }
+}
+
 private enum OCRVocabulary {
     static let studentNotebookWords = [
         "algebra", "geometry", "calculus", "derivative", "integral", "equation", "function", "limit",
-        "biology", "chemistry", "physics", "molecule", "atom", "cell", "mitosis", "photosynthesis",
-        "history", "government", "revolution", "treaty", "empire", "english", "literature", "theme",
+        "biology", "chemistry", "physics", "molecule", "atom", "cell", "mitosis", "meiosis", "photosynthesis",
+        "chlorophyll", "mitochondria", "nucleus", "enzyme", "protein", "ecosystem", "evolution",
+        "history", "government", "revolution", "treaty", "empire", "democracy", "constitution", "economy",
+        "english", "literature", "theme", "symbolism", "metaphor", "claim", "analysis",
         "thesis", "evidence", "paragraph", "computer", "algorithm", "variable", "loop", "array",
-        "hypothesis", "experiment", "example", "definition", "formula", "notes", "homework"
+        "hypothesis", "experiment", "example", "definition", "formula", "notes", "homework",
+        "quadratic", "polynomial", "matrix", "vector", "slope", "intercept", "velocity", "acceleration",
+        "force", "energy", "mass", "gravity", "electron", "proton", "neutron", "acid", "base",
+        "literary", "argument", "citation", "source", "primary", "secondary", "outline", "summary"
     ]
 }
 
@@ -268,25 +307,38 @@ private enum OCRImagePreprocessor {
         var name: String
         var image: CGImage
         var orientation: CGImagePropertyOrientation
+        var minimumTextHeight: Float
     }
 
     static func variants(from image: UIImage) -> [Variant] {
         guard let base = CIImage(image: image)?.oriented(forExifOrientation: image.imageOrientation.exifOrientation) else {
-            return image.cgImage.map { [Variant(name: "original", image: $0, orientation: CGImagePropertyOrientation(image.imageOrientation))] } ?? []
+            return image.cgImage.map {
+                [Variant(name: "original", image: $0, orientation: CGImagePropertyOrientation(image.imageOrientation), minimumTextHeight: 0.005)]
+            } ?? []
         }
 
         var variants: [Variant] = []
-        appendVariant(name: "original", image: base, to: &variants)
-        appendVariant(name: "paper", image: paperNormalized(base), to: &variants)
-        appendVariant(name: "ink", image: highContrastInk(base), to: &variants)
-        appendVariant(name: "pencil", image: faintPencilBoost(base), to: &variants)
-        appendVariant(name: "shadow", image: shadowLift(base), to: &variants)
+        let prepared = scaledForHandwriting(base)
+        appendVariant(name: "original", image: prepared, minimumTextHeight: 0.0055, to: &variants)
+        appendVariant(name: "paper", image: paperNormalized(prepared), minimumTextHeight: 0.005, to: &variants)
+        appendVariant(name: "ink", image: highContrastInk(prepared), minimumTextHeight: 0.005, to: &variants)
+        appendVariant(name: "pencil", image: faintPencilBoost(prepared), minimumTextHeight: 0.0045, to: &variants)
+        appendVariant(name: "shadow", image: shadowLift(prepared), minimumTextHeight: 0.0045, to: &variants)
+        appendVariant(name: "cursive", image: cursiveInkLift(prepared), minimumTextHeight: 0.004, to: &variants)
+        appendVariant(name: "thin strokes", image: thinStrokeRecovery(prepared), minimumTextHeight: 0.004, to: &variants)
         return variants
     }
 
-    private static func appendVariant(name: String, image: CIImage, to variants: inout [Variant]) {
+    private static func appendVariant(name: String, image: CIImage, minimumTextHeight: Float, to variants: inout [Variant]) {
         guard let cgImage = context.createCGImage(image, from: image.extent) else { return }
-        variants.append(Variant(name: name, image: cgImage, orientation: .up))
+        variants.append(Variant(name: name, image: cgImage, orientation: .up, minimumTextHeight: minimumTextHeight))
+    }
+
+    private static func scaledForHandwriting(_ image: CIImage) -> CIImage {
+        let longestSide = max(image.extent.width, image.extent.height)
+        guard longestSide > 0, longestSide < 1900 else { return image }
+        let scale = min(2.7, 1900 / longestSide)
+        return image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
     }
 
     private static func highContrastInk(_ image: CIImage) -> CIImage {
@@ -352,6 +404,42 @@ private enum OCRImagePreprocessor {
         return color.outputImage ?? shadows.outputImage ?? image
     }
 
+    private static func cursiveInkLift(_ image: CIImage) -> CIImage {
+        let shadows = CIFilter.highlightShadowAdjust()
+        shadows.inputImage = image
+        shadows.shadowAmount = 0.92
+        shadows.highlightAmount = 0.72
+
+        let color = CIFilter.colorControls()
+        color.inputImage = shadows.outputImage ?? image
+        color.saturation = 0
+        color.contrast = 1.92
+        color.brightness = 0.02
+
+        let sharpen = CIFilter.unsharpMask()
+        sharpen.inputImage = color.outputImage ?? image
+        sharpen.radius = 0.55
+        sharpen.intensity = 0.92
+        return sharpen.outputImage ?? color.outputImage ?? image
+    }
+
+    private static func thinStrokeRecovery(_ image: CIImage) -> CIImage {
+        let mono = CIFilter.colorControls()
+        mono.inputImage = image
+        mono.saturation = 0
+        mono.contrast = 1.36
+        mono.brightness = 0.12
+
+        let gamma = CIFilter.gammaAdjust()
+        gamma.inputImage = mono.outputImage ?? image
+        gamma.power = 0.62
+
+        let sharpen = CIFilter.sharpenLuminance()
+        sharpen.inputImage = gamma.outputImage ?? mono.outputImage ?? image
+        sharpen.sharpness = 0.88
+        return sharpen.outputImage ?? gamma.outputImage ?? mono.outputImage ?? image
+    }
+
 }
 
 private enum OCRLineFusion {
@@ -393,10 +481,45 @@ private enum OCRLineFusion {
 
 private extension String {
     var normalizedOCRLine: String {
-        var text = replacingOccurrences(of: #" {2,}"#, with: " ", options: .regularExpression)
+        var text = replacingOccurrences(of: "\u{00A0}", with: " ")
+        text = text.replacingOccurrences(of: "[“”]", with: "\"", options: .regularExpression)
+        text = text.replacingOccurrences(of: "[‘’]", with: "'", options: .regularExpression)
+        text = text.replacingOccurrences(of: #" {2,}"#, with: " ", options: .regularExpression)
         text = text.replacingOccurrences(of: " | ", with: " | ")
         text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return text.lowercased()
+    }
+
+    var wordLikeRatio: Double {
+        let words = split { !$0.isLetter && !$0.isNumber }
+        guard !words.isEmpty else { return 0 }
+        let plausible = words.filter { word in
+            let letters = word.filter(\.isLetter).count
+            let numbers = word.filter(\.isNumber).count
+            return word.count >= 2 && (letters >= 2 || numbers >= 1)
+        }
+        return Double(plausible.count) / Double(words.count)
+    }
+
+    var repeatedGlyphPenalty: Double {
+        let characters = Array(filter { !$0.isWhitespace })
+        guard characters.count >= 5 else { return 0 }
+        var repeatedRuns = 0
+        var runLength = 1
+        for index in 1..<characters.count {
+            if characters[index] == characters[index - 1] {
+                runLength += 1
+                if runLength >= 4 { repeatedRuns += 1 }
+            } else {
+                runLength = 1
+            }
+        }
+        return min(1, Double(repeatedRuns) / Double(characters.count))
+    }
+
+    var containsStudentNotebookWord: Bool {
+        let lowercasedText = lowercased()
+        return OCRVocabulary.studentNotebookWords.contains { lowercasedText.contains($0) }
     }
 
     var garbageRatio: Double {
@@ -496,7 +619,7 @@ private extension Character {
 }
 
 private enum OCRAllowedMarks {
-    static let characters = Set(".,:;+-=()/%")
+    static let characters = Set(".,:;+-=()/%'[]{}<>")
 }
 
 private extension Array where Element == VNRecognizedTextObservation {

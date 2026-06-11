@@ -120,7 +120,7 @@ private struct PhotoImportScannerFallback: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 34, style: .continuous)
                         .fill(NotebookTheme.paper)
-                        .frame(width: 290, height: 390)
+                        .frame(width: 292, height: 402)
                         .overlay {
                             PaperRules()
                                 .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
@@ -131,7 +131,7 @@ private struct PhotoImportScannerFallback: View {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 252, height: 334)
+                            .frame(width: 254, height: 346)
                             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -140,9 +140,9 @@ private struct PhotoImportScannerFallback: View {
                     } else {
                         VStack(spacing: 14) {
                             Image(systemName: "photo.on.rectangle.angled")
-                                .font(.system(size: 30, weight: .bold))
+                                .font(.system(size: 28, weight: .semibold))
                                 .foregroundStyle(NotebookTheme.ink)
-                                .frame(width: 72, height: 72)
+                                .frame(width: 68, height: 68)
                                 .background(.white.opacity(0.62), in: Circle())
                             Text("choose note images")
                                 .font(.system(.title3, design: .serif, weight: .semibold))
@@ -151,14 +151,14 @@ private struct PhotoImportScannerFallback: View {
                     }
 
                     ScannerFallbackSweep(active: glow || isLoading)
-                        .frame(width: 254, height: 340)
+                        .frame(width: 254, height: 346)
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
 
                     ScannerExtractionHUD(active: scanLight || !selectedImages.isEmpty)
-                        .frame(width: 252, height: 334)
+                        .frame(width: 254, height: 346)
                         .opacity(selectedImages.isEmpty ? 0.72 : 1)
                 }
-                .rotation3DEffect(.degrees(glow ? 2.4 : -2.4), axis: (x: 0.2, y: 1, z: 0), perspective: 0.78)
+                .rotation3DEffect(.degrees(glow ? 1.2 : -1.2), axis: (x: 0.2, y: 1, z: 0), perspective: 0.78)
 
                 VStack(spacing: 12) {
                     PhotosPicker(selection: $selectedItems, maxSelectionCount: 12, matching: .images) {
@@ -256,39 +256,27 @@ private struct NativeScannerChrome: View {
     var body: some View {
         VStack {
             Spacer()
-            VStack(spacing: 14) {
+            VStack(spacing: 12) {
                 ScannerFocusFrame(active: active)
-                    .frame(height: 430)
-                    .padding(.horizontal, 30)
+                    .frame(height: 426)
+                    .padding(.horizontal, 28)
 
-                HStack(spacing: 9) {
-                    scannerChip("edges", "viewfinder")
-                    scannerChip("text", "text.viewfinder")
-                    scannerChip("objects", "cube.transparent")
-                }
-                .padding(.bottom, 26)
+                Text("hold steady")
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .padding(.horizontal, 14)
+                    .frame(height: 34)
+                    .background(.black.opacity(0.26), in: Capsule())
+                    .overlay {
+                        Capsule().stroke(.white.opacity(0.16), lineWidth: 0.7)
+                    }
+                    .padding(.bottom, 22)
             }
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
                 active = true
             }
-        }
-    }
-
-    private func scannerChip(_ title: String, _ symbol: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .bold))
-            Text(title)
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-        }
-        .foregroundStyle(.white.opacity(0.9))
-        .padding(.horizontal, 11)
-        .frame(height: 32)
-        .background(.black.opacity(0.24), in: Capsule())
-        .overlay {
-            Capsule().stroke(.white.opacity(0.18), lineWidth: 0.7)
         }
     }
 }
@@ -302,38 +290,21 @@ private struct ScannerFocusFrame: View {
             let height = proxy.size.height
             ZStack {
                 RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .stroke(.white.opacity(0.34), lineWidth: 1)
-                    .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+                    .stroke(.white.opacity(0.26), lineWidth: 1)
+                    .background(.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 32, style: .continuous))
 
                 ScannerCornerMarks()
-                    .stroke(.white.opacity(0.84), style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+                    .stroke(.white.opacity(0.82), style: StrokeStyle(lineWidth: 2.1, lineCap: .round, lineJoin: .round))
                     .padding(13)
 
                 LinearGradient(colors: [.clear, .white.opacity(0.28), .clear], startPoint: .leading, endPoint: .trailing)
                     .frame(width: width * 0.72, height: 24)
                     .blur(radius: 7)
                     .rotationEffect(.degrees(-10))
-                    .offset(x: active ? width * 0.2 : -width * 0.34, y: active ? height * 0.22 : -height * 0.18)
+                    .offset(x: active ? width * 0.18 : -width * 0.32, y: active ? height * 0.18 : -height * 0.14)
                     .blendMode(.screen)
-
-                ForEach(0..<4, id: \.self) { index in
-                    Circle()
-                        .fill(.white.opacity(active ? 0.74 : 0.36))
-                        .frame(width: 5, height: 5)
-                        .position(anchorPosition(index, width: width, height: height))
-                }
             }
         }
-    }
-
-    private func anchorPosition(_ index: Int, width: CGFloat, height: CGFloat) -> CGPoint {
-        let points = [
-            CGPoint(x: width * 0.2, y: height * 0.22),
-            CGPoint(x: width * 0.8, y: height * 0.18),
-            CGPoint(x: width * 0.84, y: height * 0.78),
-            CGPoint(x: width * 0.16, y: height * 0.82)
-        ]
-        return points[index]
     }
 }
 
@@ -368,29 +339,14 @@ private struct ScannerExtractionHUD: View {
 
             VStack {
                 Spacer()
-                HStack(spacing: 7) {
-                    miniStatus("ocr", "text.viewfinder", active)
-                    miniStatus("table", "tablecells", active)
-                    miniStatus("3d", "cube.transparent", active)
-                }
+                Capsule()
+                    .fill(NotebookTheme.ink.opacity(active ? 0.26 : 0.14))
+                    .frame(width: active ? 92 : 64, height: 5)
+                    .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: active)
                 .padding(.bottom, 12)
             }
         }
         .allowsHitTesting(false)
-    }
-
-    private func miniStatus(_ text: String, _ symbol: String, _ active: Bool) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: symbol)
-                .font(.system(size: 9, weight: .bold))
-            Text(text)
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
-        }
-        .foregroundStyle(NotebookTheme.ink.opacity(0.78))
-        .padding(.horizontal, 7)
-        .frame(height: 24)
-        .background(.white.opacity(active ? 0.68 : 0.42), in: Capsule())
-        .scaleEffect(active ? 1.03 : 0.98)
     }
 }
 

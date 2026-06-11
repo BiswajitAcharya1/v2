@@ -254,53 +254,79 @@ struct MinimalAppLogo: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                Circle()
+                RoundedRectangle(cornerRadius: proxy.size.width * 0.28, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [
-                                .white.opacity(0.9),
-                                Color(red: 0.89, green: 0.9, blue: 0.92)
+                                Color(red: 0.945, green: 0.955, blue: 0.95),
+                                Color(red: 0.89, green: 0.9, blue: 0.88),
+                                Color(red: 0.98, green: 0.94, blue: 0.87)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .overlay {
-                        Circle().stroke(.white.opacity(0.86), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: proxy.size.width * 0.28, style: .continuous)
+                            .stroke(.white.opacity(0.82), lineWidth: 1)
                     }
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .fill(NotebookTheme.ink)
-                    .frame(width: 38, height: 44)
-                    .rotationEffect(.degrees(-8))
-                    .overlay(alignment: .topTrailing) {
-                        UnevenRoundedRectangle(cornerRadii: .init(bottomLeading: 10, topTrailing: 14), style: .continuous)
-                            .fill(Color(red: 0.92, green: 0.93, blue: 0.95))
-                            .frame(width: 16, height: 16)
-                            .overlay {
-                                PaperGrain(density: 24).opacity(0.18)
-                            }
-                    }
-                    .overlay {
-                        Canvas(rendersAsynchronously: true) { context, size in
-                            for index in 0..<9 {
-                                let y = size.height * (0.24 + CGFloat(index) * 0.06)
-                                var line = Path()
-                                line.move(to: CGPoint(x: size.width * 0.25, y: y))
-                                line.addLine(to: CGPoint(x: size.width * 0.66, y: y + CGFloat(index % 2) * 0.8))
-                                context.stroke(line, with: .color(.white.opacity(0.28)), style: StrokeStyle(lineWidth: 1, lineCap: .round))
-                            }
-                            var mark = Path()
-                            mark.move(to: CGPoint(x: size.width * 0.29, y: size.height * 0.72))
-                            mark.addCurve(
-                                to: CGPoint(x: size.width * 0.7, y: size.height * 0.66),
-                                control1: CGPoint(x: size.width * 0.4, y: size.height * 0.58),
-                                control2: CGPoint(x: size.width * 0.58, y: size.height * 0.82)
+
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: proxy.size.width * 0.16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.995, green: 0.99, blue: 0.94),
+                                    Color(red: 0.9, green: 0.925, blue: 0.92)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
                             )
-                            context.stroke(mark, with: .color(.white.opacity(0.72)), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        )
+                        .overlay {
+                            Canvas(rendersAsynchronously: true) { context, size in
+                                let blue = Color(red: 0.53, green: 0.72, blue: 0.86).opacity(0.52)
+                                let red = Color(red: 0.94, green: 0.44, blue: 0.46).opacity(0.45)
+                                for index in 0..<6 {
+                                    let y = size.height * (0.27 + CGFloat(index) * 0.092)
+                                    var line = Path()
+                                    line.move(to: CGPoint(x: size.width * 0.23, y: y))
+                                    line.addCurve(
+                                        to: CGPoint(x: size.width * 0.86, y: y + sin(CGFloat(index)) * 1.2),
+                                        control1: CGPoint(x: size.width * 0.42, y: y - 1.2),
+                                        control2: CGPoint(x: size.width * 0.68, y: y + 1.4)
+                                    )
+                                    context.stroke(line, with: .color(blue), style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
+                                }
+                                var margin = Path()
+                                margin.move(to: CGPoint(x: size.width * 0.32, y: size.height * 0.16))
+                                margin.addCurve(
+                                    to: CGPoint(x: size.width * 0.31, y: size.height * 0.86),
+                                    control1: CGPoint(x: size.width * 0.34, y: size.height * 0.36),
+                                    control2: CGPoint(x: size.width * 0.28, y: size.height * 0.64)
+                                )
+                                context.stroke(margin, with: .color(red), style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
+                            }
                         }
-                        .padding(5)
-                    }
-                    .shadow(color: .black.opacity(0.18), radius: 5, y: 4)
+                        .overlay(alignment: .topTrailing) {
+                            UnevenRoundedRectangle(cornerRadii: .init(bottomLeading: proxy.size.width * 0.11, topTrailing: proxy.size.width * 0.15), style: .continuous)
+                                .fill(Color.white.opacity(0.74))
+                                .frame(width: proxy.size.width * 0.22, height: proxy.size.width * 0.22)
+                                .shadow(color: .black.opacity(0.08), radius: 2, x: -1, y: 1)
+                        }
+
+                    RoundedRectangle(cornerRadius: proxy.size.width * 0.07, style: .continuous)
+                        .fill(NotebookTheme.ink)
+                        .frame(width: proxy.size.width * 0.13)
+                        .overlay {
+                            PaperGrain(density: 52)
+                                .opacity(0.25)
+                                .clipShape(RoundedRectangle(cornerRadius: proxy.size.width * 0.07, style: .continuous))
+                        }
+                }
+                .frame(width: proxy.size.width * 0.58, height: proxy.size.width * 0.68)
+                .rotationEffect(.degrees(-7))
+                .shadow(color: .black.opacity(0.16), radius: 6, x: 0, y: 5)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)

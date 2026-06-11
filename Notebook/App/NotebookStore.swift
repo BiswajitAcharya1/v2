@@ -897,7 +897,7 @@ final class NotebookStore {
         polished.legibility = min(1, max(polished.legibility, polished.legibility + 0.1))
         polished.spacing = min(1, max(polished.spacing, polished.spacing + 0.08))
         polished.structure = min(1, max(polished.structure, polished.structure + 0.12))
-        polished.coaching = "cleaned into a study-ready page. review the highlighted ideas before rewriting anything."
+        polished.coaching = "cleaned into a study ready page. review the highlighted ideas before rewriting anything."
         if var signature = polished.signature {
             signature.correctionNeed = max(0.04, signature.correctionNeed - 0.24)
             signature.studyReadiness = min(1, signature.studyReadiness + 0.18)
