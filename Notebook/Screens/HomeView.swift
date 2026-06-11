@@ -19,15 +19,6 @@ struct HomeView: View {
     @State private var doodleDrift = false
     @State private var modelReadyPulse = false
     @State private var actionLensAwake = false
-    private let allowedSubjects = [
-        "math", "pre algebra", "algebra", "geometry", "trigonometry", "precalculus", "calculus", "statistics",
-        "science", "biology", "chemistry", "physics", "environmental science", "earth science", "anatomy",
-        "history", "world history", "us history", "european history", "government", "civics",
-        "english", "literature", "writing", "creative writing", "spanish", "french", "latin",
-        "computer science", "coding", "data science", "robotics", "economics", "psychology", "sociology",
-        "art", "music", "theater", "health", "business", "engineering"
-    ]
-
     var body: some View {
         ScrollView {
             VStack(alignment: .center, spacing: 18) {
@@ -759,10 +750,7 @@ struct HomeView: View {
                     VStack(spacing: 8) {
                         ForEach(courseSuggestions, id: \.self) { subject in
                             Button {
-                                Haptics.selection()
-                                withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
-                                    courseDraft = subject
-                                }
+                                addCourse(subject)
                             } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: "book.closed.fill")
@@ -808,31 +796,23 @@ struct HomeView: View {
     }
 
     private var courseSuggestions: [String] {
-        let draft = courseDraft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let availableSubjects = allowedSubjects.filter { subject in
-            !store.notebooks.contains(where: { $0.subject == subject })
-        }
-        guard !draft.isEmpty else {
-            let featured = ["biology", "math", "computer science", "chemistry", "history", "english"]
-            return featured.filter { availableSubjects.contains($0) } + Array(availableSubjects.filter { !featured.contains($0) }.prefix(2))
-        }
-        let matches = availableSubjects.filter { subject in
-            subject.hasPrefix(draft) || subject.localizedCaseInsensitiveContains(draft)
-        }
-        return Array(matches.prefix(4))
+        SubjectCatalog.suggestions(
+            for: courseDraft,
+            excluding: Set(store.notebooks.map(\.subject)),
+            limit: courseDraft.isEmpty ? 8 : 4
+        )
     }
 
     private var bestCourseMatch: String? {
-        let draft = courseDraft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !draft.isEmpty else { return nil }
-        if allowedSubjects.contains(draft), !store.notebooks.contains(where: { $0.subject == draft }) { return draft }
-        return allowedSubjects.first { subject in
-            !store.notebooks.contains(where: { $0.subject == subject }) && subject.hasPrefix(draft)
-        }
+        SubjectCatalog.bestMatch(for: courseDraft, excluding: Set(store.notebooks.map(\.subject)))
     }
 
     private func addCourse() {
         guard let subject = bestCourseMatch else { return }
+        addCourse(subject)
+    }
+
+    private func addCourse(_ subject: String) {
         Haptics.success()
         store.addCourse(subject)
         courseDraft = ""

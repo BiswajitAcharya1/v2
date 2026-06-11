@@ -79,7 +79,7 @@ final class NotebookStore {
 
     func signIn(provider: AuthProvider) async {
         if provider == .apple || provider == .google {
-            let message = "\(provider.rawValue) sign in needs credentials before it can connect."
+            let message = "\(provider.rawValue) sign in is waiting for credentials."
             authMessage = message
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(2.4))

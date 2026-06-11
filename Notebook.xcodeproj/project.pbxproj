@@ -37,6 +37,7 @@
 		10000000000000000000011D /* NotebookDetailComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000025 /* NotebookDetailComponents.swift */; };
 		10000000000000000000011E /* AccountCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000026 /* AccountCenterView.swift */; };
 		10000000000000000000011F /* HomeStudySheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000027 /* HomeStudySheets.swift */; };
+		100000000000000000000120 /* SubjectCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000028 /* SubjectCatalog.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -72,6 +73,7 @@
 		100000000000000000000025 /* NotebookDetailComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookDetailComponents.swift; sourceTree = "<group>"; };
 		100000000000000000000026 /* AccountCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountCenterView.swift; sourceTree = "<group>"; };
 		100000000000000000000027 /* HomeStudySheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeStudySheets.swift; sourceTree = "<group>"; };
+		100000000000000000000028 /* SubjectCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectCatalog.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -123,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				100000000000000000000003 /* NotebookModels.swift */,
+				100000000000000000000028 /* SubjectCatalog.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -261,6 +264,7 @@
 				100000000000000000000101 /* NotebookApp.swift in Sources */,
 				100000000000000000000102 /* NotebookStore.swift in Sources */,
 				100000000000000000000103 /* NotebookModels.swift in Sources */,
+				100000000000000000000120 /* SubjectCatalog.swift in Sources */,
 				100000000000000000000104 /* StudyServices.swift in Sources */,
 				100000000000000000000105 /* Theme.swift in Sources */,
 				100000000000000000000106 /* GlassSurface.swift in Sources */,

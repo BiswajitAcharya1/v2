@@ -79,15 +79,11 @@ struct AuthView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
             draggableAuthBook
-                .frame(width: 390, height: 366)
+                .frame(width: 406, height: 386)
             if notebookOpen, let message = store.authMessage, !showingEmail {
-                Text(message)
-                    .font(.system(.footnote, design: .rounded, weight: .semibold))
-                    .foregroundStyle(NotebookTheme.muted)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                AuthNotice(message: message)
+                    .padding(.horizontal, 28)
+                    .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.96)))
             }
         }
         .frame(height: notebookOpen ? 456 : 366)
@@ -130,7 +126,7 @@ struct AuthView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
                 }
-                .frame(width: 236 + openProgress * 178, height: 300 + openProgress * 108)
+                .frame(width: 252 + openProgress * 174, height: 324 + openProgress * 104)
                 .rotation3DEffect(.degrees(-6 + openProgress * 13), axis: (x: 1, y: 0.18, z: 0), perspective: 0.72)
                 .offset(x: openProgress * 74, y: openProgress * 16)
                 .shadow(color: .black.opacity(0.12), radius: 16, y: 10)
@@ -138,13 +134,13 @@ struct AuthView: View {
             CompositionCoverFace(
                 subject: nil,
                 cornerRadius: 22,
-                spineWidth: 22,
-                labelWidth: 118,
-                labelHeight: 96,
+                spineWidth: 15,
+                labelWidth: 152,
+                labelHeight: 104,
                 labelOffsetY: 36,
                 paperGrainDensity: notebookOpen || coverDrag < -2 ? 90 : 0
             )
-                .frame(width: 214, height: 278)
+                .frame(width: 236, height: 306)
                 .rotation3DEffect(.degrees(-156 * openProgress + (leatherDrift ? 2.5 : -2.5)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
                 .offset(x: -132 * openProgress, y: 4 + 13 * openProgress)
                 .opacity(Double(1 - max(0, (openProgress - 0.74) / 0.26)))
@@ -171,8 +167,16 @@ struct AuthView: View {
                             }
                         }
                 )
+                .onTapGesture {
+                    guard !notebookOpen else { return }
+                    Haptics.open()
+                    withAnimation(.spring(response: 0.98, dampingFraction: 0.86)) {
+                        notebookOpen = true
+                        coverDrag = 0
+                    }
+                }
                 .accessibilityLabel("drag notebook cover")
-                .accessibilityHint("drag left to open sign up")
+                .accessibilityHint("tap or drag left to open sign up")
         }
         .scaleEffect(notebookOpen ? 1.03 : 1)
         .animation(.spring(response: 0.78, dampingFraction: 0.88), value: notebookOpen)
@@ -361,6 +365,51 @@ struct AuthView: View {
             }
         }
     }
+
+    private struct AuthNotice: View {
+        let message: String
+        @State private var awake = false
+
+        var body: some View {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(NotebookTheme.ink)
+                    Circle()
+                        .trim(from: 0.08, to: 0.34)
+                        .stroke(.white.opacity(0.34), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+                        .rotationEffect(.degrees(awake ? 126 : -20))
+                        .padding(5)
+                    Image(systemName: "key.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 34, height: 34)
+
+                Text(message)
+                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink.opacity(0.76))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 13)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().stroke(.white.opacity(0.62), lineWidth: 0.8)
+            }
+            .scaleEffect(awake ? 1 : 0.97)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.3).repeatForever(autoreverses: true)) {
+                    awake = true
+                }
+            }
+        }
+    }
+
     private var emailSheet: some View {
         ZStack {
             Rectangle()
@@ -374,7 +423,7 @@ struct AuthView: View {
                         Text(isSignIn ? "sign in" : "sign up")
                             .font(.system(.title2, design: .serif, weight: .semibold))
                             .foregroundStyle(NotebookTheme.ink)
-                        Text(isSignIn ? "welcome back." : "continue with email.")
+                        Text(isSignIn ? "secure access." : "create secure access.")
                             .font(.system(.footnote, design: .rounded))
                             .foregroundStyle(NotebookTheme.muted)
                     }

@@ -21,7 +21,7 @@ struct CompositionNotebookCard: View {
                 CompositionCoverFace(
                     subject: notebook.subject,
                     cornerRadius: 20,
-                    spineWidth: 15,
+                    spineWidth: 11,
                     labelWidth: 142,
                     labelHeight: 108,
                     labelOffsetY: 30
@@ -239,20 +239,16 @@ private struct CompositionSpine: View {
                             endPoint: .trailing
                         )
                     )
-                    .frame(width: max(14, width * 0.42))
+                    .frame(width: max(4, width * 0.46))
             }
             .overlay {
                 Canvas(rendersAsynchronously: true) { context, size in
-                    for index in 0..<18 {
-                        let y = size.height * CGFloat(index) / 17
+                    for index in 0..<9 {
+                        let y = size.height * (0.08 + CGFloat(index) * 0.105)
                         var thread = Path()
-                        thread.move(to: CGPoint(x: size.width * 0.18, y: y))
-                        thread.addCurve(
-                            to: CGPoint(x: size.width * 0.78, y: y + CGFloat(index.isMultiple(of: 2) ? 2 : -2)),
-                            control1: CGPoint(x: size.width * 0.32, y: y - 3),
-                            control2: CGPoint(x: size.width * 0.54, y: y + 3)
-                        )
-                        context.stroke(thread, with: .color(.white.opacity(0.014)), style: StrokeStyle(lineWidth: 0.55, lineCap: .round))
+                        thread.move(to: CGPoint(x: size.width * 0.24, y: y))
+                        thread.addLine(to: CGPoint(x: size.width * 0.72, y: y + 0.4))
+                        context.stroke(thread, with: .color(.white.opacity(0.035)), style: StrokeStyle(lineWidth: 0.45, lineCap: .round))
                     }
                 }
                 .padding(.vertical, 10)
@@ -359,7 +355,7 @@ struct NotebookLogo: View {
         CompositionCoverFace(
             subject: nil,
             cornerRadius: 18,
-            spineWidth: 14,
+            spineWidth: 11,
             labelWidth: 102,
             labelHeight: 88,
             labelOffsetY: 30
@@ -375,15 +371,16 @@ private struct CompositionCoverLabel: View {
         VStack(spacing: isLarge ? 7 : 6) {
             HStack(alignment: .top, spacing: 6) {
                 Text("composition\nbook")
-                    .font(.system(size: isLarge ? 13 : 10.2, weight: .semibold, design: .rounded))
+                    .font(.system(size: isLarge ? 12.2 : 9.2, weight: .semibold, design: .rounded))
                     .lineSpacing(-1)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: true, vertical: true)
                 Spacer(minLength: 4)
                 Text("vellum")
-                    .font(.system(size: isLarge ? 7 : 5.8, weight: .bold, design: .rounded))
+                    .font(.system(size: isLarge ? 6.7 : 5.2, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, isLarge ? 6 : 4)
-                    .frame(height: isLarge ? 23 : 18)
+                    .padding(.horizontal, isLarge ? 5 : 3)
+                    .frame(height: isLarge ? 21 : 16)
                     .background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: isLarge ? 5 : 4, style: .continuous))
                     .minimumScaleFactor(0.68)
             }

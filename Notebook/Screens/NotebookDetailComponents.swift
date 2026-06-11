@@ -1732,6 +1732,153 @@ struct OpenCompositionRules: View {
     }
 }
 
+struct EmptyNotebookCapturePortal: View {
+    var active: Bool
+
+    var body: some View {
+        ZStack {
+            capturePaper
+                .frame(width: 246, height: 294)
+                .rotation3DEffect(.degrees(active ? 4.5 : -3.5), axis: (x: 0.18, y: 1, z: 0), perspective: 0.76)
+                .offset(y: active ? -4 : 4)
+
+            EdgeLockCorners()
+                .stroke(NotebookTheme.ink.opacity(0.46), style: StrokeStyle(lineWidth: 2.1, lineCap: .round, lineJoin: .round))
+                .frame(width: 218, height: 266)
+                .scaleEffect(active ? 1.035 : 0.982)
+                .opacity(0.9)
+
+            ScannerGlow()
+                .frame(width: 202, height: 20)
+                .offset(y: active ? 102 : -108)
+                .opacity(active ? 0.68 : 0.38)
+
+            CaptureOrbitGlyphs(active: active)
+                .frame(width: 292, height: 316)
+        }
+        .frame(maxWidth: .infinity)
+        .animation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true), value: active)
+    }
+
+    private var capturePaper: some View {
+        RoundedRectangle(cornerRadius: 32, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        NotebookTheme.paper,
+                        Color(red: 0.97, green: 0.965, blue: 0.92)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay {
+                OpenCompositionRules(isLeft: false)
+                    .opacity(0.78)
+                    .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+            }
+            .overlay(alignment: .topLeading) {
+                ClassProgramInset()
+                    .scaleEffect(0.72, anchor: .topLeading)
+                    .padding(.leading, 26)
+                    .padding(.top, 28)
+                    .opacity(0.92)
+            }
+            .overlay {
+                CaptureGuideDoodles(active: active)
+                    .padding(22)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 32, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.82),
+                                NotebookTheme.ink.opacity(0.08)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: .black.opacity(0.1), radius: 12, y: 8)
+    }
+}
+
+private struct CaptureGuideDoodles: View {
+    var active: Bool
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            let ink = NotebookTheme.ink.opacity(0.2)
+            let blue = NotebookTheme.blueLine.opacity(0.48)
+            let lift = active ? CGFloat(-5) : CGFloat(5)
+
+            var curve = Path()
+            curve.move(to: CGPoint(x: size.width * 0.18, y: size.height * 0.72 + lift))
+            curve.addCurve(
+                to: CGPoint(x: size.width * 0.82, y: size.height * 0.56 - lift),
+                control1: CGPoint(x: size.width * 0.34, y: size.height * 0.56),
+                control2: CGPoint(x: size.width * 0.62, y: size.height * 0.76)
+            )
+            context.stroke(curve, with: .color(ink), style: StrokeStyle(lineWidth: 1.7, lineCap: .round))
+
+            var underline = Path()
+            underline.move(to: CGPoint(x: size.width * 0.34, y: size.height * 0.82))
+            underline.addCurve(
+                to: CGPoint(x: size.width * 0.72, y: size.height * 0.82 + lift * 0.4),
+                control1: CGPoint(x: size.width * 0.44, y: size.height * 0.78),
+                control2: CGPoint(x: size.width * 0.58, y: size.height * 0.86)
+            )
+            context.stroke(underline, with: .color(blue), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+
+            for index in 0..<3 {
+                let center = CGPoint(
+                    x: size.width * (0.76 - CGFloat(index) * 0.12),
+                    y: size.height * (0.28 + CGFloat(index) * 0.1)
+                )
+                var dot = Path()
+                dot.addEllipse(in: CGRect(x: center.x, y: center.y + lift * 0.35, width: 4, height: 4))
+                context.fill(dot, with: .color(ink.opacity(0.72)))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct CaptureOrbitGlyphs: View {
+    var active: Bool
+
+    private let glyphs = [
+        ("text.viewfinder", CGPoint(x: 0.18, y: 0.2)),
+        ("tablecells", CGPoint(x: 0.88, y: 0.42)),
+        ("cube.transparent", CGPoint(x: 0.2, y: 0.82))
+    ]
+
+    var body: some View {
+        GeometryReader { proxy in
+            ForEach(Array(glyphs.enumerated()), id: \.offset) { index, item in
+                Image(systemName: item.0)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(active ? .white : NotebookTheme.ink.opacity(0.72))
+                    .frame(width: 40, height: 40)
+                    .background(active ? NotebookTheme.ink.opacity(0.88) : .white.opacity(0.56), in: Circle())
+                    .overlay {
+                        Circle().stroke(.white.opacity(0.58), lineWidth: 0.8)
+                    }
+                    .position(
+                        x: proxy.size.width * item.1.x,
+                        y: proxy.size.height * item.1.y + (active ? CGFloat(index - 1) * 5 : CGFloat(1 - index) * 5)
+                    )
+                    .rotationEffect(.degrees(active ? Double(index * 16) : Double(index * -12)))
+                    .scaleEffect(active ? 1.02 : 0.94)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 struct ClassProgramInset: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {

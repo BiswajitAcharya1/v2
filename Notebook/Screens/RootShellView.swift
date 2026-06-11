@@ -41,15 +41,6 @@ private struct SetupFlowView: View {
         "explain this page like a patient tutor.",
         "help me remember only what matters."
     ]
-    private let allowedSubjects = [
-        "math", "pre algebra", "algebra", "geometry", "trigonometry", "precalculus", "calculus", "statistics",
-        "science", "biology", "chemistry", "physics", "environmental science", "earth science", "anatomy",
-        "history", "world history", "us history", "european history", "government", "civics",
-        "english", "literature", "writing", "creative writing", "spanish", "french", "latin",
-        "computer science", "coding", "data science", "robotics", "economics", "psychology", "sociology",
-        "art", "music", "theater", "health", "business", "engineering"
-    ]
-
     var body: some View {
         ZStack {
             LivingPaperBackground().ignoresSafeArea()
@@ -226,45 +217,14 @@ private struct SetupFlowView: View {
                     .opacity(bestSubjectMatch == nil ? 0.42 : 1)
                 }
 
-                if !subjectSuggestions.isEmpty {
-                    VStack(spacing: 7) {
-                        ForEach(subjectSuggestions, id: \.self) { subject in
-                            Button {
-                                addSubject(subject)
-                            } label: {
-                                HStack {
-                                    Text(subject)
-                                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                                    Spacer()
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 12, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 26, height: 26)
-                                        .background(NotebookTheme.ink, in: Circle())
-                            }
-                                .foregroundStyle(NotebookTheme.ink)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(.ultraThinMaterial, in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
+                SubjectSuggestionRibbon(subjects: subjectSuggestions, selected: subjects, draft: subjectDraft, add: addSubject)
                     .transition(.move(edge: .top).combined(with: .opacity))
-                    .animation(.spring(response: 0.72, dampingFraction: 0.86), value: subjectSuggestions)
-                }
+                    .animation(.spring(response: 0.86, dampingFraction: 0.88), value: subjectSuggestions)
 
-                if !subjects.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(subjects, id: \.self) { subject in
-                                SubjectToken(subject: subject) {
-                                    subjects.removeAll { $0 == subject }
-                                }
-                            }
-                        }
-                    }
+                SelectedSubjectShelf(subjects: subjects) { subject in
+                    subjects.removeAll { $0 == subject }
                 }
+                .animation(.spring(response: 0.48, dampingFraction: 0.82), value: subjects)
 
                 Button {
                     Haptics.success()
@@ -295,21 +255,11 @@ private struct SetupFlowView: View {
     }
 
     private var subjectSuggestions: [String] {
-        let draft = subjectDraft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let availableSubjects = allowedSubjects.filter { !subjects.contains($0) }
-        guard !draft.isEmpty else {
-            let featured = ["biology", "math", "computer science", "chemistry", "history", "english"]
-            return Array((featured.filter { availableSubjects.contains($0) } + availableSubjects.filter { !featured.contains($0) }).prefix(6))
-        }
-        let matches = availableSubjects.filter { $0.hasPrefix(draft) || $0.localizedCaseInsensitiveContains(draft) }
-        return Array(matches[0..<min(matches.count, 4)])
+        SubjectCatalog.suggestions(for: subjectDraft, excluding: Set(subjects), limit: subjectDraft.isEmpty ? 6 : 4)
     }
 
     private var bestSubjectMatch: String? {
-        let draft = subjectDraft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !draft.isEmpty else { return nil }
-        if allowedSubjects.contains(draft) { return draft }
-        return allowedSubjects.first { $0.hasPrefix(draft) }
+        SubjectCatalog.bestMatch(for: subjectDraft, excluding: Set(subjects))
     }
 
 }

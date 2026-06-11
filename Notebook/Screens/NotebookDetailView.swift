@@ -486,20 +486,8 @@ struct NotebookDetailView: View {
                 VStack(spacing: 18) {
                     Spacer()
 
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 30, style: .continuous)
-                            .stroke(NotebookTheme.ink.opacity(0.12), style: StrokeStyle(lineWidth: 1.2, dash: [10, 11]))
-                            .frame(width: 220, height: 276)
-                        EdgeLockCorners()
-                            .stroke(NotebookTheme.ink.opacity(0.44), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
-                            .frame(width: 198, height: 254)
-                            .scaleEffect(actionRailAwake ? 1.04 : 0.98)
-                        ScannerGlow()
-                            .frame(width: 188, height: 20)
-                            .offset(y: actionRailAwake ? 96 : -96)
-                            .opacity(0.58)
-                    }
-                    .frame(height: 302)
+                    EmptyNotebookCapturePortal(active: actionRailAwake)
+                        .frame(height: 316)
 
                     HStack(spacing: 12) {
                         Button {
