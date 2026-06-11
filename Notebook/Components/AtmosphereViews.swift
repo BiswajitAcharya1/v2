@@ -34,7 +34,7 @@ struct LivingPaperBackground: View {
 
 struct StaticLightField: View {
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             glow(
                 context: context,
                 center: CGPoint(x: size.width * 0.2, y: size.height * 0.18),
@@ -65,9 +65,9 @@ struct StaticLightField: View {
 
 struct LiquidLightField: View {
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0 / 12.0)) { timeline in
+        TimelineView(.periodic(from: .now, by: 1.0 / 8.0)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            Canvas { context, size in
+            Canvas(rendersAsynchronously: true) { context, size in
                 let first = CGPoint(
                     x: size.width * (0.18 + 0.18 * sin(t * 0.12)),
                     y: size.height * (0.16 + 0.08 * cos(t * 0.17))
@@ -99,7 +99,7 @@ struct PaperGrain: View {
     var density: Int = 180
 
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             for index in 0..<density {
                 let x = size.width * CGFloat((index * 47) % 103) / 103
                 let y = size.height * CGFloat((index * 83) % 107) / 107

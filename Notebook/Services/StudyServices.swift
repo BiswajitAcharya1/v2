@@ -127,6 +127,17 @@ struct LocalScanProcessingService: ScanProcessingServing {
         var models = NoteLayoutAnalyzer.models(from: lines, keywords: keywords, visualSignal: visualSignal)
         models.append(contentsOf: await objectReconstructor.reconstruct(from: image, lines: lines, keywords: keywords, visualSignal: visualSignal))
         let sections = NoteLayoutAnalyzer.sections(from: lines, fallback: usableText)
+        let profile = ImageStructureAnalyzer.profile(in: image)
+        let insight = NoteIntelligenceAnalyzer.insight(
+            text: usableText,
+            lines: lines,
+            keywords: keywords,
+            formulas: formulas,
+            tables: tables,
+            models: models,
+            confidence: ocrResult.confidence,
+            profile: profile
+        )
 
         return ExtractedContent(
             cleanedText: usableText,
@@ -136,8 +147,238 @@ struct LocalScanProcessingService: ScanProcessingServing {
             sections: sections,
             tables: tables,
             models: models,
+            insight: insight,
             confidence: cleaned.isEmpty ? min(ocrResult.confidence, 0.18) : ocrResult.confidence
         )
+    }
+}
+
+private enum NoteIntelligenceAnalyzer {
+    static func insight(
+        text: String,
+        lines: [String],
+        keywords: [String],
+        formulas: [String],
+        tables: [DetectedTable],
+        models: [DetectedModel],
+        confidence: Double,
+        profile: ImageStructureAnalyzer.Profile
+    ) -> SmartPageInsight {
+        let cleanedLines = lines.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }.filter { !$0.isEmpty }
+        let wordCount = max(1, text.split(whereSeparator: \.isWhitespace).count)
+        let averageLineLength = cleanedLines.isEmpty ? 0 : Double(cleanedLines.map(\.count).reduce(0, +)) / Double(cleanedLines.count)
+        let shortLineRatio = cleanedLines.isEmpty ? 0 : Double(cleanedLines.filter { $0.count < 24 }.count) / Double(cleanedLines.count)
+        let structureScore = min(1, Double(keywords.count + formulas.count + tables.count * 2 + models.count * 2) / 14.0)
+        let spacing = max(0, min(1, 1 - abs(averageLineLength - 44) / 64))
+        let legibility = max(0.05, min(1, confidence * 0.58 + spacing * 0.18 + (1 - profile.inkDensity) * 0.14 + structureScore * 0.1))
+        let clarity = max(0.05, min(1, legibility * 0.52 + structureScore * 0.24 + min(1, Double(cleanedLines.count) / 18) * 0.14 + (models.isEmpty ? 0 : 0.1)))
+        let risk = max(0.04, min(0.96, 1 - clarity + (formulas.count > 2 ? 0.08 : 0) + (wordCount > 280 ? 0.08 : 0)))
+        let pace: WritingPace = averageLineLength > 70 || confidence < 0.46 ? .rushed : averageLineLength < 28 && profile.inkDensity < 0.11 ? .deliberate : .steady
+        let pressure: WritingPressure = profile.inkDensity > 0.32 ? .heavy : profile.inkDensity < 0.11 ? .light : .balanced
+        let style: NoteStyle
+        if !models.isEmpty && (!tables.isEmpty || !formulas.isEmpty) {
+            style = .mixed
+        } else if !models.isEmpty {
+            style = .diagram
+        } else if !tables.isEmpty {
+            style = .table
+        } else if formulas.count >= 2 {
+            style = .formula
+        } else {
+            style = .linear
+        }
+        let topIdea = keywords.first ?? cleanedLines.first ?? "this page"
+        let onlyWhatMatters = onlyWhatMatters(from: cleanedLines, keywords: keywords, formulas: formulas, models: models)
+        let nextBestStep = nextStep(style: style, risk: risk, keywords: keywords, formulas: formulas, models: models)
+        let coaching = handwritingCoach(legibility: legibility, spacing: spacing, pace: pace, pressure: pressure)
+        let lanes = [
+            StudyLane(title: "read", systemName: "book.pages.fill", value: "\(max(1, Int(ceil(Double(wordCount) / 180.0)))) min"),
+            StudyLane(title: "risk", systemName: "exclamationmark.triangle.fill", value: percent(risk)),
+            StudyLane(title: "clarity", systemName: "checkmark.seal.fill", value: percent(clarity)),
+            StudyLane(title: "style", systemName: style.symbol, value: style.rawValue)
+        ]
+        let prompts = Array([
+            "explain \(topIdea) without looking.",
+            "name the detail most likely to be tested.",
+            formulas.first.map { "solve a new example using \($0)." },
+            models.first.map { "redraw the \( $0.title ) from memory." },
+            tables.first.map { "cover the \($0.title) and recreate the columns." }
+        ].compactMap(\.self).prefix(5))
+        let questions = Array([
+            "what is the main claim of this page?",
+            "which keyword connects two sections?",
+            formulas.first.map { "what does \($0) prove or compute?" },
+            models.first.map { "what changes if one part of \($0.title) is removed?" },
+            risk > 0.5 ? "which line should be rewritten first?" : nil
+        ].compactMap(\.self).prefix(5))
+        let hooks = memoryHooks(keywords: keywords, style: style, models: models)
+        let angles = examAngles(keywords: keywords, formulas: formulas, tables: tables, models: models)
+        let alerts = confusionAlerts(confidence: confidence, risk: risk, legibility: legibility, formulas: formulas, models: models)
+        let cleanup = cleanupSuggestions(spacing: spacing, structure: structureScore, pace: pace, pressure: pressure, tables: tables, models: models)
+        let features = detectedFeatures(
+            keywords: keywords,
+            formulas: formulas,
+            tables: tables,
+            models: models,
+            shortLineRatio: shortLineRatio,
+            profile: profile
+        )
+        return SmartPageInsight(
+            onlyWhatMatters: onlyWhatMatters,
+            nextBestStep: nextBestStep,
+            clarityScore: clarity,
+            retentionRisk: risk,
+            estimatedReadMinutes: max(1, Int(ceil(Double(wordCount) / 180.0))),
+            handwriting: HandwritingAnalysis(
+                legibility: legibility,
+                inkDensity: profile.inkDensity,
+                spacing: spacing,
+                structure: structureScore,
+                pace: pace,
+                pressure: pressure,
+                noteStyle: style,
+                coaching: coaching
+            ),
+            studyLanes: lanes,
+            recallPrompts: prompts,
+            quickQuestions: questions,
+            memoryHooks: hooks,
+            examAngles: angles,
+            confusionAlerts: alerts,
+            cleanupSuggestions: cleanup,
+            detectedFeatures: features
+        )
+    }
+
+    private static func onlyWhatMatters(from lines: [String], keywords: [String], formulas: [String], models: [DetectedModel]) -> String {
+        let strongestLine = lines.first { line in
+            keywords.contains { line.contains($0) }
+        } ?? lines.first ?? "review the core idea on this page."
+        var parts = [strongestLine]
+        if let formula = formulas.first {
+            parts.append("use \(formula)")
+        }
+        if let model = models.first {
+            parts.append("connect it to \(model.title)")
+        }
+        return parts.joined(separator: "\n")
+    }
+
+    private static func nextStep(style: NoteStyle, risk: Double, keywords: [String], formulas: [String], models: [DetectedModel]) -> String {
+        if risk > 0.62 {
+            return "rewrite the messiest line, then test \(keywords.first ?? "one idea")."
+        }
+        switch style {
+        case .diagram:
+            return "tap the model and explain each node."
+        case .table:
+            return "hide one column and recall it."
+        case .formula:
+            return "make one fresh problem from \(formulas.first ?? "the formula")."
+        case .mixed:
+            return "study text first, then rebuild the diagram."
+        case .linear:
+            return "turn the first section into two recall prompts."
+        }
+    }
+
+    private static func handwritingCoach(legibility: Double, spacing: Double, pace: WritingPace, pressure: WritingPressure) -> String {
+        if legibility < 0.42 {
+            return "slow down and leave more air between lines before the next scan."
+        }
+        if spacing < 0.46 {
+            return "spacing is tight. add short gaps around headings and formulas."
+        }
+        if pace == .rushed {
+            return "the writing looks fast. rewrite key terms before reviewing."
+        }
+        if pressure == .heavy {
+            return "ink pressure is strong. lighten strokes so ocr keeps letters cleaner."
+        }
+        return "handwriting is study ready. keep the same rhythm for future pages."
+    }
+
+    private static func detectedFeatures(
+        keywords: [String],
+        formulas: [String],
+        tables: [DetectedTable],
+        models: [DetectedModel],
+        shortLineRatio: Double,
+        profile: ImageStructureAnalyzer.Profile
+    ) -> [String] {
+        var features: [String] = []
+        if !keywords.isEmpty { features.append("keywords") }
+        if !formulas.isEmpty { features.append("formulas") }
+        if !tables.isEmpty { features.append("tables") }
+        if !models.isEmpty { features.append("models") }
+        if shortLineRatio > 0.34 { features.append("outline") }
+        if profile.edgeDensity > 0.22 { features.append("sketch") }
+        if profile.balance > 0.72 { features.append("balanced page") }
+        return features.isEmpty ? ["notes"] : features
+    }
+
+    private static func memoryHooks(keywords: [String], style: NoteStyle, models: [DetectedModel]) -> [String] {
+        var hooks = keywords.prefix(4).map { "link \($0) to one image or example." }
+        if let model = models.first {
+            hooks.append("picture \(model.title) rotating once.")
+        }
+        hooks.append("say the \(style.rawValue) pattern out loud.")
+        return Array(hooks.prefix(5))
+    }
+
+    private static func examAngles(keywords: [String], formulas: [String], tables: [DetectedTable], models: [DetectedModel]) -> [String] {
+        var angles: [String] = []
+        if let keyword = keywords.first {
+            angles.append("define \(keyword) in one sentence.")
+        }
+        if let formula = formulas.first {
+            angles.append("use \(formula) with new numbers.")
+        }
+        if let table = tables.first {
+            angles.append("compare two columns in \(table.title).")
+        }
+        if let model = models.first {
+            angles.append("label each node in \(model.title).")
+        }
+        angles.append("explain the page from memory in 30 seconds.")
+        return Array(angles.prefix(5))
+    }
+
+    private static func confusionAlerts(confidence: Double, risk: Double, legibility: Double, formulas: [String], models: [DetectedModel]) -> [String] {
+        var alerts: [String] = []
+        if confidence < 0.48 { alerts.append("ocr confidence is low. verify the text before studying.") }
+        if risk > 0.58 { alerts.append("retention risk is high. do recall before rereading.") }
+        if legibility < 0.45 { alerts.append("handwriting may hide key terms.") }
+        if formulas.count > 3 { alerts.append("formula-heavy page. practice, do not just read.") }
+        if models.count > 1 { alerts.append("multiple diagrams. study one model at a time.") }
+        return alerts
+    }
+
+    private static func cleanupSuggestions(spacing: Double, structure: Double, pace: WritingPace, pressure: WritingPressure, tables: [DetectedTable], models: [DetectedModel]) -> [String] {
+        var suggestions: [String] = []
+        if spacing < 0.5 { suggestions.append("add space around headings.") }
+        if structure < 0.35 { suggestions.append("mark key ideas with bullets.") }
+        if pace == .rushed { suggestions.append("rewrite the first messy line.") }
+        if pressure == .heavy { suggestions.append("use lighter strokes next scan.") }
+        if !tables.isEmpty { suggestions.append("check table headers.") }
+        if !models.isEmpty { suggestions.append("tap the model before flashcards.") }
+        return suggestions
+    }
+
+    private static func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+}
+
+private extension NoteStyle {
+    var symbol: String {
+        switch self {
+        case .linear: "text.alignleft"
+        case .diagram: "cube.transparent"
+        case .table: "tablecells"
+        case .formula: "function"
+        case .mixed: "sparkles.rectangle.stack"
+        }
     }
 }
 
@@ -217,9 +458,23 @@ private enum NoteLayoutAnalyzer {
                     ? "visual structure was detected in the scan and converted into an interactive study map."
                     : "the scan contains visual structure that should stay connected to the surrounding notes.",
                 terms: terms,
-                nodes: terms.isEmpty ? fallbackNodes : terms
+                nodes: terms.isEmpty ? fallbackNodes : terms,
+                reconstruction: ModelReconstructionFactory.make(
+                    source: "surya layout plus local depth",
+                    confidence: max(0.46, min(0.91, visualSignal + (textTriggered ? 0.34 : 0.22))),
+                    shape: shape(from: joined, visualSignal: visualSignal),
+                    nodes: terms.isEmpty ? fallbackNodes : terms,
+                    hint: "tap anchors to rebuild the scan as a memory object."
+                )
             )
         ]
+    }
+
+    private static func shape(from text: String, visualSignal: Double) -> ModelShape {
+        if text.contains("cycle") || text.contains("flow") || text.contains("loop") { return .cycle }
+        if text.contains("table") || text.contains("chart") { return .table }
+        if text.contains("layer") || text.contains("stack") { return .stack }
+        return visualSignal > 0.26 ? .mesh : .orbit
     }
 
     private static func splitColumns(_ line: String) -> [String] {
@@ -283,11 +538,37 @@ struct LocalNoteUnderstandingService: NoteUnderstandingServing {
     }
 
     func makeFlashcards(from content: ExtractedContent) -> [Flashcard] {
-        [
-            Flashcard(front: "what does a limit measure?", back: "the value a function approaches near a point."),
-            Flashcard(front: "when should you factor first?", back: "when direct substitution creates an undefined expression."),
-            Flashcard(front: "what confirms a two sided limit?", back: "both one sided limits approach the same value.")
-        ]
+        var cards: [Flashcard] = []
+        for section in content.sections.prefix(4) {
+            let answer = section.body
+                .split(separator: "\n")
+                .prefix(2)
+                .joined(separator: " ")
+            cards.append(Flashcard(front: "what matters in \(section.title)?", back: answer.isEmpty ? section.body : answer))
+        }
+        for keyword in content.keywords.prefix(4) {
+            cards.append(Flashcard(front: "explain \(keyword)", back: explain(keyword)))
+        }
+        for formula in content.formulas.prefix(3) {
+            cards.append(Flashcard(front: "when do you use \(formula)?", back: "use it when the page asks you to connect the quantities around \(formula)."))
+        }
+        for table in content.tables.prefix(2) {
+            cards.append(Flashcard(front: "what does \(table.title) compare?", back: table.headers.joined(separator: ", ")))
+        }
+        for model in content.models.prefix(2) {
+            let nodes = (model.nodes ?? model.terms).joined(separator: ", ")
+            cards.append(Flashcard(front: "rebuild \(model.title)", back: nodes.isEmpty ? model.summary : nodes))
+        }
+        for prompt in content.insight.recallPrompts.prefix(3) {
+            cards.append(Flashcard(front: prompt, back: content.insight.onlyWhatMatters.isEmpty ? content.cleanedText : content.insight.onlyWhatMatters))
+        }
+
+        var seen = Set<String>()
+        let unique = cards.filter { seen.insert($0.front).inserted }
+        if unique.isEmpty {
+            return [Flashcard(front: "what is this page about?", back: content.cleanedText)]
+        }
+        return Array(unique.prefix(12))
     }
 
     func explain(_ term: String) -> String {

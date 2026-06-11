@@ -9,7 +9,7 @@ struct NotebookPaperView<Content: View>: View {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(NotebookTheme.paper)
                 .overlay(PaperRules().clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)))
-                .overlay(PaperGrain(density: 440).clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)))
+                .overlay(PaperGrain(density: 220).clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)))
                 .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
 
             content
@@ -20,7 +20,7 @@ struct NotebookPaperView<Content: View>: View {
 
 struct PaperRules: View {
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             let left = size.width * 0.16
             var vertical = Path()
             vertical.move(to: CGPoint(x: left, y: 0))

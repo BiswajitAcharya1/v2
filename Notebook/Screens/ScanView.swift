@@ -16,7 +16,7 @@ struct ScanView: View {
                 )
                 .ignoresSafeArea()
 
-                TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { timeline in
+                TimelineView(.periodic(from: .now, by: 1.0 / 12.0)) { timeline in
                     let t = timeline.date.timeIntervalSinceReferenceDate
                     ZStack {
                         ScanAtmosphere(seconds: t, phase: store.scanPhase)
@@ -296,7 +296,7 @@ private struct ScanAtmosphere: View {
     var phase: ScanPhase
 
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             for index in 0..<12 {
                 let y = size.height * CGFloat(index) / 11
                 let drift = CGFloat(sin(seconds * 0.42 + Double(index))) * 18
@@ -332,7 +332,7 @@ private struct EdgeGuide: View {
     var phase: ScanPhase
 
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             let inset: CGFloat = 18
             let corner: CGFloat = 44
             let alpha = phase == .framing ? 0.88 : 0.55
@@ -370,7 +370,7 @@ private struct CaptureGlow: View {
     var seconds: TimeInterval
 
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             let y = CGFloat((seconds * 0.75).truncatingRemainder(dividingBy: 1)) * size.height
             let rect = CGRect(x: 0, y: y - 34, width: size.width, height: 68)
             context.fill(Path(rect), with: .linearGradient(

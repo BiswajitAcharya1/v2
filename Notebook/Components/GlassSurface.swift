@@ -76,10 +76,10 @@ struct PillButtonStyle: ButtonStyle {
                 Capsule()
                     .stroke(.white.opacity(configuration.isPressed ? 0.34 : 0.16), lineWidth: 0.8)
             }
-            .scaleEffect(configuration.isPressed ? 0.965 : 1)
-            .rotation3DEffect(.degrees(configuration.isPressed ? -4 : 0), axis: (x: 1, y: 0, z: 0), perspective: 0.75)
-            .shadow(color: tint.opacity(configuration.isPressed ? 0.08 : 0.16), radius: configuration.isPressed ? 4 : 8, y: configuration.isPressed ? 2 : 6)
-            .animation(.spring(response: 0.28, dampingFraction: 0.72), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.975 : 1)
+            .rotation3DEffect(.degrees(configuration.isPressed ? -2.5 : 0), axis: (x: 1, y: 0, z: 0), perspective: 0.75)
+            .shadow(color: tint.opacity(configuration.isPressed ? 0.08 : 0.16), radius: configuration.isPressed ? 5 : 8, y: configuration.isPressed ? 3 : 6)
+            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: configuration.isPressed)
             .modifier(HapticPressFeedback(isPressed: configuration.isPressed))
     }
 }
@@ -105,10 +105,10 @@ struct CircleButtonStyle: ButtonStyle {
                 Circle()
                     .stroke(.white.opacity(configuration.isPressed ? 0.36 : 0.18), lineWidth: 0.8)
             }
-            .scaleEffect(configuration.isPressed ? 0.92 : 1)
-            .rotation3DEffect(.degrees(configuration.isPressed ? 8 : 0), axis: (x: 0.6, y: 1, z: 0), perspective: 0.72)
-            .shadow(color: tint.opacity(configuration.isPressed ? 0.08 : 0.18), radius: configuration.isPressed ? 3 : 8, y: configuration.isPressed ? 2 : 5)
-            .animation(.spring(response: 0.24, dampingFraction: 0.72), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.945 : 1)
+            .rotation3DEffect(.degrees(configuration.isPressed ? 5 : 0), axis: (x: 0.6, y: 1, z: 0), perspective: 0.72)
+            .shadow(color: tint.opacity(configuration.isPressed ? 0.08 : 0.18), radius: configuration.isPressed ? 4 : 8, y: configuration.isPressed ? 3 : 5)
+            .animation(.spring(response: 0.4, dampingFraction: 0.86), value: configuration.isPressed)
             .modifier(HapticPressFeedback(isPressed: configuration.isPressed))
     }
 }
@@ -147,11 +147,11 @@ struct FloatingCircleButtonStyle: ButtonStyle {
                         .stroke(.white.opacity(configuration.isPressed ? 0.5 : 0.24), lineWidth: 0.9)
                 }
             }
-            .scaleEffect(configuration.isPressed ? 0.9 : 1)
-            .rotationEffect(.degrees(configuration.isPressed ? 10 : 0))
-            .rotation3DEffect(.degrees(configuration.isPressed ? -10 : 0), axis: (x: 0.2, y: 1, z: 0), perspective: 0.7)
-            .shadow(color: tint.opacity(configuration.isPressed ? 0.1 : 0.22), radius: configuration.isPressed ? 4 : 12, y: configuration.isPressed ? 3 : 8)
-            .animation(.spring(response: 0.3, dampingFraction: 0.62), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .rotationEffect(.degrees(configuration.isPressed ? 6 : 0))
+            .rotation3DEffect(.degrees(configuration.isPressed ? -6 : 0), axis: (x: 0.2, y: 1, z: 0), perspective: 0.7)
+            .shadow(color: tint.opacity(configuration.isPressed ? 0.1 : 0.22), radius: configuration.isPressed ? 5 : 12, y: configuration.isPressed ? 4 : 8)
+            .animation(.spring(response: 0.46, dampingFraction: 0.82), value: configuration.isPressed)
             .modifier(HapticPressFeedback(isPressed: configuration.isPressed))
     }
 }
@@ -182,6 +182,10 @@ struct GooeyInput: View {
 
     @FocusState private var focused: Bool
     @State private var breath = false
+
+    private var isActive: Bool {
+        focused || !text.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -222,7 +226,7 @@ struct GooeyInput: View {
             .padding(.horizontal, 15)
             .padding(.vertical, 14)
             .background {
-                GooeyInputBackground(active: focused || !text.isEmpty, breath: breath)
+                GooeyInputBackground(active: isActive, breath: breath)
             }
             .overlay {
                 Capsule()
@@ -232,9 +236,9 @@ struct GooeyInput: View {
             .animation(.spring(response: 0.38, dampingFraction: 0.8), value: focused)
             .animation(.spring(response: 0.32, dampingFraction: 0.84), value: text.count)
         }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
-                breath = true
+        .onChange(of: isActive) { _, newValue in
+            withAnimation(.easeInOut(duration: 0.72)) {
+                breath = newValue
             }
         }
     }
@@ -344,9 +348,9 @@ enum LegalDocument: String, Identifiable {
     var summary: String {
         switch self {
         case .terms:
-            "clear rules for using margins as a study notebook."
+            "clear rules for using vellum as a study notebook."
         case .privacy:
-            "how margins handles notes, account data, scans, and voice setup."
+            "how vellum handles notes, account data, scans, and voice setup."
         }
     }
 
@@ -355,14 +359,14 @@ enum LegalDocument: String, Identifiable {
         case .terms:
             [
                 ("your account", "use accurate sign up information, keep your password private, and only use accounts you are allowed to access."),
-                ("your notes", "you keep ownership of notes you scan or type. margins organizes them so you can study, search, listen, and review."),
+                ("your notes", "you keep ownership of notes you scan or type. vellum organizes them so you can study, search, listen, and review."),
                 ("ai study tools", "ai explanations, flashcards, and only what matters are study aids. check important answers against your class materials."),
                 ("acceptable use", "do not upload content you do not have the right to use, try to break the app, or use another person's account."),
                 ("changes", "features may improve over time. when terms change, the app should make the updated version easy to review.")
             ]
         case .privacy:
             [
-                ("data we save", "margins stores your account session, subjects, notebooks, scanned pages, typed notes, study state, and optional voice samples on device for this demo build."),
+                ("data we save", "vellum stores your account session, subjects, notebooks, scanned pages, typed notes, study state, and optional voice samples on device for this demo build."),
                 ("scans and text", "scanned notes are processed to extract readable text, tables, diagrams, and subject labels so pages can be filed into notebooks."),
                 ("voice setup", "voice recording is optional. if you use it, the app stores short samples and transcripts so reading features can personalize playback."),
                 ("sign in", "email sign in is local in this build. apple and google require production secrets before they can connect."),
@@ -480,8 +484,8 @@ struct ContainerTextFlip: View {
     private let weights: [Font.Weight] = [.semibold, .medium, .regular, .semibold, .bold, .light, .medium, .semibold, .regular, .bold, .light]
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.8)) { timeline in
-            let wordIndex = Int(timeline.date.timeIntervalSinceReferenceDate / 1.8) % max(words.count, 1)
+        TimelineView(.periodic(from: .now, by: 2.4)) { timeline in
+            let wordIndex = Int(timeline.date.timeIntervalSinceReferenceDate / 2.4) % max(words.count, 1)
             let word = words.isEmpty ? "" : words[wordIndex]
             Text(word)
                 .id(wordIndex)
@@ -498,7 +502,7 @@ struct ContainerTextFlip: View {
                     insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.92)),
                     removal: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 1.04))
                 ))
-                .animation(.spring(response: 0.48, dampingFraction: 0.78), value: wordIndex)
+                .animation(.spring(response: 0.64, dampingFraction: 0.86), value: wordIndex)
         }
         .frame(minWidth: 126, minHeight: 34)
         .clipped()

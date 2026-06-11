@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct NotebookDetailView: View {
     @Environment(NotebookStore.self) private var store
@@ -38,7 +39,12 @@ struct NotebookDetailView: View {
 
     private var currentPage: NotebookPage? {
         guard !pages.isEmpty else { return nil }
-        return pages[min(pageIndex * 2, pages.count - 1)]
+        let index = usesSinglePageLayout ? pageIndex : pageIndex * 2
+        return pages[min(index, pages.count - 1)]
+    }
+
+    private var usesSinglePageLayout: Bool {
+        UIScreen.main.bounds.width < 560
     }
 
     var body: some View {
@@ -216,13 +222,16 @@ struct NotebookDetailView: View {
 
                     TabView(selection: $pageIndex) {
                         ForEach(0..<spreadCount, id: \.self) { spread in
+                            let leftIndex = usesSinglePageLayout ? spread : spread * 2
+                            let rightIndex = leftIndex + 1
                             NotebookSpreadView(
-                                left: pages[spread * 2],
-                                right: pages.indices.contains(spread * 2 + 1) ? pages[spread * 2 + 1] : nil,
-                                leftContent: { pageContent(pages[spread * 2], index: spread * 2, compact: pages.indices.contains(spread * 2 + 1)) },
+                                left: pages[leftIndex],
+                                right: !usesSinglePageLayout && pages.indices.contains(rightIndex) ? pages[rightIndex] : nil,
+                                singlePage: usesSinglePageLayout,
+                                leftContent: { pageContent(pages[leftIndex], index: leftIndex, compact: false) },
                                 rightContent: {
-                                    if pages.indices.contains(spread * 2 + 1) {
-                                        pageContent(pages[spread * 2 + 1], index: spread * 2 + 1, compact: true)
+                                    if !usesSinglePageLayout, pages.indices.contains(rightIndex) {
+                                        pageContent(pages[rightIndex], index: rightIndex, compact: true)
                                     } else {
                                         EmptyView()
                                     }
@@ -252,13 +261,17 @@ struct NotebookDetailView: View {
     }
 
     private var spreadCount: Int {
-        max(1, Int(ceil(Double(pages.count) / 2.0)))
+        usesSinglePageLayout ? max(1, pages.count) : max(1, Int(ceil(Double(pages.count) / 2.0)))
     }
 
     private func pageContent(_ page: NotebookPage, index: Int, compact: Bool = false) -> some View {
         let scale = compact ? textScale * 0.82 : textScale
         return VStack(alignment: .leading, spacing: 12) {
             pageHeader(page, index: index, scale: scale)
+            PageInsightStrip(insight: page.content.insight, scale: scale) { prompt in
+                Haptics.selection()
+                selectedPage = page
+            }
 
             if isEditing && currentPage?.id == page.id {
                 TextEditor(text: $editedText)
@@ -438,6 +451,14 @@ struct NotebookDetailView: View {
             }
             .disabled(currentPage == nil || isEditing)
 
+            railButton(symbol: "cube.transparent", label: "model") {
+                if let page = currentPage {
+                    Haptics.success()
+                    store.generateStudyModel(for: page.id)
+                }
+            }
+            .disabled(currentPage == nil || isEditing)
+
             railButton(symbol: isEditing ? "checkmark" : "pencil", label: isEditing ? "save" : "edit") {
                 Haptics.selection()
                 if let page = currentPage {
@@ -560,9 +581,9 @@ private struct NotebookDetailAtmosphere: View {
     let accent: Color
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0 / 18.0)) { timeline in
+        TimelineView(.periodic(from: .now, by: 1.0 / 8.0)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            Canvas { context, size in
+            Canvas(rendersAsynchronously: true) { context, size in
                 for index in 0..<9 {
                     var path = Path()
                     let y = size.height * (0.1 + CGFloat(index) * 0.105)
@@ -609,6 +630,80 @@ private struct PageSignalDot: View {
     }
 }
 
+private struct PageInsightStrip: View {
+    let insight: SmartPageInsight
+    let scale: Double
+    var onStudy: (String) -> Void
+    @State private var glow = false
+
+    var body: some View {
+        if !insight.onlyWhatMatters.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    insightPill(symbol: "checkmark.seal.fill", text: percent(insight.clarityScore))
+                    insightPill(symbol: "pencil.and.scribble", text: insight.handwriting.pace.rawValue)
+                    insightPill(symbol: "clock.fill", text: "\(insight.estimatedReadMinutes)m")
+                    ForEach(insight.detectedFeatures.prefix(4), id: \.self) { feature in
+                        insightPill(symbol: symbol(for: feature), text: feature)
+                    }
+                    Button {
+                        onStudy(insight.nextBestStep)
+                    } label: {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 13 * scale, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 38, height: 38)
+                            .background(NotebookTheme.ink, in: Circle())
+                            .overlay {
+                                Circle()
+                                    .stroke(.white.opacity(glow ? 0.8 : 0.22), lineWidth: 1)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 2)
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                    glow = true
+                }
+            }
+        }
+    }
+
+    private func insightPill(symbol: String, text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .font(.system(size: 10 * scale, weight: .bold))
+            Text(text)
+                .font(.system(size: 11 * scale, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+        }
+        .foregroundStyle(NotebookTheme.ink.opacity(0.78))
+        .padding(.horizontal, 9)
+        .frame(height: 30)
+        .background(.white.opacity(0.42), in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.5), lineWidth: 0.6)
+        }
+    }
+
+    private func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
+    private func symbol(for feature: String) -> String {
+        switch feature {
+        case "formulas": "function"
+        case "tables": "tablecells"
+        case "models", "sketch": "cube.transparent"
+        case "outline": "list.bullet"
+        case "balanced page": "circle.grid.cross"
+        default: "tag.fill"
+        }
+    }
+}
+
 private struct PageStackBackdrop: View {
     var pageCount: Int
 
@@ -634,6 +729,7 @@ private struct PageStackBackdrop: View {
 private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
     let left: NotebookPage
     let right: NotebookPage?
+    let singlePage: Bool
     let leftContent: LeftContent
     let rightContent: RightContent
     let onSelect: (NotebookPage) -> Void
@@ -643,12 +739,14 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
     init(
         left: NotebookPage,
         right: NotebookPage?,
+        singlePage: Bool = false,
         @ViewBuilder leftContent: () -> LeftContent,
         @ViewBuilder rightContent: () -> RightContent,
         onSelect: @escaping (NotebookPage) -> Void
     ) {
         self.left = left
         self.right = right
+        self.singlePage = singlePage
         self.leftContent = leftContent()
         self.rightContent = rightContent()
         self.onSelect = onSelect
@@ -657,16 +755,16 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
     var body: some View {
         GeometryReader { proxy in
             let isWide = proxy.size.width > 560
-            let pageGap = isWide ? 18.0 : 2.0
+            let pageGap = singlePage ? 0.0 : (isWide ? 18.0 : 2.0)
 
             ZStack {
-                OpenCompositionSpreadBackground()
+                OpenCompositionSpreadBackground(singlePage: singlePage)
 
                 HStack(spacing: pageGap) {
                     leftContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(.leading, isWide ? 34 : 18)
-                        .padding(.trailing, isWide ? 14 : 10)
+                        .padding(.leading, singlePage ? 30 : (isWide ? 34 : 18))
+                        .padding(.trailing, singlePage ? 24 : (isWide ? 14 : 10))
                         .padding(.top, 38)
                         .padding(.bottom, 18)
                         .contentShape(Rectangle())
@@ -674,19 +772,21 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
                             onSelect(left)
                         }
 
-                    rightContent
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(.leading, isWide ? 12 : 6)
-                        .padding(.trailing, isWide ? 34 : 18)
-                        .padding(.top, 38)
-                        .padding(.bottom, 18)
-                        .opacity(right == nil ? 0.42 : 1)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if let right {
-                                onSelect(right)
+                    if !singlePage {
+                        rightContent
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .padding(.leading, isWide ? 12 : 6)
+                            .padding(.trailing, isWide ? 34 : 18)
+                            .padding(.top, 38)
+                            .padding(.bottom, 18)
+                            .opacity(right == nil ? 0.42 : 1)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if let right {
+                                    onSelect(right)
+                                }
                             }
-                        }
+                    }
                 }
                 .padding(.horizontal, isWide ? 4 : 0)
             }
@@ -731,21 +831,31 @@ private struct NotebookSpreadView<LeftContent: View, RightContent: View>: View {
 }
 
 private struct OpenCompositionSpreadBackground: View {
+    var singlePage = false
+
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let gap: CGFloat = size.width > 560 ? 18 : 2
-            let pageWidth = max(0, (size.width - gap) / 2)
+            let gap: CGFloat = singlePage ? 0 : (size.width > 560 ? 18 : 2)
+            let pageWidth = singlePage ? size.width : max(0, (size.width - gap) / 2)
             ZStack {
                 bottomPageStack(size: size)
-                HStack(spacing: gap) {
-                    pageSurface(isLeft: true)
+                if singlePage {
+                    pageSurface(isLeft: true, singlePage: true)
                         .frame(width: pageWidth)
-                    pageSurface(isLeft: false)
-                        .frame(width: pageWidth)
+                        .padding(.horizontal, 0)
+                } else {
+                    HStack(spacing: gap) {
+                        pageSurface(isLeft: true)
+                            .frame(width: pageWidth)
+                        pageSurface(isLeft: false)
+                            .frame(width: pageWidth)
+                    }
+                    .padding(.horizontal, 0)
                 }
-                .padding(.horizontal, 0)
-                centerFold
+                if !singlePage {
+                    centerFold
+                }
                 pageCrown(size: size)
                 HStack {
                     sidePageEdges()
@@ -767,16 +877,19 @@ private struct OpenCompositionSpreadBackground: View {
         }
     }
 
-    private func pageSurface(isLeft: Bool) -> some View {
-        UnevenRoundedRectangle(
-            cornerRadii: .init(
-                topLeading: isLeft ? 30 : 10,
-                bottomLeading: isLeft ? 30 : 10,
-                bottomTrailing: isLeft ? 10 : 30,
-                topTrailing: isLeft ? 10 : 30
-            ),
+    private func pageSurface(isLeft: Bool, singlePage: Bool = false) -> some View {
+        let shape = UnevenRoundedRectangle(
+            cornerRadii: singlePage
+                ? .init(topLeading: 32, bottomLeading: 32, bottomTrailing: 32, topTrailing: 32)
+                : .init(
+                    topLeading: isLeft ? 30 : 10,
+                    bottomLeading: isLeft ? 30 : 10,
+                    bottomTrailing: isLeft ? 10 : 30,
+                    topTrailing: isLeft ? 10 : 30
+                ),
             style: .continuous
         )
+        return shape
         .fill(
             LinearGradient(
                 colors: [
@@ -808,15 +921,7 @@ private struct OpenCompositionSpreadBackground: View {
             .allowsHitTesting(false)
         }
         .overlay {
-            UnevenRoundedRectangle(
-                cornerRadii: .init(
-                    topLeading: isLeft ? 30 : 10,
-                    bottomLeading: isLeft ? 30 : 10,
-                    bottomTrailing: isLeft ? 10 : 30,
-                    topTrailing: isLeft ? 10 : 30
-                ),
-                style: .continuous
-            )
+            shape
             .stroke(.white.opacity(0.72), lineWidth: 0.8)
         }
     }
@@ -884,7 +989,7 @@ private struct OpenCompositionRules: View {
     var isLeft: Bool
 
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             let margin = isLeft ? size.width * 0.16 : size.width * 0.14
             let farMargin = size.width * 0.9
 
@@ -1216,7 +1321,7 @@ private struct ReconstructedObjectGlyph: View {
     var body: some View {
         GeometryReader { proxy in
             let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
-            Canvas { context, size in
+            Canvas(rendersAsynchronously: true) { context, size in
                 let points = [
                     CGPoint(x: size.width * 0.5, y: size.height * 0.16),
                     CGPoint(x: size.width * 0.78, y: size.height * 0.36),
@@ -1380,7 +1485,7 @@ private struct ScanAtmosphere: View {
     let active: Bool
 
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             let center = CGPoint(x: size.width * 0.5, y: size.height * 0.42)
             context.fill(
                 Path(ellipseIn: CGRect(x: center.x - 170, y: center.y - 170, width: 340, height: 340)),
@@ -1453,10 +1558,21 @@ private struct DetectedModelView: View {
     let model: DetectedModel
     @State private var selectedNode: String?
     @State private var awake = false
+    @State private var renderMode: ModelRenderMode = .orbit
 
     private var nodes: [String] {
         let modelNodes = model.nodes ?? []
         return modelNodes.isEmpty ? model.terms : modelNodes
+    }
+
+    private var reconstruction: ModelReconstruction {
+        model.reconstruction ?? ModelReconstructionFactory.make(
+            source: "local depth",
+            confidence: 0.62,
+            shape: .orbit,
+            nodes: nodes,
+            hint: "tap a node to inspect the connection."
+        )
     }
 
     var body: some View {
@@ -1464,7 +1580,14 @@ private struct DetectedModelView: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(.white.opacity(0.54))
+                        .fill(
+                            RadialGradient(
+                                colors: [.white.opacity(0.92), .white.opacity(0.46)],
+                                center: .topLeading,
+                                startRadius: 0,
+                                endRadius: 42
+                            )
+                        )
                     Image(systemName: "cube.transparent")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(NotebookTheme.ink)
@@ -1481,11 +1604,39 @@ private struct DetectedModelView: View {
             }
 
             if !nodes.isEmpty {
-                InteractiveModelMap(nodes: nodes, selectedNode: $selectedNode, awake: awake)
-                    .frame(height: 138)
-                    .rotation3DEffect(.degrees(awake ? 0 : 18), axis: (x: 1, y: 0, z: 0), perspective: 0.8)
+                ReconstructionBadgeStrip(reconstruction: reconstruction)
 
-                Text(selectedNode.map { "\($0) is linked to this visual structure. tap another point to study the connection." } ?? "tap a point in the model to inspect it.")
+                HStack(spacing: 8) {
+                    ForEach(ModelRenderMode.allCases) { mode in
+                        Button {
+                            Haptics.selection()
+                            withAnimation(.spring(response: 0.42, dampingFraction: 0.8)) {
+                                renderMode = mode
+                            }
+                        } label: {
+                            Image(systemName: mode.symbol)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(renderMode == mode ? .white : NotebookTheme.ink)
+                                .frame(width: 34, height: 34)
+                                .background(renderMode == mode ? NotebookTheme.ink : .white.opacity(0.48), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Spacer()
+
+                    Text("\(nodes.count)")
+                        .font(.system(.caption, design: .rounded, weight: .bold))
+                        .foregroundStyle(NotebookTheme.ink.opacity(0.68))
+                        .frame(width: 34, height: 34)
+                        .background(.white.opacity(0.48), in: Circle())
+                }
+
+                InteractiveModelMap(nodes: nodes, reconstruction: reconstruction, selectedNode: $selectedNode, awake: awake, mode: renderMode)
+                    .frame(height: renderMode == .mesh ? 212 : 188)
+                    .rotation3DEffect(.degrees(awake ? 0 : 16), axis: (x: 1, y: 0, z: 0), perspective: 0.8)
+
+                Text(selectedNode.map { "\($0) links to \(relatedNode(after: $0))." } ?? reconstruction.interactionHint)
                     .font(.system(.caption, design: .rounded, weight: .medium))
                     .foregroundStyle(NotebookTheme.ink.opacity(0.72))
                     .padding(.horizontal, 12)
@@ -1494,49 +1645,73 @@ private struct DetectedModelView: View {
                     .animation(.spring(response: 0.35, dampingFraction: 0.84), value: selectedNode)
             }
         }
-        .padding(14)
-        .background(.white.opacity(0.28), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(.white.opacity(0.5), lineWidth: 1)
+        .padding(16)
+        .background(
+            LinearGradient(
+                colors: [.white.opacity(0.46), .white.opacity(0.22), NotebookTheme.ink.opacity(0.045)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(.white.opacity(0.62), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.06), radius: 10, y: 6)
         .onAppear {
-            withAnimation(.spring(response: 0.74, dampingFraction: 0.78).delay(0.08)) {
+            withAnimation(.spring(response: 0.9, dampingFraction: 0.86).delay(0.08)) {
                 awake = true
             }
         }
+    }
+
+    private func relatedNode(after node: String) -> String {
+        guard let index = nodes.firstIndex(of: node), !nodes.isEmpty else { return "the page" }
+        return nodes[(index + 1) % nodes.count]
     }
 }
 
 private struct InteractiveModelMap: View {
     let nodes: [String]
+    let reconstruction: ModelReconstruction
     @Binding var selectedNode: String?
     var awake: Bool
+    var mode: ModelRenderMode
     @State private var orbit = false
 
     var body: some View {
         GeometryReader { proxy in
             let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
-            let radius = min(proxy.size.width, proxy.size.height) * 0.34
+            let radius = min(proxy.size.width, proxy.size.height) * mode.radiusFactor
+            let anchors = displayAnchors
 
             ZStack {
-                ForEach(0..<3, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.white.opacity(0.18))
+                    .overlay {
+                        ModelGridLines()
+                            .opacity(awake ? 1 : 0)
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(.white.opacity(0.44), lineWidth: 0.8)
+                    }
+
+                ForEach(0..<mode.orbitCount, id: \.self) { index in
                     Ellipse()
-                        .stroke(NotebookTheme.ink.opacity(0.08 + Double(index) * 0.025), lineWidth: 1)
+                        .stroke(NotebookTheme.ink.opacity(0.08 + Double(index) * 0.026), lineWidth: mode == .mesh ? 1.2 : 1)
                         .frame(
-                            width: radius * CGFloat(2.1 + Double(index) * 0.32),
-                            height: radius * CGFloat(0.82 + Double(index) * 0.14)
+                            width: radius * CGFloat(mode == .mesh ? 2.5 + Double(index) * 0.28 : 2.1 + Double(index) * 0.32),
+                            height: radius * CGFloat(mode == .stack ? 0.56 + Double(index) * 0.18 : 0.82 + Double(index) * 0.14)
                         )
                         .rotationEffect(.degrees(Double(index) * 58 + (orbit ? 12 : -12)))
                         .position(center)
                 }
 
-                ForEach(Array(nodes.prefix(6).enumerated()), id: \.offset) { index, node in
-                    let angle = (Double(index) / Double(max(1, min(nodes.count, 6)))) * .pi * 2 - .pi / 2 + (orbit ? 0.08 : -0.08)
-                    let point = CGPoint(
-                        x: center.x + cos(angle) * radius,
-                        y: center.y + sin(angle) * radius * 0.54
-                    )
+                ForEach(Array(anchors.enumerated()), id: \.element.id) { index, anchor in
+                    let node = anchor.label
+                    let point = point(for: anchor, in: proxy.size, center: center, radius: radius, index: index, count: anchors.count)
                     Path { path in
                         path.move(to: center)
                         path.addQuadCurve(
@@ -1559,20 +1734,26 @@ private struct InteractiveModelMap: View {
                     )
                     .frame(width: 48, height: 48)
                     .overlay {
-                        Image(systemName: "cube.transparent")
+                        Image(systemName: reconstruction.shape.symbol)
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(NotebookTheme.ink)
                     }
                     .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
+                    .rotation3DEffect(.degrees(awake ? 8 : -10), axis: (x: 0.15, y: 1, z: 0), perspective: 0.8)
                     .scaleEffect(awake ? 1 : 0.82)
+                    .overlay {
+                        if mode == .mesh {
+                            Image(systemName: "point.3.connected.trianglepath.dotted")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(NotebookTheme.ink.opacity(0.62))
+                                .offset(x: 24, y: -20)
+                        }
+                    }
                     .position(center)
 
-                ForEach(Array(nodes.prefix(6).enumerated()), id: \.offset) { index, node in
-                    let angle = (Double(index) / Double(max(1, min(nodes.count, 6)))) * .pi * 2 - .pi / 2 + (orbit ? 0.08 : -0.08)
-                    let point = CGPoint(
-                        x: center.x + cos(angle) * radius,
-                        y: center.y + sin(angle) * radius * 0.54
-                    )
+                ForEach(Array(anchors.enumerated()), id: \.element.id) { index, anchor in
+                    let node = anchor.label
+                    let point = point(for: anchor, in: proxy.size, center: center, radius: radius, index: index, count: anchors.count)
                     Button {
                         Haptics.selection()
                         withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
@@ -1580,11 +1761,11 @@ private struct InteractiveModelMap: View {
                         }
                     } label: {
                         Text(node)
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
                             .lineLimit(1)
                             .minimumScaleFactor(0.62)
                             .foregroundStyle(NotebookTheme.ink)
-                            .frame(width: selectedNode == node ? 74 : 58, height: selectedNode == node ? 42 : 34)
+                            .frame(width: selectedNode == node ? 86 : 68, height: selectedNode == node ? 44 : 36)
                             .background(.white.opacity(selectedNode == node ? 0.82 : 0.54), in: Capsule())
                             .overlay {
                                 Capsule().stroke(.white.opacity(0.68), lineWidth: 0.8)
@@ -1603,5 +1784,126 @@ private struct InteractiveModelMap: View {
                 orbit = true
             }
         }
+    }
+
+    private var displayAnchors: [ModelAnchor] {
+        let anchors = reconstruction.anchors.isEmpty
+            ? ModelReconstructionFactory.make(source: "local depth", confidence: reconstruction.confidence, shape: reconstruction.shape, nodes: nodes, hint: reconstruction.interactionHint).anchors
+            : reconstruction.anchors
+        return Array(anchors.prefix(8))
+    }
+
+    private func point(for anchor: ModelAnchor, in size: CGSize, center: CGPoint, radius: CGFloat, index: Int, count: Int) -> CGPoint {
+        if mode == .orbit {
+            let angle = (Double(index) / Double(max(1, count))) * .pi * 2 - .pi / 2 + (orbit ? 0.08 : -0.08)
+            return CGPoint(
+                x: center.x + cos(angle) * radius,
+                y: center.y + sin(angle) * radius * mode.verticalSquash
+            )
+        }
+
+        let shimmer = orbit ? 0.016 : -0.016
+        let direction = index.isMultiple(of: 2) ? 1.0 : -1.0
+        let x = min(0.88, max(0.12, anchor.x + shimmer * direction))
+        let y = min(0.86, max(0.14, anchor.y))
+        return CGPoint(x: size.width * x, y: size.height * y)
+    }
+}
+
+private struct ReconstructionBadgeStrip: View {
+    let reconstruction: ModelReconstruction
+
+    var body: some View {
+        HStack(spacing: 8) {
+            badge(systemName: reconstruction.shape.symbol, text: reconstruction.shape.rawValue)
+            badge(systemName: "waveform.path.ecg", text: "\(Int((reconstruction.confidence * 100).rounded()))%")
+            badge(systemName: "sparkle.magnifyingglass", text: reconstruction.source)
+        }
+    }
+
+    private func badge(systemName: String, text: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemName)
+                .font(.system(size: 10, weight: .bold))
+            Text(text)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .foregroundStyle(NotebookTheme.ink.opacity(0.74))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(.white.opacity(0.42), in: Capsule())
+    }
+}
+
+private enum ModelRenderMode: String, CaseIterable, Identifiable {
+    case orbit
+    case mesh
+    case stack
+
+    var id: String { rawValue }
+
+    var symbol: String {
+        switch self {
+        case .orbit: "circle.dotted.circle"
+        case .mesh: "point.3.connected.trianglepath.dotted"
+        case .stack: "square.stack.3d.up.fill"
+        }
+    }
+
+    var hint: String {
+        switch self {
+        case .orbit: "tap a node to inspect the connection."
+        case .mesh: "mesh mode shows structure and linked terms."
+        case .stack: "stack mode turns the model into a recall order."
+        }
+    }
+
+    var radiusFactor: CGFloat {
+        switch self {
+        case .orbit: 0.34
+        case .mesh: 0.38
+        case .stack: 0.31
+        }
+    }
+
+    var verticalSquash: CGFloat {
+        switch self {
+        case .orbit: 0.54
+        case .mesh: 0.7
+        case .stack: 0.42
+        }
+    }
+
+    var orbitCount: Int {
+        switch self {
+        case .orbit: 3
+        case .mesh: 5
+        case .stack: 4
+        }
+    }
+}
+
+private struct ModelGridLines: View {
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            let color = NotebookTheme.ink.opacity(0.07)
+            for index in 1..<5 {
+                let x = size.width * CGFloat(index) / 5
+                var vertical = Path()
+                vertical.move(to: CGPoint(x: x, y: 0))
+                vertical.addLine(to: CGPoint(x: x, y: size.height))
+                context.stroke(vertical, with: .color(color), lineWidth: 0.6)
+            }
+            for index in 1..<4 {
+                let y = size.height * CGFloat(index) / 4
+                var horizontal = Path()
+                horizontal.move(to: CGPoint(x: 0, y: y))
+                horizontal.addLine(to: CGPoint(x: size.width, y: y))
+                context.stroke(horizontal, with: .color(color), lineWidth: 0.6)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }

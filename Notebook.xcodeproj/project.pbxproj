@@ -33,6 +33,7 @@
 		100000000000000000000119 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000021 /* LaunchScreen.storyboard */; };
 		10000000000000000000011A /* LaunchNotebookMark.png in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000022 /* LaunchNotebookMark.png */; };
 		10000000000000000000011B /* VoicePromptWordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000023 /* VoicePromptWordsView.swift */; };
+		10000000000000000000011C /* ProfileAvatarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000024 /* ProfileAvatarView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,10 +61,11 @@
 		100000000000000000000017 /* ReconstructionServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconstructionServices.swift; sourceTree = "<group>"; };
 		100000000000000000000018 /* ScanLiveActivityCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanLiveActivityCenter.swift; sourceTree = "<group>"; };
 		100000000000000000000019 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		100000000000000000000020 /* margins.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = margins.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000020 /* vellum.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = vellum.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000021 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		100000000000000000000022 /* LaunchNotebookMark.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = LaunchNotebookMark.png; sourceTree = "<group>"; };
 		100000000000000000000023 /* VoicePromptWordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePromptWordsView.swift; sourceTree = "<group>"; };
+		100000000000000000000024 /* ProfileAvatarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileAvatarView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -149,6 +151,7 @@
 				100000000000000000000013 /* DocumentScannerView.swift */,
 				100000000000000000000015 /* AtmosphereViews.swift */,
 				100000000000000000000023 /* VoicePromptWordsView.swift */,
+				100000000000000000000024 /* ProfileAvatarView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -170,7 +173,7 @@
 		100000000000000000000050 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				100000000000000000000020 /* margins.app */,
+				100000000000000000000020 /* vellum.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -192,7 +195,7 @@
 			);
 			name = notebook;
 			productName = notebook;
-			productReference = 100000000000000000000020 /* margins.app */;
+			productReference = 100000000000000000000020 /* vellum.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -269,6 +272,7 @@
 				100000000000000000000117 /* ReconstructionServices.swift in Sources */,
 				100000000000000000000118 /* ScanLiveActivityCenter.swift in Sources */,
 				10000000000000000000011B /* VoicePromptWordsView.swift in Sources */,
+				10000000000000000000011C /* ProfileAvatarView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -403,18 +407,18 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Notebook/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = margins;
-				INFOPLIST_KEY_NSCameraUsageDescription = "margins uses the camera to scan study pages.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "margins uses face id to verify password reset requests.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "margins uses the microphone for optional voice personalization.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "margins can import a note photo when the simulator has no camera.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "margins transcribes your optional voice setup recording.";
+				INFOPLIST_KEY_CFBundleDisplayName = vellum;
+				INFOPLIST_KEY_NSCameraUsageDescription = "vellum uses the camera to scan study pages.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "vellum uses face id to verify password reset requests.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "vellum uses the microphone for optional voice personalization.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "vellum can import a note photo when the simulator has no camera.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "vellum transcribes your optional voice setup recording.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswajitacharya.notebook;
-				PRODUCT_NAME = margins;
+				PRODUCT_NAME = vellum;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -436,18 +440,18 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Notebook/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = margins;
-				INFOPLIST_KEY_NSCameraUsageDescription = "margins uses the camera to scan study pages.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "margins uses face id to verify password reset requests.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "margins uses the microphone for optional voice personalization.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "margins can import a note photo when the simulator has no camera.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "margins transcribes your optional voice setup recording.";
+				INFOPLIST_KEY_CFBundleDisplayName = vellum;
+				INFOPLIST_KEY_NSCameraUsageDescription = "vellum uses the camera to scan study pages.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "vellum uses face id to verify password reset requests.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "vellum uses the microphone for optional voice personalization.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "vellum can import a note photo when the simulator has no camera.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "vellum transcribes your optional voice setup recording.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswajitacharya.notebook;
-				PRODUCT_NAME = margins;
+				PRODUCT_NAME = vellum;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;

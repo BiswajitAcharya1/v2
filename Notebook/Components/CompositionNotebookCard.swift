@@ -10,8 +10,8 @@ struct CompositionNotebookCard: View {
     @State private var float = false
     @State private var didPressHaptic = false
 
-    private var rotationX: Double { -Double(dragOffset.height / 6.8) + (float ? 1.5 : -1.3) }
-    private var rotationY: Double { Double(dragOffset.width / 6.2) + (float ? -1.7 : 1.4) }
+    private var rotationX: Double { -Double(dragOffset.height / 7.4) + (float ? 1.35 : -1.15) }
+    private var rotationY: Double { Double(dragOffset.width / 6.8) + (float ? -1.5 : 1.2) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -21,7 +21,7 @@ struct CompositionNotebookCard: View {
                 CompositionCoverFace(
                     subject: notebook.subject,
                     cornerRadius: 20,
-                    spineWidth: 46,
+                    spineWidth: 30,
                     labelWidth: 142,
                     labelHeight: 108,
                     labelOffsetY: 30
@@ -36,12 +36,12 @@ struct CompositionNotebookCard: View {
             .aspectRatio(0.72, contentMode: .fit)
             .rotation3DEffect(.degrees(rotationX), axis: (x: 1, y: 0, z: 0), perspective: 0.62)
             .rotation3DEffect(.degrees(rotationY), axis: (x: 0, y: 1, z: 0), perspective: 0.62)
-            .scaleEffect(isPressed ? 0.96 : 1)
+            .scaleEffect(isPressed ? 0.975 : 1)
             .offset(y: float ? -5 : 4)
             .shadow(color: .black.opacity(isPressed ? 0.14 : 0.24), radius: isPressed ? 10 : 20, x: dragOffset.width / -18, y: isPressed ? 8 : 18)
-            .animation(.spring(response: 0.35, dampingFraction: 0.72), value: dragOffset)
-            .animation(.spring(response: 0.28, dampingFraction: 0.78), value: isPressed)
-            .animation(.easeInOut(duration: 4.2).repeatForever(autoreverses: true), value: float)
+            .animation(.spring(response: 0.52, dampingFraction: 0.84), value: dragOffset)
+            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: isPressed)
+            .animation(.easeInOut(duration: 5.8).repeatForever(autoreverses: true), value: float)
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
@@ -51,8 +51,8 @@ struct CompositionNotebookCard: View {
                         }
                         isPressed = true
                         dragOffset = CGSize(
-                            width: max(min(value.translation.width, 40), -40),
-                            height: max(min(value.translation.height, 40), -40)
+                            width: max(min(value.translation.width, 46), -46),
+                            height: max(min(value.translation.height, 46), -46)
                         )
                     }
                     .onEnded { value in
@@ -242,7 +242,7 @@ private struct CompositionSpine: View {
                     .frame(width: max(14, width * 0.42))
             }
             .overlay {
-                Canvas { context, size in
+                Canvas(rendersAsynchronously: true) { context, size in
                     for index in 0..<24 {
                         let y = size.height * CGFloat(index) / 23
                         var thread = Path()
@@ -297,7 +297,7 @@ struct MinimalAppLogo: View {
                             }
                     }
                     .overlay {
-                        Canvas { context, size in
+                        Canvas(rendersAsynchronously: true) { context, size in
                             for index in 0..<9 {
                                 let y = size.height * (0.24 + CGFloat(index) * 0.06)
                                 var line = Path()
@@ -359,7 +359,7 @@ struct NotebookLogo: View {
         CompositionCoverFace(
             subject: nil,
             cornerRadius: 18,
-            spineWidth: 22,
+            spineWidth: 14,
             labelWidth: 102,
             labelHeight: 88,
             labelOffsetY: 30
@@ -379,7 +379,7 @@ private struct CompositionCoverLabel: View {
                     .lineSpacing(-1)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 4)
-                Text("margins")
+                Text("vellum")
                     .font(.system(size: isLarge ? 7 : 5.8, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
                     .padding(.horizontal, isLarge ? 6 : 4)
@@ -525,7 +525,7 @@ struct SpeckledCompositionTexture: View {
 
 private struct LeatherTexture: View {
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             for index in 0..<150 {
                 var path = Path()
                 let x = size.width * CGFloat((index * 29) % 101) / 100

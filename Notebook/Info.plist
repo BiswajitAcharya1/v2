@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>margins</string>
+	<string>vellum</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -25,15 +25,15 @@
 	<key>NSAccentColorName</key>
 	<string>AccentColor</string>
 	<key>NSCameraUsageDescription</key>
-	<string>margins uses the camera to scan study pages.</string>
+	<string>vellum uses the camera to scan study pages.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>margins uses face id to verify password reset requests.</string>
+	<string>vellum uses face id to verify password reset requests.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>margins uses the microphone for optional voice personalization.</string>
+	<string>vellum uses the microphone for optional voice personalization.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>margins can import a note photo when the simulator has no camera.</string>
+	<string>vellum can import a note photo when the simulator has no camera.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>margins transcribes your optional voice setup recording.</string>
+	<string>vellum transcribes your optional voice setup recording.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

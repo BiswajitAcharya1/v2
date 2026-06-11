@@ -44,7 +44,7 @@ struct AuthView: View {
             if showingEmail {
                 emailSheet
                     .transition(.asymmetric(
-                        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.9)),
+                        insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.94)),
                         removal: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.96))
                     ))
             }
@@ -53,10 +53,10 @@ struct AuthView: View {
         .onAppear {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(650))
-                withAnimation(.easeInOut(duration: 0.42)) {
+                withAnimation(.easeInOut(duration: 0.62)) {
                     ambientMotion = true
                 }
-                withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true)) {
+                withAnimation(.easeInOut(duration: 4.8).repeatForever(autoreverses: true)) {
                     leatherDrift = true
                 }
             }
@@ -79,7 +79,7 @@ struct AuthView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
             draggableAuthBook
-                .frame(width: 350, height: 330)
+                .frame(width: 390, height: 366)
             if notebookOpen, let message = store.authMessage, !showingEmail {
                 Text(message)
                     .font(.system(.footnote, design: .rounded, weight: .semibold))
@@ -90,7 +90,7 @@ struct AuthView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .frame(height: notebookOpen ? 420 : 330)
+        .frame(height: notebookOpen ? 456 : 366)
     }
 
     private var openProgress: CGFloat {
@@ -105,12 +105,12 @@ struct AuthView: View {
                 AuthPaperInterior(openProgress: openProgress)
                     .overlay {
                         if openProgress > 0.54 {
-                            VStack(spacing: 12) {
+                            VStack(spacing: 14) {
                             ForEach(Array(AuthProvider.allCases.enumerated()), id: \.element.id) { index, provider in
                                 AuthProviderPageButton(provider: provider) {
                                     if provider == .email {
                                         Haptics.open()
-                                        withAnimation(.spring(response: 0.92, dampingFraction: 0.82)) {
+                                        withAnimation(.spring(response: 1.02, dampingFraction: 0.88)) {
                                             isSignIn = false
                                             showingEmail = true
                                         }
@@ -118,34 +118,35 @@ struct AuthView: View {
                                         Task { await store.signIn(provider: provider) }
                                     }
                                 }
-                                .offset(x: openProgress >= 1 ? 0 : 16, y: openProgress >= 1 ? 0 : 10)
-                                .animation(.spring(response: 0.62, dampingFraction: 0.82).delay(Double(index) * 0.05), value: notebookOpen)
+                                .offset(x: (1 - openProgress) * 26, y: (1 - openProgress) * 34)
+                                .animation(.spring(response: 0.96, dampingFraction: 0.9).delay(Double(index) * 0.09), value: notebookOpen)
                             }
                         }
-                        .padding(.leading, 62)
-                        .padding(.trailing, 18)
+                        .frame(maxWidth: 286)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                        .padding(.horizontal, 28)
                         .opacity(Double((openProgress - 0.54) / 0.46))
-                        .scaleEffect(0.86 + openProgress * 0.14)
+                        .scaleEffect(0.9 + openProgress * 0.1)
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
                 }
-                .frame(width: 214 + openProgress * 166, height: 270 + openProgress * 100)
+                .frame(width: 236 + openProgress * 178, height: 300 + openProgress * 108)
                 .rotation3DEffect(.degrees(-6 + openProgress * 13), axis: (x: 1, y: 0.18, z: 0), perspective: 0.72)
                 .offset(x: openProgress * 74, y: openProgress * 16)
-                .shadow(color: .black.opacity(0.12), radius: 14, y: 9)
+                .shadow(color: .black.opacity(0.12), radius: 16, y: 10)
 
             CompositionCoverFace(
                 subject: nil,
                 cornerRadius: 22,
-                spineWidth: 42,
+                spineWidth: 28,
                 labelWidth: 118,
                 labelHeight: 96,
                 labelOffsetY: 36,
                 paperGrainDensity: notebookOpen || coverDrag < -2 ? 90 : 0
             )
-                .frame(width: 190, height: 248)
+                .frame(width: 214, height: 278)
                 .rotation3DEffect(.degrees(-156 * openProgress + (leatherDrift ? 2.5 : -2.5)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
-                .offset(x: -118 * openProgress, y: 4 + 12 * openProgress)
+                .offset(x: -132 * openProgress, y: 4 + 13 * openProgress)
                 .opacity(Double(1 - max(0, (openProgress - 0.74) / 0.26)))
                 .scaleEffect(1 - openProgress * 0.08)
                 .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
@@ -164,7 +165,7 @@ struct AuthView: View {
                             } else {
                                 Haptics.softTap()
                             }
-                            withAnimation(.spring(response: 0.78, dampingFraction: 0.76)) {
+                            withAnimation(.spring(response: 0.98, dampingFraction: 0.86)) {
                                 notebookOpen = shouldOpen
                                 coverDrag = 0
                             }
@@ -173,16 +174,16 @@ struct AuthView: View {
                 .accessibilityLabel("drag notebook cover")
                 .accessibilityHint("drag left to open sign up")
         }
-        .scaleEffect(notebookOpen ? 1.04 : 1)
-        .animation(.spring(response: 0.56, dampingFraction: 0.82), value: notebookOpen)
-        .animation(.spring(response: 0.28, dampingFraction: 0.74), value: coverDrag)
+        .scaleEffect(notebookOpen ? 1.03 : 1)
+        .animation(.spring(response: 0.78, dampingFraction: 0.88), value: notebookOpen)
+        .animation(.spring(response: 0.46, dampingFraction: 0.86), value: coverDrag)
     }
 
     private var authPanel: some View {
         VStack(spacing: 12) {
             Button {
                 Haptics.press()
-                withAnimation(.spring(response: 0.92, dampingFraction: 0.82)) {
+                withAnimation(.spring(response: 1.02, dampingFraction: 0.88)) {
                     isSignIn = true
                     showingEmail = true
                 }
@@ -235,8 +236,28 @@ struct AuthView: View {
     private struct FontFlipText: View {
         let text: String
         @State private var index = 0
-        private let designs: [Font.Design] = [.serif, .rounded, .monospaced, .default, .rounded, .serif, .default, .monospaced, .rounded, .serif, .default, .rounded]
-        private let weights: [Font.Weight] = [.semibold, .regular, .bold, .medium, .light, .semibold, .thin, .bold, .regular, .medium, .semibold, .light]
+        private struct FontMood {
+            let name: String?
+            let design: Font.Design
+            let weight: Font.Weight
+            let italic: Bool
+            let size: CGFloat
+        }
+
+        private let moods: [FontMood] = [
+            .init(name: "NewYork-Regular", design: .serif, weight: .semibold, italic: false, size: 45),
+            .init(name: "AvenirNext-DemiBold", design: .rounded, weight: .semibold, italic: false, size: 42),
+            .init(name: "Didot", design: .serif, weight: .regular, italic: true, size: 46),
+            .init(name: "Futura-Medium", design: .default, weight: .medium, italic: false, size: 41),
+            .init(name: "HoeflerText-Regular", design: .serif, weight: .regular, italic: true, size: 46),
+            .init(name: nil, design: .monospaced, weight: .bold, italic: false, size: 40),
+            .init(name: "Georgia-Bold", design: .serif, weight: .bold, italic: false, size: 42),
+            .init(name: nil, design: .rounded, weight: .light, italic: false, size: 44),
+            .init(name: "AvenirNext-UltraLight", design: .default, weight: .light, italic: false, size: 45),
+            .init(name: nil, design: .serif, weight: .semibold, italic: true, size: 45),
+            .init(name: "Menlo-Bold", design: .monospaced, weight: .bold, italic: false, size: 38),
+            .init(name: nil, design: .default, weight: .medium, italic: false, size: 43)
+        ]
 
         init(_ text: String) {
             self.text = text
@@ -244,7 +265,7 @@ struct AuthView: View {
 
         var body: some View {
             ZStack(alignment: .leading) {
-                ForEach(designs.indices, id: \.self) { designIndex in
+                ForEach(moods.indices, id: \.self) { designIndex in
                     fontText(for: designIndex)
                         .opacity(index == designIndex ? 1 : 0)
                         .scaleEffect(index == designIndex ? 1 : 0.94)
@@ -253,22 +274,24 @@ struct AuthView: View {
             }
             .frame(width: 62, height: 52, alignment: .leading)
             .clipped()
-            .animation(.spring(response: 0.42, dampingFraction: 0.76), value: index)
+            .animation(.spring(response: 0.58, dampingFraction: 0.86), value: index)
             .task {
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .milliseconds(620))
-                    index = (index + 1) % designs.count
+                    try? await Task.sleep(for: .milliseconds(920))
+                    index = (index + 1) % moods.count
                 }
             }
         }
 
         @ViewBuilder
         private func fontText(for designIndex: Int) -> some View {
+            let mood = moods[designIndex]
             let base = Text(text)
-                .font(.system(size: 43, weight: weights[designIndex], design: designs[designIndex]))
+                .font(mood.name.map { .custom($0, size: mood.size) } ?? .system(size: mood.size, weight: mood.weight, design: mood.design))
+                .fontWeight(mood.weight)
                 .baselineOffset(designIndex == 2 ? -1 : 0)
 
-            if designIndex.isMultiple(of: 2) {
+            if mood.italic {
                 base.italic()
             } else {
                 base
@@ -315,7 +338,7 @@ struct AuthView: View {
             .buttonStyle(.plain)
             .simultaneousGesture(TapGesture().onEnded { Haptics.press() })
             .onAppear {
-                withAnimation(.easeInOut(duration: 3.8).repeatForever(autoreverses: false)) {
+                withAnimation(.easeInOut(duration: 1.45).delay(0.22)) {
                     shimmer = true
                 }
             }
@@ -514,10 +537,6 @@ private struct AuthPaperInterior: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let width = proxy.size.width
-            let gap = max(12, width * 0.045)
-            let pageWidth = max(0, (width - gap) / 2)
-
             ZStack {
                 if openProgress > 0.01 {
                     ForEach(0..<3, id: \.self) { index in
@@ -526,39 +545,15 @@ private struct AuthPaperInterior: View {
                             .offset(x: CGFloat(index) * 3, y: CGFloat(index + 1) * 4)
                     }
 
-                    HStack(spacing: gap) {
-                        authPage(isLeft: true)
-                            .frame(width: pageWidth)
-                        authPage(isLeft: false)
-                            .frame(width: pageWidth)
-                    }
-
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [.black.opacity(0.16), .white.opacity(0.42), .black.opacity(0.1)],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: 16)
-                        .blur(radius: 1.8)
-                        .opacity(Double(openProgress))
+                    authPage()
+                        .padding(.horizontal, 2)
                 }
             }
         }
     }
 
-    private func authPage(isLeft: Bool) -> some View {
-        UnevenRoundedRectangle(
-            cornerRadii: .init(
-                topLeading: isLeft ? 28 : 9,
-                bottomLeading: isLeft ? 28 : 9,
-                bottomTrailing: isLeft ? 9 : 28,
-                topTrailing: isLeft ? 9 : 28
-            ),
-            style: .continuous
-        )
+    private func authPage() -> some View {
+        RoundedRectangle(cornerRadius: 30, style: .continuous)
         .fill(
             LinearGradient(
                 colors: [
@@ -570,37 +565,27 @@ private struct AuthPaperInterior: View {
                 endPoint: .bottom
             )
         )
-        .overlay(AuthPageRules(isLeft: isLeft))
-        .overlay(PaperGrain(density: 260).opacity(0.15))
-        .overlay(alignment: isLeft ? .trailing : .leading) {
+        .overlay(AuthPageRules())
+        .overlay(PaperGrain(density: 120).opacity(0.15))
+        .overlay(alignment: .leading) {
             LinearGradient(
                 colors: [.black.opacity(0.1), .clear],
-                startPoint: isLeft ? .trailing : .leading,
-                endPoint: isLeft ? .leading : .trailing
+                startPoint: .leading,
+                endPoint: .trailing
             )
-            .frame(width: 34)
+            .frame(width: 28)
         }
         .overlay {
-            UnevenRoundedRectangle(
-                cornerRadii: .init(
-                    topLeading: isLeft ? 28 : 9,
-                    bottomLeading: isLeft ? 28 : 9,
-                    bottomTrailing: isLeft ? 9 : 28,
-                    topTrailing: isLeft ? 9 : 28
-                ),
-                style: .continuous
-            )
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
             .stroke(.white.opacity(0.68), lineWidth: 0.85)
         }
     }
 }
 
 private struct AuthPageRules: View {
-    var isLeft: Bool
-
     var body: some View {
-        Canvas { context, size in
-            let margin = size.width * (isLeft ? 0.2 : 0.13)
+        Canvas(rendersAsynchronously: true) { context, size in
+            let margin = size.width * 0.16
             var red = Path()
             red.move(to: CGPoint(x: margin, y: 0))
             red.addLine(to: CGPoint(x: margin, y: size.height))
@@ -620,7 +605,7 @@ private struct AuthPageRules: View {
 
 private struct GoogleLogo: View {
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             let lineWidth = min(size.width, size.height) * 0.18
             let inset = lineWidth / 2
             let rect = CGRect(x: inset, y: inset, width: size.width - lineWidth, height: size.height - lineWidth)

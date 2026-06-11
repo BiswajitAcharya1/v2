@@ -37,6 +37,7 @@ final class NotebookStore {
     private let voiceService: VoiceServing = MossTTSVoiceService()
     @ObservationIgnored private let persistence = AppPersistence()
     @ObservationIgnored private var audioEngine: AVAudioEngine?
+    @ObservationIgnored private var voiceTapInstalled = false
     @ObservationIgnored private var voiceAudioFile: AVAudioFile?
     @ObservationIgnored private var liveRecognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     @ObservationIgnored private var liveRecognitionTask: SFSpeechRecognitionTask?
@@ -49,6 +50,7 @@ final class NotebookStore {
     @ObservationIgnored private var voiceSignalStartedAt: Date?
     @ObservationIgnored private var voiceActiveSpeechDuration: TimeInterval = 0
     @ObservationIgnored private var lastVoiceActivityTick: Date?
+    @ObservationIgnored private var lastVoiceMeterUIUpdateAt: Date?
 
     var pinnedNotebooks: [SubjectNotebook] {
         notebooks.filter(\.isPinned)
@@ -186,6 +188,7 @@ final class NotebookStore {
         voiceSignalStartedAt = nil
         voiceActiveSpeechDuration = 0
         lastVoiceActivityTick = nil
+        lastVoiceMeterUIUpdateAt = nil
         withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
             setupStep = .subjects
         }
@@ -264,6 +267,7 @@ final class NotebookStore {
     }
 
     private func startVoicePrompt(_ prompt: String) async {
+        stopLiveVoiceCapture(cancelRecognition: true)
         guard await requestMicrophonePermission() else {
             authMessage = "microphone access is needed to record voice."
             return
@@ -271,16 +275,22 @@ final class NotebookStore {
         let speechAllowed = await requestSpeechPermission()
         let recognizer = speechAllowed ? SFSpeechRecognizer(locale: Locale(identifier: "en-US")) : nil
         let session = AVAudioSession.sharedInstance()
-        let fileName = "margins-voice-\(UUID().uuidString).caf"
+        let fileName = "vellum-voice-\(UUID().uuidString).caf"
         let url = voiceSamplesDirectory().appendingPathComponent(fileName)
 
         do {
             try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker, .allowBluetoothHFP])
+            try? session.setPreferredSampleRate(44_100)
+            try? session.setPreferredIOBufferDuration(0.025)
             try session.setActive(true)
 
             let engine = AVAudioEngine()
             let input = engine.inputNode
             let format = input.outputFormat(forBus: 0)
+            guard format.sampleRate > 0, format.channelCount > 0 else {
+                throw VoiceRecordingError.failedToStart
+            }
+            audioEngine = engine
             let audioFile = try AVAudioFile(forWriting: url, settings: format.settings)
             var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
             var recognitionTask: SFSpeechRecognitionTask?
@@ -289,7 +299,7 @@ final class NotebookStore {
                 request.shouldReportPartialResults = true
                 request.addsPunctuation = false
                 request.taskHint = .dictation
-                request.contextualStrings = prompt.normalizedSpeechWords + ["margins", "study", "tutor", "remember"]
+                request.contextualStrings = prompt.normalizedSpeechWords + ["vellum", "study", "tutor", "remember"]
                 recognitionRequest = request
                 recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
                     guard let self else { return }
@@ -320,6 +330,10 @@ final class NotebookStore {
                     guard let self, self.isRecordingVoice else { return }
                     let activeLevel = self.isVoicePaused ? 0 : level
                     let now = Date()
+                    if let lastUpdate = self.lastVoiceMeterUIUpdateAt, now.timeIntervalSince(lastUpdate) < 1.0 / 18.0 {
+                        return
+                    }
+                    self.lastVoiceMeterUIUpdateAt = now
                     let elapsed = self.voiceRecordingStartedAt.map { now.timeIntervalSince($0) } ?? 0
                     if elapsed < 0.55 {
                         self.voiceNoiseFloor = min(0.08, max(0.012, self.voiceNoiseFloor * 0.84 + activeLevel * 0.16))
@@ -348,10 +362,10 @@ final class NotebookStore {
                     }
                 }
             }
+            voiceTapInstalled = true
 
             liveRecognitionRequest = recognitionRequest
             liveRecognitionTask = recognitionTask
-            audioEngine = engine
             voiceAudioFile = audioFile
             engine.prepare()
             try engine.start()
@@ -372,6 +386,7 @@ final class NotebookStore {
             voiceSignalStartedAt = nil
             voiceActiveSpeechDuration = 0
             lastVoiceActivityTick = nil
+            lastVoiceMeterUIUpdateAt = nil
         } catch {
             stopLiveVoiceCapture(cancelRecognition: true)
             recordingURL = nil
@@ -388,6 +403,7 @@ final class NotebookStore {
             voiceSignalStartedAt = nil
             voiceActiveSpeechDuration = 0
             lastVoiceActivityTick = nil
+            lastVoiceMeterUIUpdateAt = nil
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
             authMessage = "voice recording could not start."
         }
@@ -416,6 +432,7 @@ final class NotebookStore {
         voiceSignalStartedAt = nil
         voiceActiveSpeechDuration = 0
         lastVoiceActivityTick = nil
+        lastVoiceMeterUIUpdateAt = nil
         recordingURL = nil
         recordingPrompt = nil
         guard duration >= 0.5 else {
@@ -527,7 +544,10 @@ final class NotebookStore {
     private func stopLiveVoiceCapture(cancelRecognition: Bool) {
         pendingVoiceFinishTask?.cancel()
         pendingVoiceFinishTask = nil
-        audioEngine?.inputNode.removeTap(onBus: 0)
+        if voiceTapInstalled {
+            audioEngine?.inputNode.removeTap(onBus: 0)
+            voiceTapInstalled = false
+        }
         audioEngine?.stop()
         audioEngine = nil
         voiceAudioFile = nil
@@ -537,6 +557,7 @@ final class NotebookStore {
         voiceNoiseFloor = 0.025
         voiceActiveSpeechDuration = 0
         lastVoiceActivityTick = nil
+        lastVoiceMeterUIUpdateAt = nil
         liveRecognitionRequest?.endAudio()
         liveRecognitionRequest = nil
         if cancelRecognition {
@@ -579,6 +600,27 @@ final class NotebookStore {
         persist()
     }
 
+    func updateAvatar(_ avatar: AvatarProfile) {
+        withAnimation(.spring(response: 0.48, dampingFraction: 0.82)) {
+            user.avatar = avatar
+        }
+        persist()
+    }
+
+    func randomizeAvatar() {
+        let bases = ColorToken.allCases
+        let symbols = ["book.closed.fill", "pencil.and.scribble", "sparkles", "brain.head.profile", "cube.transparent", "graduationcap.fill"]
+        let details = AvatarDetail.allCases
+        updateAvatar(
+            AvatarProfile(
+                base: bases.randomElement() ?? .blue,
+                accent: bases.randomElement() ?? .green,
+                symbol: symbols.randomElement() ?? "book.closed.fill",
+                detail: details.randomElement() ?? .spark
+            )
+        )
+    }
+
     func move(_ notebook: SubjectNotebook, direction: MoveDirection) {
         guard let index = notebooks.firstIndex(where: { $0.id == notebook.id }) else { return }
         let target = direction == .earlier ? max(index - 1, 0) : min(index + 1, notebooks.count - 1)
@@ -597,6 +639,54 @@ final class NotebookStore {
             persist()
             return
         }
+    }
+
+    @discardableResult
+    func generateStudyModel(for pageID: NotebookPage.ID) -> DetectedModel? {
+        for notebookIndex in notebooks.indices {
+            guard let pageIndex = notebooks[notebookIndex].pages.firstIndex(where: { $0.id == pageID }) else { continue }
+            let content = notebooks[notebookIndex].pages[pageIndex].content
+            let terms = Array((content.keywords + content.formulas + content.tables.flatMap(\.headers)).filter { !$0.isEmpty }.prefix(6))
+            let sectionTerms = content.sections.flatMap { section in
+                [section.title] + section.body
+                    .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                    .map(String.init)
+                    .filter { $0.count > 4 }
+            }
+            let nodes = terms.isEmpty ? Array(sectionTerms.prefix(6)) : terms
+            let finalNodes = nodes.isEmpty ? ["idea", "evidence", "example", "test", "memory"] : nodes
+            let shape = content.tables.isEmpty ? inferredModelShape(from: content, nodeCount: finalNodes.count) : ModelShape.table
+            let model = DetectedModel(
+                title: "\(notebooks[notebookIndex].pages[pageIndex].title) model",
+                summary: "vellum rebuilt the page into a rotatable study object with labeled anchors and depth.",
+                terms: finalNodes,
+                nodes: finalNodes,
+                reconstruction: ModelReconstructionFactory.make(
+                    source: content.models.first?.reconstruction?.source ?? "local page reconstruction",
+                    confidence: max(0.58, min(0.96, content.insight.clarityScore + 0.22)),
+                    shape: shape,
+                    nodes: finalNodes,
+                    hint: shape == .table ? "tap each cell anchor to rebuild the table." : "rotate the object and explain each anchor aloud."
+                )
+            )
+            withAnimation(.spring(response: 0.62, dampingFraction: 0.82)) {
+                notebooks[notebookIndex].pages[pageIndex].content.models.insert(model, at: 0)
+                notebooks[notebookIndex].pages[pageIndex].content.insight.detectedFeatures = Array(Set(notebooks[notebookIndex].pages[pageIndex].content.insight.detectedFeatures + ["models"]))
+                notebooks[notebookIndex].pages[pageIndex].content.insight.nextBestStep = "study the generated model, then grade one flashcard."
+                notebooks[notebookIndex].lastActivity = "model generated"
+            }
+            persist()
+            return model
+        }
+        return nil
+    }
+
+    private func inferredModelShape(from content: ExtractedContent, nodeCount: Int) -> ModelShape {
+        let text = (content.cleanedText + " " + content.keywords.joined(separator: " ")).lowercased()
+        if text.contains("cycle") || text.contains("loop") || text.contains("flow") { return .cycle }
+        if text.contains("layer") || text.contains("stack") { return .stack }
+        if nodeCount >= 5 || content.insight.handwriting.noteStyle == .diagram { return .mesh }
+        return .orbit
     }
 
     func addTypedPage(to notebookID: SubjectNotebook.ID, text: String) {
@@ -697,6 +787,56 @@ final class NotebookStore {
         reviewService.schedule(card, mode: mode)
     }
 
+    func reviewQueue(limit: Int = 5) -> [NotebookPage] {
+        notebooks
+            .flatMap(\.pages)
+            .sorted { first, second in
+                let firstScore = first.content.insight.retentionRisk + first.studyState.difficulty - first.studyState.stability * 0.35
+                let secondScore = second.content.insight.retentionRisk + second.studyState.difficulty - second.studyState.stability * 0.35
+                if firstScore == secondScore {
+                    return first.createdAt > second.createdAt
+                }
+                return firstScore > secondScore
+            }
+            .prefix(limit)
+            .map(\.self)
+    }
+
+    func recordReview(pageID: NotebookPage.ID, grade: ReviewGrade) {
+        for notebookIndex in notebooks.indices {
+            guard let pageIndex = notebooks[notebookIndex].pages.firstIndex(where: { $0.id == pageID }) else { continue }
+            var state = notebooks[notebookIndex].pages[pageIndex].studyState
+            state.reviewCount += 1
+            state.lastReviewedAt = .now
+            switch grade {
+            case .forgot:
+                state.lapses += 1
+                state.stability = max(0.12, state.stability * 0.62)
+                state.difficulty = min(1, state.difficulty + 0.18)
+                state.dueLabel = "review in 10 min"
+            case .hard:
+                state.stability = max(0.18, state.stability * 0.88)
+                state.difficulty = min(1, state.difficulty + 0.08)
+                state.dueLabel = "review tonight"
+            case .good:
+                state.stability = min(1, state.stability + 0.16)
+                state.difficulty = max(0.12, state.difficulty - 0.08)
+                state.dueLabel = selectedStudyMode == .shortTerm ? "review tomorrow" : "review in 3 days"
+            case .easy:
+                state.stability = min(1, state.stability + 0.26)
+                state.difficulty = max(0.08, state.difficulty - 0.14)
+                state.dueLabel = selectedStudyMode == .shortTerm ? "review in 2 days" : "review next week"
+            }
+            withAnimation(.spring(response: 0.48, dampingFraction: 0.82)) {
+                notebooks[notebookIndex].pages[pageIndex].studyState = state
+                notebooks[notebookIndex].progress = min(1, max(0, notebooks[notebookIndex].progress + (grade == .forgot ? -0.02 : 0.04)))
+                notebooks[notebookIndex].lastActivity = "reviewed \(grade.rawValue)"
+            }
+            persist()
+            return
+        }
+    }
+
     func readAloud(_ page: NotebookPage, style: PlaybackStyle) async -> VoicePlayback {
         await voiceService.makePlayback(page.content.cleanedText, style: style, profile: voiceProfile)
     }
@@ -753,7 +893,7 @@ final class NotebookStore {
 
     private func voiceSamplesDirectory() -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
-        let directory = base.appendingPathComponent("margins-voice-samples", isDirectory: true)
+        let directory = base.appendingPathComponent("vellum-voice-samples", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
