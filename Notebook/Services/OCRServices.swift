@@ -516,7 +516,7 @@ struct GoogleVisionOCRClient {
                     GoogleVisionAnnotateRequest(
                         image: GoogleVisionImage(content: candidate.data.base64EncodedString()),
                         features: [GoogleVisionFeature(type: "DOCUMENT_TEXT_DETECTION", maxResults: 1, model: model)],
-                        imageContext: GoogleVisionImageContext(languageHints: ["en"])
+                        imageContext: GoogleVisionImageContext(languageHints: OCRLanguageHints.vision)
                     )
                 ]
             )
@@ -1292,7 +1292,7 @@ struct ChandraOCRClient {
     }
 
     private func submitMultipart(candidate: OCRUploadCandidate, endpoint: URL) async throws -> OCRScanResult? {
-        let boundary = "marginalia-chandra-\(UUID().uuidString)"
+        let boundary = "cahier-chandra-\(UUID().uuidString)"
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 100
@@ -1478,7 +1478,7 @@ struct SuryaOCRClient {
         guard let endpoint else { return nil }
         var bestResult: OCRScanResult?
         for candidate in OCRImagePreprocessor.remoteUploadCandidates(from: image) {
-            let boundary = "marginalia-surya-\(UUID().uuidString)"
+            let boundary = "cahier-surya-\(UUID().uuidString)"
             var request = URLRequest(url: endpoint)
             request.httpMethod = "POST"
             request.timeoutInterval = 70
@@ -1644,7 +1644,7 @@ private enum VisionOCRTextScanner {
             }
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
-            request.recognitionLanguages = ["en-US", "en-GB"]
+            request.recognitionLanguages = OCRLanguageHints.appleVision
             request.minimumTextHeight = minimumTextHeight
             request.customWords = OCRVocabulary.studentNotebookWords
 
@@ -1688,6 +1688,11 @@ private enum OCRCandidateRanker {
             + lengthScore
             - repetitionPenalty * 0.22
     }
+}
+
+private enum OCRLanguageHints {
+    static let vision = ["en", "fr", "es", "de", "it", "pt", "nl", "pl", "ru", "ar", "hi", "zh", "ja", "ko"]
+    static let appleVision = ["en-US", "en-GB", "fr-FR", "es-ES", "de-DE", "it-IT", "pt-BR", "nl-NL", "pl-PL", "ru-RU", "ar-SA", "hi-IN", "zh-Hans", "ja-JP", "ko-KR"]
 }
 
 private enum OCRVocabulary {

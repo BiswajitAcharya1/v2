@@ -28,12 +28,12 @@ struct AuthView: View {
                 heroStack
                     .scaleEffect(appeared ? 1 : 0.92)
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: notebookOpen ? -22 : -176)
+                .offset(y: notebookOpen ? -12 : -154)
 
                 if notebookOpen {
                     authPanel
                         .padding(.horizontal, 22)
-                        .offset(y: appeared ? 48 : 74)
+                        .offset(y: appeared ? 36 : 64)
                         .opacity(appeared ? 1 : 0)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -80,14 +80,14 @@ struct AuthView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
             draggableAuthBook
-                .frame(width: 430, height: 414)
+                .frame(width: 372, height: 360)
             if notebookOpen, let message = store.authMessage, !showingEmail {
                 AuthNotice(message: message)
                     .padding(.horizontal, 28)
                     .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.96)))
             }
         }
-        .frame(height: notebookOpen ? 484 : 386)
+        .frame(height: notebookOpen ? 430 : 342)
     }
 
     private var openProgress: CGFloat {
@@ -102,13 +102,13 @@ struct AuthView: View {
                 AuthPaperInterior(openProgress: openProgress)
                     .overlay {
                         if openProgress > 0.54 {
-                            VStack(spacing: 14) {
+                            VStack(spacing: 12) {
                             ForEach(Array(AuthProvider.allCases.enumerated()), id: \.element.id) { index, provider in
                                 AuthProviderPageButton(provider: provider) {
                                     guard authControlsReady else { return }
                                     if provider == .email {
                                         Haptics.open()
-                                        withAnimation(.spring(response: 1.02, dampingFraction: 0.88)) {
+                                        withAnimation(.spring(response: 1.22, dampingFraction: 0.9)) {
                                             isSignIn = false
                                             showingEmail = true
                                         }
@@ -120,7 +120,7 @@ struct AuthView: View {
                                 .animation(.spring(response: 0.96, dampingFraction: 0.9).delay(Double(index) * 0.09), value: notebookOpen)
                             }
                         }
-                        .frame(maxWidth: 292)
+                        .frame(maxWidth: 260)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                         .padding(.horizontal, 28)
                         .opacity(Double((openProgress - 0.54) / 0.46))
@@ -129,23 +129,23 @@ struct AuthView: View {
                         .allowsHitTesting(authControlsReady)
                     }
                 }
-                .frame(width: 282 + openProgress * 214, height: 356 + openProgress * 138)
+                .frame(width: 236 + openProgress * 184, height: 302 + openProgress * 108)
                 .rotation3DEffect(.degrees(-6 + openProgress * 13), axis: (x: 1, y: 0.18, z: 0), perspective: 0.72)
-                .offset(x: openProgress * 78, y: openProgress * 12)
+                .offset(x: openProgress * 62, y: openProgress * 10)
                 .shadow(color: .black.opacity(0.12), radius: 16, y: 10)
 
             CompositionCoverFace(
                 subject: nil,
                 cornerRadius: 22,
-                spineWidth: 16,
-                labelWidth: 152,
-                labelHeight: 104,
-                labelOffsetY: 36,
+                spineWidth: 14,
+                labelWidth: 124,
+                labelHeight: 88,
+                labelOffsetY: 30,
                 paperGrainDensity: notebookOpen || coverDrag < -2 ? 90 : 0
             )
-                .frame(width: 252, height: 326)
+                .frame(width: 214, height: 278)
                 .rotation3DEffect(.degrees(-168 * openProgress + (leatherDrift ? 2.5 : -2.5)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
-                .offset(x: -152 * openProgress, y: 4 + 13 * openProgress)
+                .offset(x: -128 * openProgress, y: 4 + 11 * openProgress)
                 .opacity(Double(1 - max(0, (openProgress - 0.58) / 0.26)))
                 .scaleEffect(1 - openProgress * 0.08)
                 .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
@@ -204,7 +204,7 @@ struct AuthView: View {
     private var authPanel: some View {
         VStack(spacing: 12) {
             SlowAuthButton {
-                withAnimation(.spring(response: 1.02, dampingFraction: 0.88)) {
+                withAnimation(.spring(response: 1.18, dampingFraction: 0.9)) {
                     isSignIn = true
                     showingEmail = true
                 }
@@ -365,11 +365,11 @@ struct AuthView: View {
         var body: some View {
             Button {
                 Haptics.press()
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
+                withAnimation(.spring(response: 0.62, dampingFraction: 0.76)) {
                     pressed = true
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
+                    withAnimation(.spring(response: 0.72, dampingFraction: 0.84)) {
                         pressed = false
                     }
                     action()
@@ -405,8 +405,10 @@ struct AuthView: View {
                 .accessibilityLabel(provider.title)
             }
             .buttonStyle(.plain)
-            .scaleEffect(pressed ? 0.965 : 1)
-            .rotation3DEffect(.degrees(pressed ? 5 : 0), axis: (x: 0.16, y: 1, z: 0), perspective: 0.82)
+            .scaleEffect(pressed ? 0.94 : 1)
+            .offset(y: pressed ? 3 : 0)
+            .rotation3DEffect(.degrees(pressed ? 8 : 0), axis: (x: 0.16, y: 1, z: 0), perspective: 0.82)
+            .shadow(color: .black.opacity(pressed ? 0.08 : 0), radius: pressed ? 8 : 0, y: pressed ? 5 : 0)
             .onAppear {
                 withAnimation(.easeInOut(duration: 1.45).delay(0.22)) {
                     shimmer = true
@@ -445,11 +447,11 @@ struct AuthView: View {
         var body: some View {
             Button {
                 Haptics.softTap()
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.72)) {
+                withAnimation(.spring(response: 0.62, dampingFraction: 0.76)) {
                     pressed = true
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
+                    withAnimation(.spring(response: 0.7, dampingFraction: 0.84)) {
                         pressed = false
                     }
                     action()
@@ -458,8 +460,9 @@ struct AuthView: View {
                 content()
             }
             .buttonStyle(.plain)
-            .scaleEffect(pressed ? 0.96 : 1)
-            .offset(y: pressed ? 2 : 0)
+            .scaleEffect(pressed ? 0.94 : 1)
+            .offset(y: pressed ? 3 : 0)
+            .rotation3DEffect(.degrees(pressed ? 4 : 0), axis: (x: 1, y: 0.2, z: 0), perspective: 0.8)
         }
     }
 

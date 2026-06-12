@@ -39,6 +39,7 @@
 		100000000000000000000120 /* SubjectCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000028 /* SubjectCatalog.swift */; };
 		100000000000000000000121 /* ScanProcessingConstellation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000029 /* ScanProcessingConstellation.swift */; };
 		100000000000000000000122 /* ComfortDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002A /* ComfortDisplay.swift */; };
+		100000000000000000000123 /* CanvasService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10000000000000000000002B /* CanvasService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -65,7 +66,7 @@
 		100000000000000000000017 /* ReconstructionServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconstructionServices.swift; sourceTree = "<group>"; };
 		100000000000000000000018 /* ScanLiveActivityCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanLiveActivityCenter.swift; sourceTree = "<group>"; };
 		100000000000000000000019 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		100000000000000000000020 /* quarto.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = quarto.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000020 /* cahier.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = cahier.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000021 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		100000000000000000000022 /* LaunchNotebookMark.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = LaunchNotebookMark.png; sourceTree = "<group>"; };
 		100000000000000000000023 /* VoicePromptWordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePromptWordsView.swift; sourceTree = "<group>"; };
@@ -76,6 +77,7 @@
 		100000000000000000000028 /* SubjectCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubjectCatalog.swift; sourceTree = "<group>"; };
 		100000000000000000000029 /* ScanProcessingConstellation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanProcessingConstellation.swift; sourceTree = "<group>"; };
 		10000000000000000000002A /* ComfortDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComfortDisplay.swift; sourceTree = "<group>"; };
+		10000000000000000000002B /* CanvasService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -138,6 +140,7 @@
 				100000000000000000000004 /* StudyServices.swift */,
 				100000000000000000000016 /* OCRServices.swift */,
 				100000000000000000000017 /* ReconstructionServices.swift */,
+				10000000000000000000002B /* CanvasService.swift */,
 				100000000000000000000018 /* ScanLiveActivityCenter.swift */,
 				100000000000000000000012 /* AppPersistence.swift */,
 				100000000000000000000014 /* Haptics.swift */,
@@ -188,7 +191,7 @@
 		100000000000000000000050 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				100000000000000000000020 /* quarto.app */,
+				100000000000000000000020 /* cahier.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -210,7 +213,7 @@
 			);
 			name = notebook;
 			productName = notebook;
-			productReference = 100000000000000000000020 /* quarto.app */;
+			productReference = 100000000000000000000020 /* cahier.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -293,6 +296,7 @@
 					10000000000000000000011C /* ProfileAvatarView.swift in Sources */,
 					10000000000000000000011D /* NotebookDetailComponents.swift in Sources */,
 					100000000000000000000121 /* ScanProcessingConstellation.swift in Sources */,
+					100000000000000000000123 /* CanvasService.swift in Sources */,
 				);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -428,18 +432,16 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Notebook/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = quarto;
-				INFOPLIST_KEY_NSCameraUsageDescription = "quarto uses the camera to scan study pages.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "quarto uses face id to verify password reset requests.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "quarto uses the microphone for optional voice personalization.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "quarto can import a note photo when the simulator has no camera.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "quarto transcribes your optional voice setup recording.";
+				INFOPLIST_KEY_CFBundleDisplayName = cahier;
+				INFOPLIST_KEY_NSCameraUsageDescription = "cahier uses the camera to scan study pages.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "cahier uses face id to verify password reset requests.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "cahier can import a note photo when the simulator has no camera.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswajitacharya.notebook;
-				PRODUCT_NAME = quarto;
+				PRODUCT_NAME = cahier;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -462,18 +464,16 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Notebook/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = quarto;
-				INFOPLIST_KEY_NSCameraUsageDescription = "quarto uses the camera to scan study pages.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "quarto uses face id to verify password reset requests.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "quarto uses the microphone for optional voice personalization.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "quarto can import a note photo when the simulator has no camera.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "quarto transcribes your optional voice setup recording.";
+				INFOPLIST_KEY_CFBundleDisplayName = cahier;
+				INFOPLIST_KEY_NSCameraUsageDescription = "cahier uses the camera to scan study pages.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "cahier uses face id to verify password reset requests.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "cahier can import a note photo when the simulator has no camera.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.biswajitacharya.notebook;
-				PRODUCT_NAME = quarto;
+				PRODUCT_NAME = cahier;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;

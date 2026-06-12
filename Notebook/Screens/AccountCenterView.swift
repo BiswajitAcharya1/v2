@@ -6,6 +6,7 @@ struct AccountCenterView: View {
     @State private var legalDocument: LegalDocument?
     @State private var editingAvatar = false
     @State private var showingComfort = false
+    @State private var showingCanvasImport = false
     @State private var expanded = false
     @State private var heroPulse = false
     @State private var closeRotation = 0.0
@@ -18,8 +19,7 @@ struct AccountCenterView: View {
                     AccountDynamicIsland(
                         avatar: store.user.avatar,
                         name: store.user.name,
-                        pages: store.notebooks.reduce(0) { $0 + $1.pages.count },
-                        voiceReady: store.voiceProfile.isPersonalized
+                        pages: store.notebooks.reduce(0) { $0 + $1.pages.count }
                     )
                     accountHero
                     .scaleEffect(expanded ? 1 : 0.96)
@@ -27,7 +27,29 @@ struct AccountCenterView: View {
 
                     accountSection("notebooks") {
                         accountRow(systemName: "books.vertical.fill", title: "\(store.notebooks.count) journals", detail: "\(store.notebooks.reduce(0) { $0 + $1.pages.count }) pages")
-                        accountRow(systemName: "mic.fill", title: "personal voice", detail: voiceStatus)
+                        accountRow(systemName: "paintpalette.fill", title: "cover studio", detail: "hold any journal to redesign it")
+                        accountRow(systemName: "link", title: "shared library", detail: "import journal links from friends")
+                    }
+
+                    accountSection("actions") {
+                        AccountActionGrid {
+                            AccountActionTile(symbol: "studentdesk", title: "canvas", detail: "sync classes") {
+                                Haptics.open()
+                                showingCanvasImport = true
+                            }
+                            AccountActionTile(symbol: "text.page", title: "comfort", detail: "e ink mode") {
+                                Haptics.open()
+                                showingComfort = true
+                            }
+                            AccountActionTile(symbol: "person.crop.circle.fill", title: "avatar", detail: "profile mark") {
+                                Haptics.open()
+                                editingAvatar = true
+                            }
+                            AccountActionTile(symbol: "hand.raised.fill", title: "privacy", detail: "saved data") {
+                                Haptics.open()
+                                legalDocument = .privacy
+                            }
+                        }
                     }
 
                     accountSection("study") {
@@ -60,18 +82,6 @@ struct AccountCenterView: View {
                             )
                         }
                         .buttonStyle(.plain)
-
-                        Toggle(
-                            "personal voice",
-                            isOn: Binding(
-                                get: { store.voiceProfile.wantsPersonalVoice },
-                                set: { value in
-                                    Haptics.selection()
-                                    store.setPersonalVoiceEnabled(value)
-                                }
-                            )
-                        )
-                            .tint(NotebookTheme.ink)
                         Button {
                             Haptics.open()
                             editingAvatar = true
@@ -131,6 +141,11 @@ struct AccountCenterView: View {
             .sheet(isPresented: $showingComfort) {
                 ComfortStudioView()
                     .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showingCanvasImport) {
+                CanvasImportSheet()
+                    .presentationDetents([.height(430), .large])
                     .presentationDragIndicator(.visible)
             }
             .onAppear {
@@ -201,9 +216,9 @@ struct AccountCenterView: View {
                         Haptics.open()
                         editingAvatar = true
                     }
-                    AccountQuickAction(symbol: "waveform", title: "voice", active: store.voiceProfile.wantsPersonalVoice) {
+                    AccountQuickAction(symbol: "studentdesk", title: "canvas", active: store.notebooks.contains { $0.canvasCourseID != nil }) {
                         Haptics.selection()
-                        store.setPersonalVoiceEnabled(!store.voiceProfile.wantsPersonalVoice)
+                        showingCanvasImport = true
                     }
                     AccountQuickAction(symbol: "hand.raised.fill", title: "privacy", active: false) {
                         Haptics.open()
@@ -214,7 +229,7 @@ struct AccountCenterView: View {
                 AccountTrustRibbon(
                     provider: authProviderTitle,
                     faceID: faceIDDetail,
-                    voice: voiceStatus,
+                    notebooks: "\(store.notebooks.count) journals",
                     awake: heroPulse
                 )
             }
@@ -343,11 +358,6 @@ struct AccountCenterView: View {
         }?.subject ?? "scan first"
     }
 
-    private var voiceStatus: String {
-        if store.voiceProfile.isPersonalized { return "ready" }
-        return store.voiceProfile.wantsPersonalVoice ? "enabled" : "optional"
-    }
-
     private var authProviderTitle: String {
         guard let provider = store.authSession?.provider else { return "email access" }
         return "\(provider.rawValue) access"
@@ -394,7 +404,6 @@ private struct AccountDynamicIsland: View {
     var avatar: AvatarProfile
     var name: String
     var pages: Int
-    var voiceReady: Bool
     @State private var awake = false
 
     var body: some View {
@@ -405,7 +414,7 @@ private struct AccountDynamicIsland: View {
                 Text(name.lowercased())
                     .font(.system(.subheadline, design: .serif, weight: .semibold))
                     .foregroundStyle(.white)
-                Text("\(pages) pages  \(voiceReady ? "voice ready" : "voice optional")")
+                Text("\(pages) pages  secure library")
                     .font(.system(.caption, design: .rounded, weight: .medium))
                     .foregroundStyle(.white.opacity(0.68))
             }
@@ -463,17 +472,168 @@ private struct AccountQuickAction: View {
     }
 }
 
+private struct AccountActionGrid<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
+            content
+        }
+    }
+}
+
+private struct AccountActionTile: View {
+    var symbol: String
+    var title: String
+    var detail: String
+    var action: () -> Void
+    @State private var drift = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Image(systemName: symbol)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .frame(width: 38, height: 38)
+                        .background(.white.opacity(0.68), in: Circle())
+                    Spacer()
+                    Circle()
+                        .fill(NotebookTheme.ink.opacity(0.16))
+                        .frame(width: drift ? 10 : 6, height: drift ? 10 : 6)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(.subheadline, design: .serif, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                    Text(detail)
+                        .font(.system(.caption, design: .rounded, weight: .medium))
+                        .foregroundStyle(NotebookTheme.muted)
+                        .lineLimit(1)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 126, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(.white.opacity(0.48))
+                    .overlay(alignment: drift ? .bottomTrailing : .topLeading) {
+                        Circle()
+                            .fill(NotebookTheme.ink.opacity(0.07))
+                            .frame(width: 82, height: 82)
+                            .blur(radius: 16)
+                    }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(.white.opacity(0.58), lineWidth: 0.8)
+            }
+            .rotation3DEffect(.degrees(drift ? 1.4 : -1.2), axis: (x: 0.14, y: 1, z: 0), perspective: 0.82)
+        }
+        .buttonStyle(.plain)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) {
+                drift = true
+            }
+        }
+    }
+}
+
+private struct CanvasImportSheet: View {
+    @Environment(NotebookStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var domain = ""
+    @State private var token = ""
+    @State private var closeRotation = 0.0
+
+    var body: some View {
+        ZStack {
+            LivingPaperBackground().ignoresSafeArea()
+            VStack(spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("canvas")
+                            .font(.system(.title2, design: .serif, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.ink)
+                        Text("turn courses into journals")
+                            .font(.system(.footnote, design: .rounded, weight: .medium))
+                            .foregroundStyle(NotebookTheme.muted)
+                    }
+                    Spacer()
+                    Button {
+                        Haptics.softTap()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
+                            closeRotation += 90
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                            dismiss()
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(width: 38, height: 38)
+                            .rotationEffect(.degrees(closeRotation))
+                    }
+                    .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
+                }
+
+                GlassSurface(radius: 30, padding: 16, interactive: true) {
+                    VStack(spacing: 12) {
+                        GooeyInput(label: "canvas domain", systemName: "link", text: $domain, keyboardType: .URL)
+                        GooeyInput(label: "access token", systemName: "key.fill", text: $token, isSecure: true)
+                        Button {
+                            Haptics.open()
+                            Task {
+                                await store.importCanvasCourses(domain: domain, token: token)
+                                if store.canvasImportMessage?.contains("added") == true {
+                                    dismiss()
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 9) {
+                                if store.isImportingCanvas {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Image(systemName: "arrow.down.doc.fill")
+                                }
+                                Text(store.isImportingCanvas ? "connecting" : "import")
+                            }
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(NotebookTheme.ink, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(store.isImportingCanvas)
+
+                        if let message = store.canvasImportMessage {
+                            Text(message)
+                                .font(.system(.caption, design: .rounded, weight: .semibold))
+                                .foregroundStyle(NotebookTheme.muted)
+                                .multilineTextAlignment(.center)
+                        }
+                    }
+                }
+            }
+            .padding(22)
+        }
+    }
+}
+
 private struct AccountTrustRibbon: View {
     var provider: String
     var faceID: String
-    var voice: String
+    var notebooks: String
     var awake: Bool
 
     var body: some View {
         HStack(spacing: 8) {
             trustChip(symbol: "key.fill", title: provider)
             trustChip(symbol: "faceid", title: faceID)
-            trustChip(symbol: "waveform", title: "voice \(voice)")
+            trustChip(symbol: "books.vertical.fill", title: notebooks)
         }
         .padding(7)
         .background(.white.opacity(0.34), in: Capsule())

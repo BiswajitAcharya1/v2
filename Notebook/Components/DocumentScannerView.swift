@@ -143,9 +143,9 @@ private struct PhotoImportScannerFallback: View {
                     } else {
                         VStack(spacing: 14) {
                             Image(systemName: "photo.on.rectangle.angled")
-                                .font(.system(size: 28, weight: .semibold))
+                                .font(.system(size: 22, weight: .semibold))
                                 .foregroundStyle(NotebookTheme.ink)
-                                .frame(width: 68, height: 68)
+                                .frame(width: 52, height: 52)
                                 .background(.white.opacity(0.62), in: Circle())
                             Text("choose note images")
                                 .font(.system(.title3, design: .serif, weight: .semibold))
@@ -173,7 +173,7 @@ private struct PhotoImportScannerFallback: View {
                         }
                         .foregroundStyle(NotebookTheme.ink)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 56)
+                        .frame(height: 48)
                         .background(.white.opacity(0.82), in: Capsule())
                     }
                     .buttonStyle(.plain)
@@ -198,7 +198,7 @@ private struct PhotoImportScannerFallback: View {
                         }
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 56)
+                        .frame(height: 48)
                         .background(selectedImages.isEmpty ? NotebookTheme.ink.opacity(0.38) : NotebookTheme.ink, in: Capsule())
                     }
                     .buttonStyle(.plain)

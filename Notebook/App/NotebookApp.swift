@@ -8,6 +8,9 @@ struct NotebookApp: App {
         WindowGroup {
             RootShellView()
                 .environment(store)
+                .onOpenURL { url in
+                    store.handleIncomingURL(url)
+                }
         }
     }
 }

@@ -460,7 +460,7 @@ struct NotebookDetailView: View {
                             Haptics.open()
                             showingUpload = true
                         } label: {
-                            Image(systemName: "square.and.arrow.up")
+                            Image(systemName: "photo.stack.fill")
                                 .font(.system(size: 17, weight: .bold))
                                 .frame(width: 58, height: 58)
                         }
@@ -528,7 +528,7 @@ struct NotebookDetailView: View {
             }
             .disabled(isScanning)
 
-            railButton(symbol: "square.and.arrow.up", label: "upload") {
+            railButton(symbol: "photo.stack.fill", label: "upload") {
                 Haptics.open()
                 showingUpload = true
             }
@@ -693,9 +693,11 @@ struct NotebookDetailView: View {
 }
 
 private struct NotebookShareSheet: View {
+    @Environment(NotebookStore.self) private var store
     let notebook: SubjectNotebook
     @State private var opened = false
     @State private var shimmer = false
+    @State private var unwrap = false
     @State private var shareURL: URL?
 
     var body: some View {
@@ -703,23 +705,16 @@ private struct NotebookShareSheet: View {
             LivingPaperBackground().ignoresSafeArea()
             VStack(spacing: 22) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 32, style: .continuous)
-                        .fill(.white.opacity(0.74))
-                        .frame(width: 236, height: 300)
-                        .rotationEffect(.degrees(opened ? 7 : -2))
-                        .offset(x: opened ? 24 : 0, y: opened ? 8 : 0)
-                        .overlay {
-                            PaperRules()
-                                .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-                                .opacity(opened ? 0.8 : 0.2)
-                        }
+                    ShareSleeve(opened: opened, unwrap: unwrap, shimmer: shimmer)
+                        .frame(width: 226, height: 300)
+                        .offset(x: opened ? 5 : 0, y: opened ? 2 : 0)
 
                     CompositionCoverFace(
                         subject: notebook.subject,
                         cornerRadius: 24,
-                        spineWidth: 14,
-                        labelWidth: 136,
-                        labelHeight: 104,
+                        spineWidth: 18,
+                        labelWidth: 116,
+                        labelHeight: 88,
                         labelOffsetY: 34,
                         coverStyle: notebook.coverStyle,
                         coverColor: notebook.coverColor,
@@ -727,9 +722,9 @@ private struct NotebookShareSheet: View {
                         fontStyle: notebook.coverFontStyle,
                         customCoverImage: notebook.customCoverImage
                     )
-                    .frame(width: 220, height: 292)
-                    .rotation3DEffect(.degrees(opened ? -42 : -4), axis: (x: 0.08, y: 1, z: 0), anchor: .leading, perspective: 0.72)
-                    .offset(x: opened ? -26 : 0, y: opened ? 4 : 0)
+                    .frame(width: 214, height: 286)
+                    .rotation3DEffect(.degrees(opened ? -7 : -2), axis: (x: 0.08, y: 1, z: 0), anchor: .leading, perspective: 0.72)
+                    .offset(x: opened ? -4 : 0, y: opened ? 1 : 0)
                     .overlay {
                         DirectionAwareTouchHighlight(
                             offset: CGSize(width: shimmer ? 24 : -20, height: shimmer ? -12 : 12),
@@ -745,7 +740,7 @@ private struct NotebookShareSheet: View {
 
                 if let shareURL {
                     ShareLink(item: shareURL) {
-                        Label("share journal", systemImage: "paperplane.fill")
+                        Label("share link", systemImage: "link")
                             .font(.system(.headline, design: .rounded, weight: .semibold))
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -757,7 +752,7 @@ private struct NotebookShareSheet: View {
                     HStack(spacing: 10) {
                         ProgressView()
                             .tint(NotebookTheme.ink)
-                        Text("wrapping journal")
+                        Text("making link")
                             .font(.system(.headline, design: .rounded, weight: .semibold))
                             .foregroundStyle(NotebookTheme.ink)
                     }
@@ -775,26 +770,50 @@ private struct NotebookShareSheet: View {
             withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
                 shimmer = true
             }
-            shareURL = makeShareBundle()
+            withAnimation(.spring(response: 0.82, dampingFraction: 0.84).delay(0.42)) {
+                unwrap = true
+            }
+            shareURL = store.shareLink(for: notebook)
         }
     }
+}
 
-    private func makeShareBundle() -> URL? {
-        let safeSubject = notebook.subject
-            .lowercased()
-            .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-        let filename = "\(safeSubject.isEmpty ? "journal" : safeSubject).marginalia-notebook"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        do {
-            let data = try encoder.encode(notebook)
-            try data.write(to: url, options: [.atomic])
-            return url
-        } catch {
-            return nil
+private struct ShareSleeve: View {
+    var opened: Bool
+    var unwrap: Bool
+    var shimmer: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .fill(.white.opacity(0.62))
+                .overlay {
+                    PaperRules()
+                        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+                        .opacity(0.28)
+                }
+                .shadow(color: .black.opacity(0.12), radius: 18, y: 10)
+
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    LinearGradient(
+                        colors: [.white.opacity(0.34), .white.opacity(0.08), .white.opacity(0.28)],
+                        startPoint: shimmer ? .topLeading : .bottomLeading,
+                        endPoint: shimmer ? .bottomTrailing : .topTrailing
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+                }
+                .overlay(alignment: .top) {
+                    Capsule()
+                        .fill(.white.opacity(0.55))
+                        .frame(width: 122, height: 8)
+                        .padding(.top, 14)
+                }
+                .rotation3DEffect(.degrees(unwrap ? -54 : 0), axis: (x: 0.1, y: 1, z: 0), anchor: .leading, perspective: 0.72)
+                .offset(x: unwrap ? -118 : 0, y: unwrap ? 8 : 0)
+                .opacity(unwrap ? 0.62 : 0.95)
         }
+        .rotationEffect(.degrees(opened ? 0.5 : -1))
     }
 }

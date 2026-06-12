@@ -2589,7 +2589,9 @@ struct DetectedTableView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(NotebookTheme.ink.opacity(0.12), lineWidth: 0.8)
             )
+            .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func tableRow(_ cells: [String], isHeader: Bool) -> some View {
@@ -2600,7 +2602,8 @@ struct DetectedTableView: View {
                     .foregroundStyle(NotebookTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 9)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 10)
+                    .frame(minHeight: 42)
                     .background(isHeader ? NotebookTheme.ink.opacity(0.055) : .white.opacity(0.12))
             }
         }
@@ -2692,7 +2695,7 @@ struct DetectedModelView: View {
                 }
 
                 InteractiveModelMap(nodes: nodes, reconstruction: reconstruction, selectedNode: $selectedNode, awake: awake, mode: renderMode)
-                    .frame(height: renderMode == .mesh ? 212 : 188)
+                    .frame(height: renderMode == .mesh ? 318 : 292)
                     .rotation3DEffect(.degrees(awake ? Double(modelTilt.height / -18) : 16), axis: (x: 1, y: 0, z: 0), perspective: 0.8)
                     .rotation3DEffect(.degrees(Double(modelTilt.width / 18)), axis: (x: 0, y: 1, z: 0), perspective: 0.8)
                     .scaleEffect(modelTilt == .zero ? 1 : 1.018)
@@ -2724,6 +2727,7 @@ struct DetectedModelView: View {
             }
         }
         .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 430, alignment: .topLeading)
         .background(
             LinearGradient(
                 colors: [.white.opacity(0.46), .white.opacity(0.22), NotebookTheme.ink.opacity(0.045)],

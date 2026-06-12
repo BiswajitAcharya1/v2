@@ -37,8 +37,13 @@ private struct SetupFlowView: View {
     @Environment(NotebookStore.self) private var store
     @State private var subjectDraft = ""
     @State private var subjects: [String] = []
+    @State private var canvasDomain = ""
+    @State private var canvasToken = ""
+    @State private var canvasExpanded = false
     @State private var recordTaskActive = false
     @State private var retakeRotation = 0.0
+    @State private var subjectCheckRotation = 0.0
+    @State private var themeCheckRotation = 0.0
     private let prompts = [
         "today i will study with calm focus.",
         "explain this page like a patient tutor.",
@@ -47,43 +52,19 @@ private struct SetupFlowView: View {
     var body: some View {
         ZStack {
             LivingPaperBackground().ignoresSafeArea()
-            if store.setupStep == .voiceRecording {
-                VStack {
-                    HStack {
-                        Spacer()
-                        Button {
-                            Haptics.softTap()
-                            withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
-                                store.skipVoiceSetup()
-                            }
-                        } label: {
-                            Image(systemName: "forward.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(NotebookTheme.ink)
-                                .frame(width: 52, height: 52)
-                                .background(.ultraThinMaterial, in: Circle())
-                                .rotationEffect(.degrees(store.setupStep == .voiceRecording ? 0 : 90))
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.trailing, 20)
-                        .padding(.top, 18)
-                    }
-                    Spacer()
-                }
-            }
             ScrollView(showsIndicators: false) {
             VStack(spacing: 24) {
                 NotebookLogo()
-                    .frame(width: 112, height: 146)
+                    .frame(width: store.setupStep == .subjects ? 112 : 104, height: store.setupStep == .subjects ? 146 : 136)
                     .rotationEffect(.degrees(store.setupStep == .theme ? -4 : 3))
                     .animation(.spring(response: 0.55, dampingFraction: 0.75), value: store.setupStep)
 
                 Group {
                     switch store.setupStep {
                     case .voiceRecording:
-                        voiceRecording
-                    case .theme:
                         subjectChoice
+                    case .theme:
+                        themeChoice
                     case .subjects:
                         subjectChoice
                     case .avatar:
@@ -96,17 +77,18 @@ private struct SetupFlowView: View {
                 ))
                 .animation(.spring(response: 0.62, dampingFraction: 0.84), value: store.setupStep)
             }
-            .padding(22)
+            .padding(20)
             .padding(.top, 82)
             .padding(.bottom, 34)
             }
+
         }
     }
 
     private var voiceRecording: some View {
-        GlassSurface(radius: 34, padding: 20, interactive: true) {
-            VStack(spacing: 18) {
-                Text("voice")
+        GlassSurface(radius: 30, padding: 18, interactive: true) {
+            VStack(spacing: 14) {
+                Text("audio")
                     .font(.system(.title2, design: .serif, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
                 Text(voiceInstructionText)
@@ -114,49 +96,15 @@ private struct SetupFlowView: View {
                     .foregroundStyle(NotebookTheme.muted)
                     .multilineTextAlignment(.center)
 
-                VoicePromptText(
-                    prompt: currentVoicePrompt,
-                    progress: store.voicePromptWordProgress,
-                    recording: store.isRecordingVoice,
-                    voiceActive: store.voiceSignalActive
-                )
-
-                VoiceRecognitionStatus(
-                    sentenceIndex: min(store.voiceProfile.samples.count + 1, prompts.count),
-                    totalSentences: prompts.count,
-                    heardWords: store.voicePromptWordProgress,
-                    totalWords: currentVoicePrompt.split(separator: " ").count,
-                    isRecording: store.isRecordingVoice,
-                    isPreparing: store.isPreparingVoiceRecording,
-                    voiceActive: store.voiceSignalActive,
-                    recognitionAvailable: store.voiceRecognitionAvailable,
-                    level: store.voiceRecordingLevel
-                )
-
-                if let transcript = store.latestVoiceTranscript, store.isRecordingVoice {
-                    HStack(spacing: 8) {
-                        Image(systemName: "quote.bubble.fill")
-                            .font(.system(size: 11, weight: .bold))
-                        Text(transcript)
-                            .font(.system(.caption, design: .rounded, weight: .semibold))
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.72)
-                    }
-                    .foregroundStyle(NotebookTheme.ink.opacity(0.74))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.96)))
-                }
-
-                VoiceProgress(count: store.voiceProfile.samples.count, total: prompts.count, recording: store.isRecordingVoice, preparing: store.isPreparingVoiceRecording)
-                VoiceRecordingReadout(
-                    elapsed: store.voiceRecordingElapsed,
-                    level: store.voiceRecordingLevel,
-                    paused: store.isVoicePaused,
-                    samples: store.voiceProfile.samples
-                )
+                Text(currentVoicePrompt)
+                    .font(.system(.callout, design: .serif, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 14)
+                    .frame(maxWidth: .infinity)
+                    .background(.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                 if let message = store.voiceSetupMessage {
                     Text(message)
@@ -168,7 +116,7 @@ private struct SetupFlowView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
-                HStack(spacing: 14) {
+                HStack(spacing: 12) {
                     Button {
                         Haptics.softTap()
                         withAnimation(.spring(response: 0.36, dampingFraction: 0.72)) {
@@ -177,8 +125,8 @@ private struct SetupFlowView: View {
                         store.retakeVoicePrompt()
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 18, weight: .bold))
-                            .frame(width: 56, height: 56)
+                            .font(.system(size: 14, weight: .bold))
+                            .frame(width: 36, height: 36)
                             .rotationEffect(.degrees(retakeRotation))
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.muted.opacity(0.6), foreground: NotebookTheme.ink))
@@ -190,31 +138,49 @@ private struct SetupFlowView: View {
                     } label: {
                         ZStack {
                             Circle()
-                                .stroke(.white.opacity(0.26), lineWidth: 8)
-                                .scaleEffect(store.isRecordingVoice ? 1.18 + store.voiceRecordingLevel * 0.12 : 1)
+                                .stroke(.white.opacity(0.24), lineWidth: 5)
+                                .scaleEffect(store.isRecordingVoice ? 1.1 + store.voiceRecordingLevel * 0.08 : 1)
                                 .opacity(store.isRecordingVoice ? 1 : 0)
                             Image(systemName: voiceRecordSymbol)
-                                .font(.system(size: 22, weight: .bold))
-                                .frame(width: 72, height: 72)
+                                .font(.system(size: 14, weight: .bold))
+                                .frame(width: 36, height: 36)
                         }
                     }
                     .buttonStyle(CircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
                     .disabled(store.isPreparingVoiceRecording || recordTaskActive)
                     .scaleEffect(store.isPreparingVoiceRecording || recordTaskActive ? 0.96 : 1)
                     .accessibilityLabel(store.isRecordingVoice ? "finish recording" : "start recording")
+
+                    Button {
+                        Haptics.softTap()
+                        store.skipVoiceSetup()
+                    } label: {
+                        Text("skip")
+                            .font(.system(.footnote, design: .rounded, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.ink)
+                            .padding(.horizontal, 15)
+                            .frame(height: 36)
+                            .background(.white.opacity(0.58), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Capsule())
                 }
             }
         }
     }
 
     private func recordCurrentPrompt() {
-        guard !recordTaskActive else { return }
+        guard !recordTaskActive, !store.isPreparingVoiceRecording else { return }
         Haptics.open()
         Task {
             await MainActor.run {
                 recordTaskActive = true
             }
-            await store.recordVoicePrompt(currentVoicePrompt)
+            if store.isRecordingVoice {
+                store.finishCurrentVoicePrompt()
+            } else {
+                await store.recordVoicePrompt(currentVoicePrompt)
+            }
             await MainActor.run {
                 recordTaskActive = false
             }
@@ -230,14 +196,14 @@ private struct SetupFlowView: View {
             return "opening microphone."
         }
         if store.isRecordingVoice && !store.voiceRecognitionAvailable {
-            return "keep reading naturally. the meter saves your voice sample."
+            return "read naturally, then tap again to save."
         }
         return "read each sentence once. words darken only when they are matched."
     }
 
     private var voiceRecordSymbol: String {
         if store.isPreparingVoiceRecording || recordTaskActive { return "ellipsis" }
-        return store.isRecordingVoice ? "waveform" : "mic.fill"
+        return store.isRecordingVoice ? "stop.fill" : "mic.fill"
     }
 
     private var subjectChoice: some View {
@@ -256,9 +222,9 @@ private struct SetupFlowView: View {
                     )
 
                     Button(action: addSubject) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .bold))
-                            .frame(width: 54, height: 54)
+                    Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .bold))
+                            .frame(width: 44, height: 44)
                     }
                     .buttonStyle(FloatingCircleButtonStyle())
                     .disabled(bestSubjectMatch == nil)
@@ -274,17 +240,141 @@ private struct SetupFlowView: View {
                 }
                 .animation(.spring(response: 0.48, dampingFraction: 0.82), value: subjects)
 
+                canvasImportCard
+
                 Button {
                     Haptics.success()
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
+                        subjectCheckRotation += 90
+                    }
                     store.setSubjects(subjects)
                 } label: {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 18, weight: .bold))
-                        .frame(width: 58, height: 58)
+                        .font(.system(size: 16, weight: .bold))
+                        .frame(width: 46, height: 46)
+                        .rotationEffect(.degrees(subjectCheckRotation))
                 }
                 .buttonStyle(CircleButtonStyle())
                 .disabled(subjects.isEmpty)
             }
+        }
+    }
+
+    private var canvasImportCard: some View {
+        VStack(spacing: 12) {
+            Button {
+                Haptics.open()
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
+                    canvasExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "studentdesk")
+                        .font(.system(size: 15, weight: .bold))
+                        .frame(width: 34, height: 34)
+                        .background(.white.opacity(0.58), in: Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("connect canvas")
+                            .font(.system(.subheadline, design: .serif, weight: .semibold))
+                        Text("make notebooks from real courses")
+                            .font(.system(.caption, design: .rounded, weight: .medium))
+                            .foregroundStyle(NotebookTheme.muted)
+                    }
+                    Spacer()
+                    Image(systemName: "plus")
+                        .font(.system(size: 13, weight: .bold))
+                        .rotationEffect(.degrees(canvasExpanded ? 45 : 0))
+                }
+                .foregroundStyle(NotebookTheme.ink)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(.white.opacity(0.5), in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            if canvasExpanded {
+                VStack(spacing: 10) {
+                    GooeyInput(label: "canvas domain", systemName: "link", text: $canvasDomain, keyboardType: .URL)
+                    GooeyInput(label: "access token", systemName: "key.fill", text: $canvasToken, isSecure: true)
+                    Button {
+                        importCanvasCourses()
+                    } label: {
+                        HStack(spacing: 9) {
+                            if store.isImportingCanvas {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "arrow.down.doc.fill")
+                            }
+                            Text(store.isImportingCanvas ? "connecting" : "import courses")
+                        }
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                        .background(NotebookTheme.ink, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.isImportingCanvas)
+                    if let message = store.canvasImportMessage {
+                        Text(message)
+                            .font(.system(.caption, design: .rounded, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.muted)
+                            .multilineTextAlignment(.center)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .padding(13)
+                .background(.white.opacity(0.34), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .transition(.scale(scale: 0.94, anchor: .top).combined(with: .opacity))
+            }
+        }
+    }
+
+    private var themeChoice: some View {
+        GlassSurface(radius: 34, padding: 20, interactive: true) {
+            VStack(spacing: 17) {
+                Text("display")
+                    .font(.system(.title2, design: .serif, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                Text("choose the surface your notebooks live on.")
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
+                    .foregroundStyle(NotebookTheme.muted)
+                    .multilineTextAlignment(.center)
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 2), spacing: 10) {
+                    ForEach(ComfortPreset.allCases) { preset in
+                        ComfortChoiceCard(
+                            preset: preset,
+                            active: store.comfortSettings.enabledFeatures == preset.features
+                        ) {
+                            Haptics.selection()
+                            store.applyComfortPreset(preset)
+                        }
+                    }
+                }
+
+                Button {
+                    Haptics.success()
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
+                        themeCheckRotation += 90
+                    }
+                    store.continueToAvatar()
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .bold))
+                        .frame(width: 46, height: 46)
+                        .rotationEffect(.degrees(themeCheckRotation))
+                }
+                .buttonStyle(CircleButtonStyle())
+            }
+        }
+    }
+
+    private func importCanvasCourses() {
+        Haptics.open()
+        Task {
+            await store.importCanvasCourses(domain: canvasDomain, token: canvasToken)
         }
     }
 
@@ -322,6 +412,7 @@ private struct SetupAvatarChoice: View {
     @Environment(NotebookStore.self) private var store
     @State private var draft = AvatarProfile.default
     @State private var float = false
+    @State private var checkRotation = 0.0
 
     private let symbols = ["book.closed.fill", "sparkles", "brain.head.profile", "graduationcap.fill", "function", "atom"]
 
@@ -376,12 +467,16 @@ private struct SetupAvatarChoice: View {
 
                 Button {
                     Haptics.success()
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
+                        checkRotation += 90
+                    }
                     store.updateAvatar(draft)
                     done()
                 } label: {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 18, weight: .bold))
-                        .frame(width: 58, height: 58)
+                        .font(.system(size: 16, weight: .bold))
+                        .frame(width: 46, height: 46)
+                        .rotationEffect(.degrees(checkRotation))
                 }
                 .buttonStyle(CircleButtonStyle())
             }
@@ -395,6 +490,79 @@ private struct SetupAvatarChoice: View {
     }
 
     var done: () -> Void
+}
+
+private struct ComfortChoiceCard: View {
+    var preset: ComfortPreset
+    var active: Bool
+    var action: () -> Void
+    @State private var glow = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: preset.symbol)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(active ? .white : NotebookTheme.ink)
+                        .frame(width: 36, height: 36)
+                        .background(active ? NotebookTheme.ink : .white.opacity(0.62), in: Circle())
+                    Spacer()
+                    if active {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 26, height: 26)
+                            .background(NotebookTheme.ink, in: Circle())
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                Text(preset.title)
+                    .font(.system(.headline, design: .serif, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                Text(detail)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(NotebookTheme.muted)
+                    .lineLimit(2)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, minHeight: 126, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(active ? .white.opacity(0.74) : .white.opacity(0.46))
+                    .overlay(alignment: glow ? .bottomTrailing : .topLeading) {
+                        Circle()
+                            .fill(NotebookTheme.accent(.blue).opacity(active ? 0.2 : 0.1))
+                            .frame(width: 74, height: 74)
+                            .blur(radius: 16)
+                    }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(active ? NotebookTheme.ink.opacity(0.28) : .white.opacity(0.52), lineWidth: active ? 1.2 : 0.8)
+            }
+            .scaleEffect(active ? 1.02 : 1)
+        }
+        .buttonStyle(.plain)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) {
+                glow = true
+            }
+        }
+    }
+
+    private var detail: String {
+        switch preset {
+        case .paper:
+            "soft e ink paper for long reading"
+        case .focus:
+            "calm margins and study contrast"
+        case .evening:
+            "warm low glare night review"
+        case .performance:
+            "lighter motion for older phones"
+        }
+    }
 }
 
 private struct VoiceProgress: View {
@@ -415,7 +583,7 @@ private struct VoiceProgress: View {
                 .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(NotebookTheme.ink)
         }
-        .frame(width: 118, height: 118)
+        .frame(width: 86, height: 86)
         .animation(.spring(response: 0.45, dampingFraction: 0.8), value: count)
         .animation(.spring(response: 0.28, dampingFraction: 0.78), value: preparing)
     }
@@ -463,9 +631,9 @@ private struct VoiceRecognitionStatus: View {
             return "\(min(heardWords, totalWords)) of \(totalWords) heard"
         }
         if voiceActive {
-            return "voice captured"
+            return "audio captured"
         }
-        return recognitionAvailable ? "listening for words" : "listening for your voice"
+        return recognitionAvailable ? "listening for words" : "listening"
     }
 }
 

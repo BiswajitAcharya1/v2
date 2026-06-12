@@ -24,17 +24,39 @@ struct HomeView: View {
     @State private var actionLensAwake = false
     @State private var revealDetailSurfaces = false
     @State private var stylingNotebook: SubjectNotebook?
+    @AppStorage("cahier.home.walkthrough.seen") private var hasSeenHomeWalkthrough = false
+    @State private var showingHomeWalkthrough = false
     var body: some View {
         ScrollView {
             VStack(alignment: .center, spacing: 18) {
                 header
                 journalCarousel
             }
-            .padding(.top, 18)
+            .padding(.top, 46)
             .padding(.bottom, 32)
         }
         .background {
             LivingPaperBackground().ignoresSafeArea()
+        }
+        .overlay(alignment: .top) {
+            if let notice = store.libraryNotice {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                        .background(NotebookTheme.ink, in: Circle())
+                    Text(notice)
+                        .font(.system(.caption, design: .rounded, weight: .semibold))
+                        .foregroundStyle(NotebookTheme.ink)
+                }
+                .padding(.leading, 7)
+                .padding(.trailing, 13)
+                .padding(.vertical, 7)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(.top, 12)
+                .transition(.move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.96)))
+            }
         }
         .navigationDestination(item: $selectedNotebook) { notebook in
             NotebookDetailView(notebook: notebook)
@@ -58,6 +80,14 @@ struct HomeView: View {
             AccountCenterView()
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingHomeWalkthrough) {
+            HomeWalkthroughView {
+                hasSeenHomeWalkthrough = true
+                showingHomeWalkthrough = false
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingQuickScanner) {
             DocumentScannerView { images in
@@ -106,6 +136,10 @@ struct HomeView: View {
                 }
                 withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true)) {
                     actionLensAwake = true
+                }
+                if !hasSeenHomeWalkthrough {
+                    try? await Task.sleep(for: .milliseconds(650))
+                    showingHomeWalkthrough = true
                 }
             }
         }
@@ -715,8 +749,8 @@ struct HomeView: View {
 
                         Button(action: addCourse) {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 18, weight: .bold))
-                                .frame(width: 54, height: 54)
+                                .font(.system(size: 15, weight: .bold))
+                                .frame(width: 44, height: 44)
                         }
                         .buttonStyle(FloatingCircleButtonStyle())
                         .disabled(bestCourseMatch == nil)
@@ -876,9 +910,9 @@ private struct NotebookStyleSheet: View {
                     CompositionCoverFace(
                         subject: liveNotebook.subject,
                         cornerRadius: 18,
-                        spineWidth: 16,
-                        labelWidth: 106,
-                        labelHeight: 82,
+                        spineWidth: 18,
+                        labelWidth: 90,
+                        labelHeight: 70,
                         labelOffsetY: 24,
                         paperGrainDensity: 70,
                         coverStyle: liveNotebook.coverStyle,
@@ -1133,10 +1167,10 @@ private struct CourseSuggestionBook: View {
                 CompositionCoverFace(
                     subject: subject,
                     cornerRadius: 16,
-                    spineWidth: 14,
-                    labelWidth: 58,
-                    labelHeight: 46,
-                    labelOffsetY: 16,
+                    spineWidth: 16,
+                    labelWidth: 44,
+                    labelHeight: 36,
+                    labelOffsetY: 14,
                     paperGrainDensity: 44
                 )
                 .overlay {
@@ -1154,10 +1188,10 @@ private struct CourseSuggestionBook: View {
                     .foregroundStyle(NotebookTheme.ink)
                     .frame(width: 30, height: 30)
                     .background(.white, in: Circle())
-                    .offset(x: 64, y: 80)
+                    .offset(x: 66, y: 82)
                     .shadow(color: .black.opacity(0.12), radius: 5, y: 3)
             }
-            .frame(width: 98, height: 128)
+            .frame(width: 104, height: 134)
             .rotationEffect(.degrees(entered ? (active ? -2.4 : 1.4) : 7))
             .rotation3DEffect(.degrees(active ? 8 : -3), axis: (x: 0.16, y: 1, z: 0), perspective: 0.74)
             .scaleEffect(active ? 1.04 : 1)
@@ -1195,6 +1229,193 @@ private struct CourseSuggestionBook: View {
             return "text.book.closed.fill"
         default:
             return "book.closed.fill"
+        }
+    }
+}
+
+private struct HomeWalkthroughView: View {
+    var done: () -> Void
+    @State private var appeared = false
+    @State private var closeRotation = 0.0
+    @State private var selectedStep = 0
+
+    private let steps: [(String, String, String)] = [
+        ("plus", "add a course", "create another composition notebook for a class."),
+        ("person.crop.circle", "account", "change profile, comfort, security, and notebook settings."),
+        ("hand.tap.fill", "hold a cover", "customize color, label, paper style, and cover art."),
+        ("book.closed.fill", "open a notebook", "scan, upload, type, edit, study, and read notes."),
+        ("link", "share links", "send a journal link so another user can add it to their library.")
+    ]
+
+    var body: some View {
+        ZStack {
+            LivingPaperBackground().ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("quick tour")
+                            .font(.system(.title2, design: .serif, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.ink)
+                        Text("your shelf is built around touch, hold, and share.")
+                            .font(.system(.footnote, design: .rounded, weight: .medium))
+                            .foregroundStyle(NotebookTheme.muted)
+                    }
+                    Spacer()
+                    Button {
+                        close()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .frame(width: 38, height: 38)
+                            .rotationEffect(.degrees(closeRotation))
+                    }
+                    .buttonStyle(CircleButtonStyle(tint: .white.opacity(0.72), foreground: NotebookTheme.ink))
+                }
+
+                walkthroughStage
+
+                HStack(spacing: 8) {
+                    ForEach(steps.indices, id: \.self) { index in
+                        Capsule()
+                            .fill(index == selectedStep ? NotebookTheme.ink : NotebookTheme.ink.opacity(0.16))
+                            .frame(width: index == selectedStep ? 24 : 8, height: 8)
+                            .animation(.spring(response: 0.36, dampingFraction: 0.8), value: selectedStep)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                Button {
+                    Haptics.success()
+                    advance()
+                } label: {
+                    Text(selectedStep == steps.count - 1 ? "start" : "next")
+                        .font(.system(.headline, design: .rounded, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(NotebookTheme.ink, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(22)
+        }
+        .gesture(
+            DragGesture(minimumDistance: 18)
+                .onEnded { value in
+                    if value.translation.width < -30 {
+                        advance()
+                    } else if value.translation.width > 30 {
+                        retreat()
+                    }
+                }
+        )
+        .onAppear {
+            withAnimation(.spring(response: 0.58, dampingFraction: 0.84)) {
+                appeared = true
+            }
+        }
+    }
+
+    private var walkthroughStage: some View {
+        let step = steps[selectedStep]
+        return ZStack {
+            RoundedRectangle(cornerRadius: 34, style: .continuous)
+                .fill(.white.opacity(0.56))
+                .overlay {
+                    PaperRules()
+                        .opacity(0.22)
+                        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+                }
+
+            VStack(spacing: 18) {
+                ZStack {
+                    Circle()
+                        .fill(NotebookTheme.ink.opacity(0.08))
+                        .frame(width: 132, height: 132)
+                    Image(systemName: step.0)
+                        .font(.system(size: 38, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 86, height: 86)
+                        .background(NotebookTheme.ink, in: Circle())
+                        .rotation3DEffect(.degrees(appeared ? 0 : 28), axis: (x: 0.2, y: 1, z: 0), perspective: 0.75)
+                        .shadow(color: .black.opacity(0.16), radius: 12, y: 8)
+                }
+                Text(step.1)
+                    .font(.system(.title3, design: .serif, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                Text(step.2)
+                    .font(.system(.subheadline, design: .rounded, weight: .medium))
+                    .foregroundStyle(NotebookTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+            }
+            .padding(24)
+        }
+        .frame(height: 300)
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 12)
+        .animation(.spring(response: 0.55, dampingFraction: 0.82), value: selectedStep)
+        .animation(.spring(response: 0.52, dampingFraction: 0.84), value: appeared)
+    }
+
+    private func walkthroughRow(symbol: String, title: String, detail: String, index: Int) -> some View {
+        HStack(spacing: 13) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(NotebookTheme.ink, in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                Text(detail)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(NotebookTheme.muted)
+                    .lineSpacing(3)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 13)
+        .overlay(alignment: .bottom) {
+            if index < steps.count - 1 {
+                Rectangle()
+                    .fill(NotebookTheme.ink.opacity(0.1))
+                    .frame(height: 0.7)
+                    .padding(.leading, 47)
+            }
+        }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 10)
+        .animation(.spring(response: 0.52, dampingFraction: 0.84).delay(Double(index) * 0.04), value: appeared)
+    }
+
+    private func close() {
+        Haptics.softTap()
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
+            closeRotation += 90
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            done()
+        }
+    }
+
+    private func advance() {
+        Haptics.selection()
+        if selectedStep == steps.count - 1 {
+            close()
+        } else {
+            withAnimation(.spring(response: 0.48, dampingFraction: 0.82)) {
+                selectedStep += 1
+            }
+        }
+    }
+
+    private func retreat() {
+        guard selectedStep > 0 else { return }
+        Haptics.selection()
+        withAnimation(.spring(response: 0.48, dampingFraction: 0.82)) {
+            selectedStep -= 1
         }
     }
 }

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>marginalia</string>
+	<string>cahier</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -14,6 +14,18 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>cahier notebook links</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cahier</string>
+				<string>marginalia</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -25,15 +37,11 @@
 	<key>NSAccentColorName</key>
 	<string>AccentColor</string>
 	<key>NSCameraUsageDescription</key>
-	<string>marginalia uses the camera to scan study pages.</string>
+	<string>cahier uses the camera to scan study pages.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>marginalia uses face id to verify password reset requests.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>marginalia uses the microphone for optional voice personalization.</string>
+	<string>cahier uses face id to verify password reset requests.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>marginalia can import a note photo when the simulator has no camera.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>marginalia transcribes your optional voice setup recording.</string>
+	<string>cahier can import a note photo when the simulator has no camera.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

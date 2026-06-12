@@ -701,7 +701,7 @@ struct StudyFocusView: View {
                         .background(NotebookTheme.ink, in: Capsule())
                 }
                 .buttonStyle(.plain)
-                Text(playback?.summary ?? (isReading ? "reading now" : "focused review voice"))
+                Text(playback?.summary ?? (isReading ? "reading now" : "focused review"))
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(NotebookTheme.muted)
             }
@@ -2456,7 +2456,7 @@ private enum PracticeDrillGenerator {
                 prompt: "which formula belongs here?",
                 answer: formula,
                 options: options(answer: formula, pool: pool),
-                reason: "marginalia found this formula in the scanned notes."
+                reason: "cahier found this formula in the scanned notes."
             ))
         }
 

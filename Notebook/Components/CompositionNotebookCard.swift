@@ -24,10 +24,10 @@ struct CompositionNotebookCard: View {
                 CompositionCoverFace(
                     subject: notebook.subject,
                     cornerRadius: 20,
-                    spineWidth: 16,
-                    labelWidth: 142,
-                    labelHeight: 108,
-                    labelOffsetY: 30,
+                    spineWidth: 20,
+                    labelWidth: 110,
+                    labelHeight: 82,
+                    labelOffsetY: 28,
                     coverStyle: notebook.coverStyle,
                     coverColor: notebook.coverColor,
                     labelStyle: notebook.coverLabelStyle,
@@ -40,6 +40,12 @@ struct CompositionNotebookCard: View {
                 DirectionAwareTouchHighlight(offset: dragOffset, isActive: isPressed, cornerRadius: 20)
                     .blendMode(.screen)
                 parallaxEdgeLight
+
+                if let canvasGrade = notebook.canvasGrade, !canvasGrade.isEmpty {
+                    CanvasGradeSeal(text: canvasGrade)
+                        .padding(12)
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
             .aspectRatio(0.72, contentMode: .fit)
             .rotation3DEffect(.degrees(rotationX), axis: (x: 1, y: 0, z: 0), perspective: 0.62)
@@ -151,6 +157,33 @@ struct CompositionNotebookCard: View {
     }
 }
 
+private struct CanvasGradeSeal: View {
+    var text: String
+
+    var body: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Text(text)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(NotebookTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .padding(.horizontal, 10)
+                    .frame(height: 30)
+                    .background(.white.opacity(0.82), in: Capsule())
+                    .overlay {
+                        Capsule()
+                            .stroke(.black.opacity(0.14), lineWidth: 0.8)
+                    }
+                    .shadow(color: .black.opacity(0.16), radius: 4, y: 2)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 struct CompositionCoverFace: View {
     var subject: String?
     var cornerRadius: CGFloat
@@ -179,7 +212,8 @@ struct CompositionCoverFace: View {
             } else if coverStyle == .marbled {
                 SpeckledCompositionTexture()
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                    .opacity(0.98)
+                    .blendMode(coverColor == .graphite ? .normal : .luminosity)
+                    .opacity(coverColor == .graphite ? 0.98 : 0.82)
             } else if coverStyle == .linen {
                 LinenCoverTexture(color: NotebookTheme.accent(coverColor))
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
@@ -232,7 +266,7 @@ struct CompositionCoverFace: View {
             VStack {
                 HStack {
                     Spacer(minLength: spineWidth + 8)
-                    CompositionCoverLabel(subject: subject, isLarge: labelWidth > 124, labelStyle: labelStyle, fontStyle: fontStyle)
+                    CompositionCoverLabel(subject: subject, isLarge: labelWidth > 104, labelStyle: labelStyle, fontStyle: fontStyle)
                         .frame(width: labelWidth, height: labelHeight)
                     Spacer()
                 }
@@ -461,9 +495,9 @@ struct NotebookLogo: View {
         CompositionCoverFace(
             subject: nil,
             cornerRadius: 18,
-            spineWidth: 15,
-            labelWidth: 102,
-            labelHeight: 88,
+            spineWidth: 17,
+            labelWidth: 76,
+            labelHeight: 62,
             labelOffsetY: 30
         )
     }
@@ -529,8 +563,8 @@ private struct CompositionCoverLabel: View {
             }
         }
         .foregroundStyle(.black.opacity(0.78))
-        .padding(.horizontal, isLarge ? 11 : 9)
-        .padding(.vertical, isLarge ? 9 : 8)
+        .padding(.horizontal, isLarge ? 9 : 8)
+        .padding(.vertical, isLarge ? 8 : 7)
         .background(
             LinearGradient(
                 colors: [.white, Color(red: 0.965, green: 0.96, blue: 0.93)],

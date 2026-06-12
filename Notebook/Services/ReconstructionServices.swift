@@ -44,7 +44,7 @@ struct SAM3DObjectReconstructionAdapter: ObjectReconstructionServing {
         let shape = ReconstructionTextAnalyzer.shape(from: lines, profile: profile)
         return [DetectedModel(
             title: terms.first.map { "\($0) region" } ?? "diagram region",
-            summary: "marginalia isolated the strongest visual region and rebuilt its labels, arrows, edges, and note anchors into a tappable study model.",
+            summary: "cahier isolated the strongest visual region and rebuilt its labels, arrows, edges, and note anchors into a tappable study model.",
             terms: finalNodes,
             nodes: finalNodes,
             reconstruction: ModelReconstructionFactory.make(

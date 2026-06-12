@@ -13,8 +13,11 @@ final class NotebookStore {
     var isAuthenticated = false
     var authSession: AuthSession?
     var authMessage: String?
+    var libraryNotice: String?
+    var canvasImportMessage: String?
+    var isImportingCanvas = false
     var hasCompletedOnboarding = false
-    var setupStep: SetupStep = .voiceRecording
+    var setupStep: SetupStep = .subjects
     var appTheme: AppTheme = .device
     var activeScanJob: ScanJob?
     var scanRouteNotice: ScanRouteNotice?
@@ -39,6 +42,7 @@ final class NotebookStore {
     private let aiService: NoteUnderstandingServing = LocalNoteUnderstandingService()
     private let reviewService: SpacedRepetitionServing = LocalSpacedRepetitionService()
     private let voiceService: VoiceServing = MossTTSVoiceService()
+    private let canvasService = CanvasCourseService()
     @ObservationIgnored private let persistence = AppPersistence()
     @ObservationIgnored private var audioEngine: AVAudioEngine?
     @ObservationIgnored private var audioRecorder: AVAudioRecorder?
@@ -74,7 +78,7 @@ final class NotebookStore {
             authSession = saved.authSession
             isAuthenticated = saved.authSession != nil
             hasCompletedOnboarding = saved.hasCompletedOnboarding
-            setupStep = saved.setupStep
+            setupStep = saved.setupStep == .voiceRecording ? .subjects : saved.setupStep
             appTheme = saved.appTheme
             selectedStudyMode = saved.selectedStudyMode
             voiceProfile = saved.voiceProfile
@@ -132,8 +136,9 @@ final class NotebookStore {
             authSession = nil
             isAuthenticated = false
             hasCompletedOnboarding = false
-            setupStep = .voiceRecording
+            setupStep = .subjects
             authMessage = nil
+            canvasImportMessage = nil
         }
         persist()
     }
@@ -145,11 +150,12 @@ final class NotebookStore {
             authSession = nil
             isAuthenticated = false
             hasCompletedOnboarding = false
-            setupStep = .voiceRecording
+            setupStep = .subjects
             selectedStudyMode = .longTerm
             voiceProfile = VoiceProfile()
             onboardingSubjects = []
             authMessage = nil
+            canvasImportMessage = nil
         }
         persistence.clear()
     }
@@ -157,7 +163,7 @@ final class NotebookStore {
     func finishOnboarding() {
         withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) {
             hasCompletedOnboarding = true
-            setupStep = .voiceRecording
+            setupStep = .subjects
         }
         persist()
     }
@@ -165,7 +171,7 @@ final class NotebookStore {
     func choosePersonalVoice(_ wantsPersonalVoice: Bool) {
         voiceProfile.wantsPersonalVoice = wantsPersonalVoice
         withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) {
-            setupStep = wantsPersonalVoice ? .voiceRecording : .subjects
+            setupStep = .subjects
         }
         persist()
     }
@@ -178,6 +184,11 @@ final class NotebookStore {
         } else {
             await startVoicePrompt(prompt)
         }
+    }
+
+    func finishCurrentVoicePrompt() {
+        guard isRecordingVoice, !isPreparingVoiceRecording else { return }
+        finishVoicePrompt()
     }
 
     func pauseVoiceRecording() {
@@ -265,6 +276,13 @@ final class NotebookStore {
         persist()
     }
 
+    func continueToAvatar() {
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+            setupStep = .avatar
+        }
+        persist()
+    }
+
     func setSubjects(_ subjects: [String]) {
         let cleaned = subjects
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
@@ -282,9 +300,66 @@ final class NotebookStore {
             )
         }
         withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
-            setupStep = .avatar
+            setupStep = .theme
         }
         persist()
+    }
+
+    func importCanvasCourses(domain: String, token: String) async {
+        guard !isImportingCanvas else { return }
+        isImportingCanvas = true
+        canvasImportMessage = nil
+        defer {
+            isImportingCanvas = false
+            persist()
+        }
+
+        do {
+            let courses = try await canvasService.fetchCourses(domain: domain, token: token)
+            guard !courses.isEmpty else {
+                canvasImportMessage = "no canvas courses found."
+                return
+            }
+            withAnimation(.spring(response: 0.62, dampingFraction: 0.84)) {
+                for course in courses {
+                    let subject = course.notebookSubject
+                    let grade = course.gradeLabel
+                    if let existing = notebooks.firstIndex(where: { notebook in
+                        notebook.canvasCourseID == course.id || notebook.subject == subject
+                    }) {
+                        notebooks[existing].canvasCourseID = course.id
+                        notebooks[existing].canvasGrade = grade
+                        notebooks[existing].canvasScore = course.score
+                        notebooks[existing].lastActivity = "canvas \(grade)"
+                        notebooks[existing].progress = normalizedCanvasProgress(course.score)
+                    } else {
+                        notebooks.append(
+                            SubjectNotebook(
+                                subject: subject,
+                                pages: [],
+                                progress: normalizedCanvasProgress(course.score),
+                                lastActivity: "canvas \(grade)",
+                                isPinned: notebooks.isEmpty,
+                                accent: ColorToken.allCases[notebooks.count % ColorToken.allCases.count],
+                                canvasCourseID: course.id,
+                                canvasGrade: grade,
+                                canvasScore: course.score
+                            )
+                        )
+                    }
+                }
+                onboardingSubjects = notebooks.map(\.subject)
+                canvasImportMessage = "\(courses.count) canvas courses added."
+                setupStep = .theme
+            }
+        } catch {
+            canvasImportMessage = error.localizedDescription.lowercased()
+        }
+    }
+
+    private func normalizedCanvasProgress(_ score: Double?) -> Double {
+        guard let score else { return 0 }
+        return min(1, max(0, score / 100))
     }
 
     func addCourse(_ subject: String) {
@@ -306,14 +381,68 @@ final class NotebookStore {
         persist()
     }
 
+    func shareLink(for notebook: SubjectNotebook) -> URL? {
+        var sharedNotebook = notebook
+        sharedNotebook.customCoverData = nil
+        guard let data = try? JSONEncoder().encode(sharedNotebook) else { return nil }
+        let payload = data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        var components = URLComponents()
+        components.scheme = "cahier"
+        components.host = "share"
+        components.path = "/notebook"
+        components.queryItems = [URLQueryItem(name: "payload", value: payload)]
+        return components.url
+    }
+
+    func handleIncomingURL(_ url: URL) {
+        guard (url.scheme == "cahier" || url.scheme == "marginalia"),
+              url.host == "share",
+              url.path == "/notebook",
+              let payload = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?
+                .first(where: { $0.name == "payload" })?
+                .value,
+              let data = Data(base64URLString: payload),
+              var imported = try? JSONDecoder().decode(SubjectNotebook.self, from: data) else { return }
+
+        imported.id = UUID()
+        imported.isPinned = notebooks.isEmpty
+        imported.lastActivity = "shared notebook"
+        let baseSubject = imported.subject.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if notebooks.contains(where: { $0.subject == baseSubject }) {
+            imported.subject = "\(baseSubject) shared"
+        } else {
+            imported.subject = baseSubject
+        }
+        withAnimation(.spring(response: 0.62, dampingFraction: 0.84)) {
+            notebooks.insert(imported, at: 0)
+            libraryNotice = "\(imported.subject) added"
+            isAuthenticated = true
+            hasCompletedOnboarding = true
+        }
+        persist()
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.4))
+            if libraryNotice == "\(imported.subject) added" {
+                withAnimation(.spring(response: 0.36, dampingFraction: 0.84)) {
+                    libraryNotice = nil
+                }
+            }
+        }
+    }
+
     private func completeAuth(_ session: AuthSession) {
         authSession = session
         authMessage = "\(session.provider.rawValue) ready"
+        canvasImportMessage = nil
         user.name = session.username.lowercased()
         withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) {
             isAuthenticated = true
             hasCompletedOnboarding = false
-            setupStep = .voiceRecording
+            setupStep = .subjects
         }
         persist()
     }
@@ -324,12 +453,12 @@ final class NotebookStore {
         voiceSetupMessage = "opening microphone."
         defer { isPreparingVoiceRecording = false }
         guard await requestMicrophonePermission() else {
-            authMessage = "microphone access is needed to record voice."
+            authMessage = "microphone access is needed to record audio."
             voiceSetupMessage = "microphone access is needed."
             return
         }
         let session = AVAudioSession.sharedInstance()
-        let fileName = "marginalia-voice-\(UUID().uuidString).m4a"
+        let fileName = "cahier-audio-\(UUID().uuidString).m4a"
         let url = voiceSamplesDirectory().appendingPathComponent(fileName)
 
         do {
@@ -365,7 +494,7 @@ final class NotebookStore {
             voiceRecognitionAvailable = false
             voicePromptWordProgress = 0
             latestVoiceTranscript = nil
-            voiceSetupMessage = "listening to your voice."
+            voiceSetupMessage = "listening."
             lastVoiceHeardAt = nil
             voiceNoiseFloor = 0.025
             voiceSignalStartedAt = nil
@@ -392,8 +521,8 @@ final class NotebookStore {
             lastVoiceActivityTick = nil
             lastVoiceMeterUIUpdateAt = nil
             try? session.setActive(false, options: .notifyOthersOnDeactivation)
-            authMessage = "voice recording could not start."
-            voiceSetupMessage = "voice recording could not start."
+            authMessage = "audio recording could not start."
+            voiceSetupMessage = "audio recording could not start."
         }
     }
 
@@ -424,14 +553,14 @@ final class NotebookStore {
         recordingURL = nil
         recordingPrompt = nil
         guard duration >= 0.5 else {
-            authMessage = "record a little longer so voice can be saved."
+            authMessage = "record a little longer so audio can be saved."
             voiceSetupMessage = "record a little longer."
             try? FileManager.default.removeItem(at: url)
             return
         }
         if hadWordRecognition {
             guard completedProgress >= max(1, prompt.normalizedSpeechWords.count - 1) else {
-                authMessage = "read the sentence once so the voice sample can match it."
+                authMessage = "read the sentence once so the sample can match it."
                 voiceSetupMessage = "read the sentence once."
                 try? FileManager.default.removeItem(at: url)
                 return
@@ -439,7 +568,7 @@ final class NotebookStore {
         } else {
             let targetSpeechDuration = targetSpeechDuration(for: prompt)
             guard capturedSpeechDuration >= min(targetSpeechDuration, 0.42) || duration >= targetSpeechDuration + 0.2 else {
-                authMessage = "keep reading until the voice meter stays active."
+                authMessage = "keep reading until the meter stays active."
                 voiceSetupMessage = "keep reading until the meter moves."
                 try? FileManager.default.removeItem(at: url)
                 return
@@ -448,7 +577,7 @@ final class NotebookStore {
         let sampleID = UUID()
         voiceProfile.samples.append(VoiceSample(id: sampleID, prompt: prompt, isRecorded: true, audioURL: url, duration: duration))
         voiceProfile.isPersonalized = voiceProfile.samples.count == 3
-        voiceSetupMessage = voiceProfile.isPersonalized ? "voice ready." : "sample saved."
+        voiceSetupMessage = voiceProfile.isPersonalized ? "audio ready." : "sample saved."
         if voiceProfile.isPersonalized {
             withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
                 setupStep = .subjects
@@ -492,9 +621,7 @@ final class NotebookStore {
                 }
                 let spokenProgress = voiceActiveSpeechDuration / max(0.75, target * 0.78)
                 voicePromptWordProgress = min(wordCount, Int(spokenProgress * Double(wordCount)))
-                if voicePromptWordProgress >= wordCount, voiceActiveSpeechDuration >= max(0.52, target * 0.66) {
-                    finishVoicePrompt()
-                } else if elapsed >= 9.5 {
+                if elapsed >= 9.5 {
                     voiceSetupMessage = voiceActiveSpeechDuration > 0.32 ? "tap again to save." : "move closer and try again."
                 }
             }
@@ -516,7 +643,7 @@ final class NotebookStore {
         voicePromptWordProgress = max(voicePromptWordProgress, matchedWords)
         let targetCount = prompt.normalizedSpeechWords.count
         if targetCount > 0, voicePromptWordProgress >= targetCount, voiceRecordingElapsed > 0.9 {
-            scheduleVoicePromptFinish(expectedProgress: targetCount)
+            voiceSetupMessage = "tap again to save."
         }
     }
 
@@ -1044,8 +1171,8 @@ final class NotebookStore {
         return DetectedModel(
             title: modelTitle,
             summary: content.tables.isEmpty
-                ? "marginalia rebuilt the page into a rotatable study object with labeled anchors, relationships, and depth."
-                : "marginalia rebuilt the table into a structured study object with row and column anchors.",
+                ? "cahier rebuilt the page into a rotatable study object with labeled anchors, relationships, and depth."
+                : "cahier rebuilt the table into a structured study object with row and column anchors.",
             terms: finalNodes,
             nodes: finalNodes,
             reconstruction: ModelReconstructionFactory.make(
@@ -2324,14 +2451,14 @@ final class NotebookStore {
 
     private func voiceSamplesDirectory() -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
-        let directory = base.appendingPathComponent("marginalia-voice-samples", isDirectory: true)
+        let directory = base.appendingPathComponent("cahier-audio-samples", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
 
     private func transcribeVoiceSample(at url: URL) async -> String {
         guard await requestSpeechPermission() else {
-            authMessage = "speech recognition access is needed to transcribe voice."
+            authMessage = "speech recognition access is needed to transcribe audio."
             return ""
         }
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US")), recognizer.isAvailable else {
@@ -2374,6 +2501,17 @@ final class NotebookStore {
         }
         let rms = sqrt(sum / Float(frameCount))
         return max(0, min(1, Double(rms) * 18))
+    }
+}
+
+private extension Data {
+    init?(base64URLString: String) {
+        var value = base64URLString
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let padding = (4 - value.count % 4) % 4
+        value.append(String(repeating: "=", count: padding))
+        self.init(base64Encoded: value)
     }
 }
 

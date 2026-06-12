@@ -813,7 +813,7 @@ struct GemmaStudyLLMService {
 
     private func prompt(question: String, content: ExtractedContent) -> String {
         """
-        you are marginalia's local gemma study tutor. answer only from the student's notes. keep it short, clear, and useful. if the answer is not in the notes, say what part of the notes is closest.
+        you are cahier's local gemma study tutor. answer only from the student's notes. keep it short, clear, and useful. if the answer is not in the notes, say what part of the notes is closest.
 
         question:
         \(question)
@@ -870,7 +870,7 @@ struct LocalSpacedRepetitionService: SpacedRepetitionServing {
 
 struct MossTTSVoiceService: VoiceServing {
     func makePlayback(_ text: String, style: PlaybackStyle, profile: VoiceProfile) async -> VoicePlayback {
-        let backend: VoiceReplicationBackend = profile.isPersonalized ? .mossTTSV15 : .kokoro
+        let backend: VoiceReplicationBackend = profile.replicationBackend
         let request = MossTTSRequest(
             text: text,
             referenceAudioURLs: profile.samples.compactMap(\.audioURL),
@@ -893,7 +893,7 @@ struct MossTTSVoiceService: VoiceServing {
         if request.referenceAudioURLs.isEmpty {
             summary = "on device \(styleName) reader is speaking \(words) words."
         } else {
-            summary = "on device \(styleName) reader is using \(request.referenceAudioURLs.count) saved voice samples for timing."
+            summary = "on device \(styleName) reader is using \(request.referenceAudioURLs.count) saved audio samples for timing."
         }
         return VoicePlayback(
             style: style,

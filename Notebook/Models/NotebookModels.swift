@@ -380,6 +380,9 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
     var coverLabelStyle: NotebookLabelStyle
     var coverFontStyle: NotebookCoverFontStyle
     var customCoverData: Data?
+    var canvasCourseID: Int?
+    var canvasGrade: String?
+    var canvasScore: Double?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -394,6 +397,9 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
         case coverLabelStyle
         case coverFontStyle
         case customCoverData
+        case canvasCourseID
+        case canvasGrade
+        case canvasScore
     }
 
     init(
@@ -408,7 +414,10 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
         coverColor: ColorToken = .graphite,
         coverLabelStyle: NotebookLabelStyle = .classic,
         coverFontStyle: NotebookCoverFontStyle = .serif,
-        customCoverData: Data? = nil
+        customCoverData: Data? = nil,
+        canvasCourseID: Int? = nil,
+        canvasGrade: String? = nil,
+        canvasScore: Double? = nil
     ) {
         self.id = id
         self.subject = subject
@@ -422,6 +431,9 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
         self.coverLabelStyle = coverLabelStyle
         self.coverFontStyle = coverFontStyle
         self.customCoverData = customCoverData
+        self.canvasCourseID = canvasCourseID
+        self.canvasGrade = canvasGrade
+        self.canvasScore = canvasScore
     }
 
     init(from decoder: Decoder) throws {
@@ -438,6 +450,9 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
         coverLabelStyle = try container.decodeIfPresent(NotebookLabelStyle.self, forKey: .coverLabelStyle) ?? .classic
         coverFontStyle = try container.decodeIfPresent(NotebookCoverFontStyle.self, forKey: .coverFontStyle) ?? .serif
         customCoverData = try container.decodeIfPresent(Data.self, forKey: .customCoverData)
+        canvasCourseID = try container.decodeIfPresent(Int.self, forKey: .canvasCourseID)
+        canvasGrade = try container.decodeIfPresent(String.self, forKey: .canvasGrade)
+        canvasScore = try container.decodeIfPresent(Double.self, forKey: .canvasScore)
     }
 }
 
@@ -1137,11 +1152,11 @@ struct AIAction: Identifiable, Hashable, Codable {
 
 struct VoiceProfile: Identifiable, Hashable, Codable {
     var id = UUID()
-    var name: String = "my voice"
+    var name: String = "my audio"
     var samples: [VoiceSample] = []
     var isPersonalized = false
     var wantsPersonalVoice = false
-    var replicationBackend: VoiceReplicationBackend = .mossTTSV15
+    var replicationBackend: VoiceReplicationBackend = .coquiTTS
 }
 
 struct VoiceSample: Identifiable, Hashable, Codable {
@@ -1162,11 +1177,13 @@ struct VoicePlayback: Hashable, Codable {
 }
 
 enum VoiceReplicationBackend: String, Hashable, Codable {
+    case coquiTTS = "coqui-tts"
     case mossTTSV15 = "moss-tts"
     case kokoro = "kokoro"
 
     var modelID: String {
         switch self {
+        case .coquiTTS: "coqui-ai/TTS"
         case .mossTTSV15: "OpenMOSS-Team/MOSS-TTS-v1.5"
         case .kokoro: "hexgrad/kokoro"
         }
@@ -1174,6 +1191,8 @@ enum VoiceReplicationBackend: String, Hashable, Codable {
 
     var sourceURL: URL {
         switch self {
+        case .coquiTTS:
+            URL(string: "https://github.com/coqui-ai/TTS")!
         case .mossTTSV15:
             URL(string: "https://huggingface.co/spaces/OpenMOSS-Team/MOSS-TTS-v1.5/tree/main")!
         case .kokoro:
@@ -1183,6 +1202,7 @@ enum VoiceReplicationBackend: String, Hashable, Codable {
 
     var displayName: String {
         switch self {
+        case .coquiTTS: "coqui tts"
         case .mossTTSV15: "moss-tts v1.5"
         case .kokoro: "kokoro"
         }
