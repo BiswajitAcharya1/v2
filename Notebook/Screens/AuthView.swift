@@ -129,23 +129,23 @@ struct AuthView: View {
                         .allowsHitTesting(authControlsReady)
                     }
                 }
-                .frame(width: 266 + openProgress * 204, height: 342 + openProgress * 126)
+                .frame(width: 282 + openProgress * 214, height: 356 + openProgress * 138)
                 .rotation3DEffect(.degrees(-6 + openProgress * 13), axis: (x: 1, y: 0.18, z: 0), perspective: 0.72)
-                .offset(x: openProgress * 74, y: openProgress * 16)
+                .offset(x: openProgress * 78, y: openProgress * 12)
                 .shadow(color: .black.opacity(0.12), radius: 16, y: 10)
 
             CompositionCoverFace(
                 subject: nil,
                 cornerRadius: 22,
-                spineWidth: 12,
+                spineWidth: 16,
                 labelWidth: 152,
                 labelHeight: 104,
                 labelOffsetY: 36,
                 paperGrainDensity: notebookOpen || coverDrag < -2 ? 90 : 0
             )
-                .frame(width: 236, height: 306)
-                .rotation3DEffect(.degrees(-156 * openProgress + (leatherDrift ? 2.5 : -2.5)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
-                .offset(x: -132 * openProgress, y: 4 + 13 * openProgress)
+                .frame(width: 252, height: 326)
+                .rotation3DEffect(.degrees(-168 * openProgress + (leatherDrift ? 2.5 : -2.5)), axis: (x: 0.02, y: 1, z: 0), anchor: .leading, perspective: 0.68)
+                .offset(x: -152 * openProgress, y: 4 + 13 * openProgress)
                 .opacity(Double(1 - max(0, (openProgress - 0.58) / 0.26)))
                 .scaleEffect(1 - openProgress * 0.08)
                 .shadow(color: .black.opacity(0.22), radius: 18, y: 12)
@@ -203,8 +203,7 @@ struct AuthView: View {
 
     private var authPanel: some View {
         VStack(spacing: 12) {
-            Button {
-                Haptics.press()
+            SlowAuthButton {
                 withAnimation(.spring(response: 1.02, dampingFraction: 0.88)) {
                     isSignIn = true
                     showingEmail = true
@@ -218,9 +217,8 @@ struct AuthView: View {
                 .foregroundStyle(NotebookTheme.ink)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(.ultraThinMaterial, in: Capsule())
+                    .background(.ultraThinMaterial, in: Capsule())
             }
-            .buttonStyle(.plain)
 
             HStack(spacing: 16) {
                 legalLink(.terms)
@@ -230,8 +228,7 @@ struct AuthView: View {
     }
 
     private func legalLink(_ document: LegalDocument) -> some View {
-        Button {
-            Haptics.softTap()
+        SlowAuthButton {
             legalDocument = document
         } label: {
             Text(document.title)
@@ -241,7 +238,6 @@ struct AuthView: View {
                 .padding(.vertical, 7)
                 .background(.ultraThinMaterial, in: Capsule())
         }
-        .buttonStyle(.plain)
     }
 
     private struct BrandSignUpTitle: View {
@@ -364,9 +360,21 @@ struct AuthView: View {
         let provider: AuthProvider
         var action: () -> Void
         @State private var shimmer = false
+        @State private var pressed = false
 
         var body: some View {
-            Button(action: action) {
+            Button {
+                Haptics.press()
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
+                    pressed = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+                        pressed = false
+                    }
+                    action()
+                }
+            } label: {
                 HStack(spacing: 10) {
                     Circle()
                         .fill(.ultraThinMaterial)
@@ -397,7 +405,8 @@ struct AuthView: View {
                 .accessibilityLabel(provider.title)
             }
             .buttonStyle(.plain)
-            .simultaneousGesture(TapGesture().onEnded { Haptics.press() })
+            .scaleEffect(pressed ? 0.965 : 1)
+            .rotation3DEffect(.degrees(pressed ? 5 : 0), axis: (x: 0.16, y: 1, z: 0), perspective: 0.82)
             .onAppear {
                 withAnimation(.easeInOut(duration: 1.45).delay(0.22)) {
                     shimmer = true
@@ -420,6 +429,37 @@ struct AuthView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(NotebookTheme.ink)
             }
+        }
+    }
+
+    private struct SlowAuthButton<Content: View>: View {
+        var action: () -> Void
+        @ViewBuilder var content: () -> Content
+        @State private var pressed = false
+
+        init(_ action: @escaping () -> Void, @ViewBuilder label: @escaping () -> Content) {
+            self.action = action
+            self.content = label
+        }
+
+        var body: some View {
+            Button {
+                Haptics.softTap()
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.72)) {
+                    pressed = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.82)) {
+                        pressed = false
+                    }
+                    action()
+                }
+            } label: {
+                content()
+            }
+            .buttonStyle(.plain)
+            .scaleEffect(pressed ? 0.96 : 1)
+            .offset(y: pressed ? 2 : 0)
         }
     }
 

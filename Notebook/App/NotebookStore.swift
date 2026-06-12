@@ -41,6 +41,8 @@ final class NotebookStore {
     private let voiceService: VoiceServing = MossTTSVoiceService()
     @ObservationIgnored private let persistence = AppPersistence()
     @ObservationIgnored private var audioEngine: AVAudioEngine?
+    @ObservationIgnored private var audioRecorder: AVAudioRecorder?
+    @ObservationIgnored private var voiceMeterTask: Task<Void, Never>?
     @ObservationIgnored private var voiceTapInstalled = false
     @ObservationIgnored private var voiceAudioFile: AVAudioFile?
     @ObservationIgnored private var liveRecognitionRequest: SFSpeechAudioBufferRecognitionRequest?
@@ -180,14 +182,15 @@ final class NotebookStore {
 
     func pauseVoiceRecording() {
         guard isRecordingVoice, !isVoicePaused else { return }
-        audioEngine?.pause()
+        audioRecorder?.pause()
         isVoicePaused = true
     }
 
     func resumeVoiceRecording() {
         guard isRecordingVoice, isVoicePaused else { return }
-        try? audioEngine?.start()
-        isVoicePaused = false
+        if audioRecorder?.record() == true {
+            isVoicePaused = false
+        }
     }
 
     func skipVoiceSetup() {
@@ -278,7 +281,10 @@ final class NotebookStore {
                 accent: ColorToken.allCases[index % ColorToken.allCases.count]
             )
         }
-        finishOnboarding()
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
+            setupStep = .avatar
+        }
+        persist()
     }
 
     func addCourse(_ subject: String) {
@@ -322,109 +328,31 @@ final class NotebookStore {
             voiceSetupMessage = "microphone access is needed."
             return
         }
-        let speechAllowed = await requestSpeechPermission()
-        let recognizer = speechAllowed ? SFSpeechRecognizer(locale: Locale(identifier: "en-US")) : nil
         let session = AVAudioSession.sharedInstance()
-        let fileName = "vellum-voice-\(UUID().uuidString).caf"
+        let fileName = "marginalia-voice-\(UUID().uuidString).m4a"
         let url = voiceSamplesDirectory().appendingPathComponent(fileName)
 
         do {
-            try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker, .allowBluetoothHFP])
+            try session.setCategory(.record, mode: .measurement, options: [])
             try? session.setPreferredSampleRate(44_100)
-            try? session.setPreferredIOBufferDuration(0.025)
+            try? session.setPreferredIOBufferDuration(0.035)
             try session.setActive(true)
 
-            let engine = AVAudioEngine()
-            let input = engine.inputNode
-            let format = input.outputFormat(forBus: 0)
-            guard format.sampleRate > 0, format.channelCount > 0 else {
+            let recorder = try AVAudioRecorder(
+                url: url,
+                settings: [
+                    AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                    AVSampleRateKey: 44_100,
+                    AVNumberOfChannelsKey: 1,
+                    AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+                ]
+            )
+            recorder.isMeteringEnabled = true
+            recorder.prepareToRecord()
+            guard recorder.record() else {
                 throw VoiceRecordingError.failedToStart
             }
-            audioEngine = engine
-            let audioFile = try AVAudioFile(forWriting: url, settings: format.settings)
-            var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-            var recognitionTask: SFSpeechRecognitionTask?
-            if let recognizer, recognizer.isAvailable {
-                let request = SFSpeechAudioBufferRecognitionRequest()
-                request.shouldReportPartialResults = true
-                request.addsPunctuation = false
-                request.taskHint = .dictation
-                request.contextualStrings = prompt.normalizedSpeechWords + ["vellum", "study", "tutor", "remember"]
-                recognitionRequest = request
-                recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                    guard let self else { return }
-                    if let result {
-                        let transcript = result.bestTranscription.formattedString.lowercased()
-                        Task { @MainActor in
-                            self.applyLiveVoiceTranscript(transcript, prompt: prompt)
-                        }
-                    } else if error != nil {
-                        Task { @MainActor in
-                            self.liveRecognitionTask = nil
-                            self.liveRecognitionRequest = nil
-                            self.voiceRecognitionAvailable = false
-                        }
-                    }
-                }
-            }
-
-            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-                do {
-                    try audioFile.write(from: buffer)
-                } catch {
-                    return
-                }
-                recognitionRequest?.append(buffer)
-                let level = Self.normalizedVoiceLevel(buffer)
-                Task { @MainActor in
-                    guard let self, self.isRecordingVoice else { return }
-                    let activeLevel = self.isVoicePaused ? 0 : level
-                    let now = Date()
-                    if let lastUpdate = self.lastVoiceMeterUIUpdateAt, now.timeIntervalSince(lastUpdate) < 1.0 / 18.0 {
-                        return
-                    }
-                    self.lastVoiceMeterUIUpdateAt = now
-                    let elapsed = self.voiceRecordingStartedAt.map { now.timeIntervalSince($0) } ?? 0
-                    if elapsed < 0.55 {
-                        self.voiceNoiseFloor = min(0.08, max(0.012, self.voiceNoiseFloor * 0.84 + activeLevel * 0.16))
-                    }
-                    let speechThreshold = max(0.045, min(0.18, self.voiceNoiseFloor + 0.045))
-                    if activeLevel > speechThreshold {
-                        if self.voiceSignalStartedAt == nil {
-                            self.voiceSignalStartedAt = now
-                        }
-                        let sustainedSpeech = self.voiceSignalStartedAt.map { now.timeIntervalSince($0) > 0.08 } ?? false
-                        if sustainedSpeech {
-                            self.lastVoiceHeardAt = now
-                            self.trackVoiceActivity(now: now)
-                        }
-                    } else if activeLevel < speechThreshold * 0.72 {
-                        self.voiceSignalStartedAt = nil
-                        self.lastVoiceActivityTick = nil
-                    }
-                    self.voiceSignalActive = self.lastVoiceHeardAt.map { now.timeIntervalSince($0) < 0.42 } ?? false
-                    if !self.voiceSignalActive {
-                        self.latestVoiceTranscript = nil
-                    }
-                    self.voiceRecordingLevel = activeLevel
-                    if let startedAt = self.voiceRecordingStartedAt {
-                        self.voiceRecordingElapsed = now.timeIntervalSince(startedAt)
-                    }
-                    if !self.voiceRecognitionAvailable, let activePrompt = self.recordingPrompt {
-                        let targetSpeechDuration = self.targetSpeechDuration(for: activePrompt)
-                        if self.voiceActiveSpeechDuration >= targetSpeechDuration, elapsed > 1.0 {
-                            self.scheduleVoicePromptFinishBySpeech(prompt: activePrompt)
-                        }
-                    }
-                }
-            }
-            voiceTapInstalled = true
-
-            liveRecognitionRequest = recognitionRequest
-            liveRecognitionTask = recognitionTask
-            voiceAudioFile = audioFile
-            engine.prepare()
-            try engine.start()
+            audioRecorder = recorder
             recordingURL = url
             recordingPrompt = prompt
             voiceRecordingStartedAt = Date()
@@ -434,16 +362,17 @@ final class NotebookStore {
             voiceRecordingElapsed = 0
             voiceRecordingLevel = 0
             voiceSignalActive = false
-            voiceRecognitionAvailable = recognitionRequest != nil
+            voiceRecognitionAvailable = false
             voicePromptWordProgress = 0
             latestVoiceTranscript = nil
-            voiceSetupMessage = recognitionRequest == nil ? "listening to your voice." : "listening for the sentence."
+            voiceSetupMessage = "listening to your voice."
             lastVoiceHeardAt = nil
             voiceNoiseFloor = 0.025
             voiceSignalStartedAt = nil
             voiceActiveSpeechDuration = 0
             lastVoiceActivityTick = nil
             lastVoiceMeterUIUpdateAt = nil
+            startRecorderMetering(prompt: prompt)
         } catch {
             stopLiveVoiceCapture(cancelRecognition: true)
             recordingURL = nil
@@ -509,7 +438,7 @@ final class NotebookStore {
             }
         } else {
             let targetSpeechDuration = targetSpeechDuration(for: prompt)
-            guard capturedSpeechDuration >= targetSpeechDuration else {
+            guard capturedSpeechDuration >= min(targetSpeechDuration, 0.42) || duration >= targetSpeechDuration + 0.2 else {
                 authMessage = "keep reading until the voice meter stays active."
                 voiceSetupMessage = "keep reading until the meter moves."
                 try? FileManager.default.removeItem(at: url)
@@ -541,6 +470,35 @@ final class NotebookStore {
             voiceActiveSpeechDuration += min(0.18, max(0, now.timeIntervalSince(lastVoiceActivityTick)))
         }
         lastVoiceActivityTick = now
+    }
+
+    private func startRecorderMetering(prompt: String) {
+        voiceMeterTask?.cancel()
+        let target = targetSpeechDuration(for: prompt)
+        let wordCount = max(1, prompt.normalizedSpeechWords.count)
+        voiceMeterTask = Task { @MainActor in
+            while !Task.isCancelled, isRecordingVoice {
+                try? await Task.sleep(for: .milliseconds(70))
+                guard let recorder = audioRecorder else { continue }
+                recorder.updateMeters()
+                let elapsed = voiceRecordingStartedAt.map { Date().timeIntervalSince($0) } ?? recorder.currentTime
+                let power = recorder.averagePower(forChannel: 0)
+                let normalized = Double(max(0, min(1, (power + 52) / 44)))
+                voiceRecordingElapsed = elapsed
+                voiceRecordingLevel = isVoicePaused ? 0 : normalized
+                voiceSignalActive = normalized > 0.08
+                if voiceSignalActive {
+                    trackVoiceActivity(now: Date())
+                }
+                let spokenProgress = voiceActiveSpeechDuration / max(0.75, target * 0.78)
+                voicePromptWordProgress = min(wordCount, Int(spokenProgress * Double(wordCount)))
+                if voicePromptWordProgress >= wordCount, voiceActiveSpeechDuration >= max(0.52, target * 0.66) {
+                    finishVoicePrompt()
+                } else if elapsed >= 9.5 {
+                    voiceSetupMessage = voiceActiveSpeechDuration > 0.32 ? "tap again to save." : "move closer and try again."
+                }
+            }
+        }
     }
 
     private func applyLiveVoiceTranscript(_ transcript: String, prompt: String) {
@@ -627,6 +585,10 @@ final class NotebookStore {
     private func stopLiveVoiceCapture(cancelRecognition: Bool) {
         pendingVoiceFinishTask?.cancel()
         pendingVoiceFinishTask = nil
+        voiceMeterTask?.cancel()
+        voiceMeterTask = nil
+        audioRecorder?.stop()
+        audioRecorder = nil
         if voiceTapInstalled {
             audioEngine?.inputNode.removeTap(onBus: 0)
             voiceTapInstalled = false
@@ -696,7 +658,13 @@ final class NotebookStore {
         persist()
     }
 
-    func updateNotebookAppearance(id: SubjectNotebook.ID, style: NotebookCoverStyle? = nil, color: ColorToken? = nil) {
+    func updateNotebookAppearance(
+        id: SubjectNotebook.ID,
+        style: NotebookCoverStyle? = nil,
+        color: ColorToken? = nil,
+        labelStyle: NotebookLabelStyle? = nil,
+        fontStyle: NotebookCoverFontStyle? = nil
+    ) {
         guard let index = notebooks.firstIndex(where: { $0.id == id }) else { return }
         withAnimation(.spring(response: 0.5, dampingFraction: 0.84)) {
             if let style {
@@ -704,6 +672,25 @@ final class NotebookStore {
             }
             if let color {
                 notebooks[index].coverColor = color
+            }
+            if let labelStyle {
+                notebooks[index].coverLabelStyle = labelStyle
+            }
+            if let fontStyle {
+                notebooks[index].coverFontStyle = fontStyle
+            }
+        }
+        persist()
+    }
+
+    func updateNotebookCoverImage(id: SubjectNotebook.ID, data: Data?) {
+        guard let index = notebooks.firstIndex(where: { $0.id == id }) else { return }
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.84)) {
+            notebooks[index].customCoverData = data
+            if data != nil {
+                notebooks[index].coverStyle = .solid
+            } else if notebooks[index].coverStyle == .solid {
+                notebooks[index].coverStyle = .marbled
             }
         }
         persist()
@@ -1057,8 +1044,8 @@ final class NotebookStore {
         return DetectedModel(
             title: modelTitle,
             summary: content.tables.isEmpty
-                ? "vellum rebuilt the page into a rotatable study object with labeled anchors, relationships, and depth."
-                : "vellum rebuilt the table into a structured study object with row and column anchors.",
+                ? "marginalia rebuilt the page into a rotatable study object with labeled anchors, relationships, and depth."
+                : "marginalia rebuilt the table into a structured study object with row and column anchors.",
             terms: finalNodes,
             nodes: finalNodes,
             reconstruction: ModelReconstructionFactory.make(
@@ -1252,6 +1239,14 @@ final class NotebookStore {
 
     func answer(_ question: String, for page: NotebookPage) -> String {
         aiService.answer(question, from: page.content)
+    }
+
+    func answerWithLocalModel(_ question: String, for page: NotebookPage) async -> String {
+        if let localAnswer = await aiService.answerWithLocalModel(question, from: page.content),
+           !localAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return localAnswer.lowercased()
+        }
+        return answer(question, for: page)
     }
 
     func schedule(for card: Flashcard, mode: MemorizationMode) -> ReviewState {
@@ -2329,7 +2324,7 @@ final class NotebookStore {
 
     private func voiceSamplesDirectory() -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
-        let directory = base.appendingPathComponent("vellum-voice-samples", isDirectory: true)
+        let directory = base.appendingPathComponent("marginalia-voice-samples", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }

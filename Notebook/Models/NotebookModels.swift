@@ -377,6 +377,9 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
     var accent: ColorToken
     var coverStyle: NotebookCoverStyle
     var coverColor: ColorToken
+    var coverLabelStyle: NotebookLabelStyle
+    var coverFontStyle: NotebookCoverFontStyle
+    var customCoverData: Data?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -388,6 +391,9 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
         case accent
         case coverStyle
         case coverColor
+        case coverLabelStyle
+        case coverFontStyle
+        case customCoverData
     }
 
     init(
@@ -399,7 +405,10 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
         isPinned: Bool,
         accent: ColorToken,
         coverStyle: NotebookCoverStyle = .marbled,
-        coverColor: ColorToken = .graphite
+        coverColor: ColorToken = .graphite,
+        coverLabelStyle: NotebookLabelStyle = .classic,
+        coverFontStyle: NotebookCoverFontStyle = .serif,
+        customCoverData: Data? = nil
     ) {
         self.id = id
         self.subject = subject
@@ -410,6 +419,9 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
         self.accent = accent
         self.coverStyle = coverStyle
         self.coverColor = coverColor
+        self.coverLabelStyle = coverLabelStyle
+        self.coverFontStyle = coverFontStyle
+        self.customCoverData = customCoverData
     }
 
     init(from decoder: Decoder) throws {
@@ -423,6 +435,9 @@ struct SubjectNotebook: Identifiable, Hashable, Codable {
         accent = try container.decode(ColorToken.self, forKey: .accent)
         coverStyle = try container.decodeIfPresent(NotebookCoverStyle.self, forKey: .coverStyle) ?? .marbled
         coverColor = try container.decodeIfPresent(ColorToken.self, forKey: .coverColor) ?? .graphite
+        coverLabelStyle = try container.decodeIfPresent(NotebookLabelStyle.self, forKey: .coverLabelStyle) ?? .classic
+        coverFontStyle = try container.decodeIfPresent(NotebookCoverFontStyle.self, forKey: .coverFontStyle) ?? .serif
+        customCoverData = try container.decodeIfPresent(Data.self, forKey: .customCoverData)
     }
 }
 
@@ -444,6 +459,27 @@ enum NotebookCoverStyle: String, CaseIterable, Identifiable, Hashable, Codable {
         case .paper: "doc.richtext"
         }
     }
+}
+
+enum NotebookLabelStyle: String, CaseIterable, Identifiable, Hashable, Codable {
+    case classic
+    case minimal
+    case lab
+    case ruled
+    case graffiti
+
+    var id: String { rawValue }
+    var title: String { rawValue }
+}
+
+enum NotebookCoverFontStyle: String, CaseIterable, Identifiable, Hashable, Codable {
+    case serif
+    case rounded
+    case mono
+    case handwritten
+
+    var id: String { rawValue }
+    var title: String { rawValue }
 }
 
 struct NotebookPage: Identifiable, Hashable, Codable {
@@ -1267,6 +1303,7 @@ enum SetupStep: Hashable, Codable {
     case voiceRecording
     case theme
     case subjects
+    case avatar
 }
 
 enum PasswordStrength: String {

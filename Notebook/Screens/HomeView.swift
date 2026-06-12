@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct HomeView: View {
     @Environment(NotebookStore.self) private var store
@@ -28,23 +29,12 @@ struct HomeView: View {
             VStack(alignment: .center, spacing: 18) {
                 header
                 journalCarousel
-                if revealDetailSurfaces {
-                    dailyBriefStrip
-                    reviewPulseStrip
-                }
             }
             .padding(.top, 18)
             .padding(.bottom, 32)
         }
         .background {
-            ZStack {
-                LivingPaperBackground().ignoresSafeArea()
-                if revealDetailSurfaces {
-                    HomeDoodleLayer(animated: doodleDrift)
-                        .ignoresSafeArea()
-                        .transition(.opacity)
-                }
-            }
+            LivingPaperBackground().ignoresSafeArea()
         }
         .navigationDestination(item: $selectedNotebook) { notebook in
             NotebookDetailView(notebook: notebook)
@@ -61,7 +51,7 @@ struct HomeView: View {
         }
         .sheet(item: $stylingNotebook) { notebook in
             NotebookStyleSheet(notebook: notebook)
-                .presentationDetents([.height(430), .medium])
+                .presentationDetents([.height(620), .large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingAccountCenter) {
@@ -104,7 +94,6 @@ struct HomeView: View {
             .presentationDragIndicator(.visible)
         }
         .onAppear {
-            revealDetailSurfaces = false
             withAnimation(.easeInOut(duration: 6.2).repeatForever(autoreverses: true)) {
                 sparkleSpin = true
             }
@@ -112,10 +101,6 @@ struct HomeView: View {
                 entered = true
             }
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(520))
-                withAnimation(.spring(response: 0.62, dampingFraction: 0.86)) {
-                    revealDetailSurfaces = true
-                }
                 withAnimation(.easeInOut(duration: 8.0).repeatForever(autoreverses: true)) {
                     doodleDrift = true
                 }
@@ -160,13 +145,9 @@ struct HomeView: View {
 
     private var journalCarousel: some View {
         GeometryReader { proxy in
-            let cardWidth = min(proxy.size.width * (store.notebooks.count == 1 ? 0.91 : 0.81), 382)
+            let cardWidth = min(proxy.size.width * (store.notebooks.count == 1 ? 0.94 : 0.86), 410)
 
             ZStack(alignment: .top) {
-                ShelfBackdrop(subjectCount: store.notebooks.count)
-                    .padding(.horizontal, 30)
-                    .padding(.top, 350)
-
                 ZStack {
                     ForEach(Array(store.notebooks.enumerated()), id: \.element.id) { index, notebook in
                         let distance = index - selectedJournalIndex
@@ -209,7 +190,7 @@ struct HomeView: View {
                         }
                     }
                 }
-                .frame(height: 502)
+                .frame(height: 548)
                 .contentShape(Rectangle())
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 12)
@@ -231,12 +212,9 @@ struct HomeView: View {
                         }
                 )
 
-                journalIndexRail
-                    .padding(.top, 502)
-
             }
         }
-        .frame(height: 550)
+        .frame(height: 562)
     }
 
     private var journalIndexRail: some View {
@@ -745,13 +723,6 @@ struct HomeView: View {
                         .opacity(bestCourseMatch == nil ? 0.42 : 1)
                     }
 
-                    CourseMatchPreview(
-                        draft: courseDraft,
-                        match: bestCourseMatch,
-                        count: courseSuggestions.count
-                    )
-                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
-
                     CourseSuggestionCarousel(
                         subjects: courseSuggestions,
                         activeSubject: bestCourseMatch,
@@ -843,76 +814,6 @@ struct HomeView: View {
     }
 }
 
-private struct CourseMatchPreview: View {
-    var draft: String
-    var match: String?
-    var count: Int
-    @State private var glow = false
-
-    private var cleanedDraft: String {
-        draft.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    var body: some View {
-        HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(match == nil && !cleanedDraft.isEmpty ? NotebookTheme.redRule.opacity(0.14) : NotebookTheme.ink.opacity(0.08))
-                Image(systemName: symbol)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(match == nil && !cleanedDraft.isEmpty ? NotebookTheme.redRule : NotebookTheme.ink)
-                    .rotationEffect(.degrees(glow ? 5 : -5))
-            }
-            .frame(width: 34, height: 34)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
-                    .foregroundStyle(NotebookTheme.ink)
-                    .lineLimit(1)
-                Text(detail)
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(NotebookTheme.muted)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 50)
-        .background(.white.opacity(0.44), in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(.white.opacity(glow ? 0.72 : 0.42), lineWidth: 0.8)
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true)) {
-                glow = true
-            }
-        }
-        .animation(.spring(response: 0.52, dampingFraction: 0.86), value: match)
-        .animation(.spring(response: 0.52, dampingFraction: 0.86), value: cleanedDraft)
-    }
-
-    private var symbol: String {
-        if match != nil { return "checkmark" }
-        if cleanedDraft.isEmpty { return "sparkle.magnifyingglass" }
-        return "line.3.horizontal.decrease.circle"
-    }
-
-    private var title: String {
-        if let match { return "will add \(match)" }
-        if cleanedDraft.isEmpty { return "type a subject" }
-        return "choose a listed course"
-    }
-
-    private var detail: String {
-        if match != nil { return "one tap creates the journal" }
-        if cleanedDraft.isEmpty { return "\(count) suggestions ready" }
-        return count == 0 ? "try biology, math, or computer science" : "\(count) close matches"
-    }
-}
-
 private struct CourseSuggestionCarousel: View {
     var subjects: [String]
     var activeSubject: String?
@@ -943,6 +844,8 @@ private struct NotebookStyleSheet: View {
     @Environment(\.dismiss) private var dismiss
     let notebook: SubjectNotebook
     @State private var closeRotation = 0.0
+    @State private var coverPhotoItem: PhotosPickerItem?
+    @State private var previewPressed = false
 
     private var liveNotebook: SubjectNotebook {
         store.notebook(with: notebook.id) ?? notebook
@@ -951,6 +854,7 @@ private struct NotebookStyleSheet: View {
     var body: some View {
         ZStack {
             LivingPaperBackground().ignoresSafeArea()
+            ScrollView {
             VStack(spacing: 18) {
                 HStack {
                     Text("cover")
@@ -972,17 +876,46 @@ private struct NotebookStyleSheet: View {
                     CompositionCoverFace(
                         subject: liveNotebook.subject,
                         cornerRadius: 18,
-                        spineWidth: 12,
+                        spineWidth: 16,
                         labelWidth: 106,
                         labelHeight: 82,
                         labelOffsetY: 24,
                         paperGrainDensity: 70,
                         coverStyle: liveNotebook.coverStyle,
-                        coverColor: liveNotebook.coverColor
+                        coverColor: liveNotebook.coverColor,
+                        labelStyle: liveNotebook.coverLabelStyle,
+                        fontStyle: liveNotebook.coverFontStyle,
+                        customCoverImage: liveNotebook.customCoverImage
                     )
                     .frame(width: 164, height: 222)
-                    .rotation3DEffect(.degrees(-7), axis: (x: 0.1, y: 1, z: 0), perspective: 0.7)
-                    .shadow(color: .black.opacity(0.16), radius: 16, y: 10)
+                    .rotation3DEffect(.degrees(previewPressed ? -16 : -7), axis: (x: 0.1, y: 1, z: 0), perspective: 0.7)
+                    .scaleEffect(previewPressed ? 1.035 : 1)
+                    .shadow(color: .black.opacity(previewPressed ? 0.22 : 0.16), radius: previewPressed ? 22 : 16, y: previewPressed ? 14 : 10)
+                    .gesture(
+                        LongPressGesture(minimumDuration: 0.38)
+                            .onChanged { _ in
+                                withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
+                                    previewPressed = true
+                                }
+                            }
+                            .onEnded { _ in
+                                Haptics.success()
+                                cycleCoverLook()
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
+                                    previewPressed = false
+                                }
+                            }
+                    )
+                    .overlay(alignment: .bottom) {
+                        Text("hold to remix")
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .foregroundStyle(NotebookTheme.ink.opacity(0.7))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.white.opacity(0.68), in: Capsule())
+                            .offset(y: 18)
+                            .opacity(previewPressed ? 1 : 0.82)
+                    }
 
                     VStack(alignment: .leading, spacing: 14) {
                         Text("style")
@@ -1004,6 +937,54 @@ private struct NotebookStyleSheet: View {
                                 colorButton(color)
                             }
                         }
+
+                        Text("label")
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.muted)
+
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
+                            ForEach(NotebookLabelStyle.allCases) { labelStyle in
+                                labelStyleButton(labelStyle)
+                            }
+                        }
+
+                        Text("font")
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.muted)
+
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
+                            ForEach(NotebookCoverFontStyle.allCases) { fontStyle in
+                                fontStyleButton(fontStyle)
+                            }
+                        }
+
+                        PhotosPicker(selection: $coverPhotoItem, matching: .images) {
+                            Label("upload cover", systemImage: "photo.fill")
+                                .font(.system(.caption, design: .rounded, weight: .semibold))
+                                .foregroundStyle(NotebookTheme.ink)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 42)
+                                .background(.white.opacity(0.58), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .onChange(of: coverPhotoItem) { _, item in
+                            loadCoverPhoto(item)
+                        }
+
+                        if liveNotebook.customCoverData != nil {
+                            Button {
+                                Haptics.softTap()
+                                store.updateNotebookCoverImage(id: notebook.id, data: nil)
+                            } label: {
+                                Label("remove cover", systemImage: "trash")
+                                    .font(.system(.caption, design: .rounded, weight: .semibold))
+                                    .foregroundStyle(NotebookTheme.ink)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 42)
+                                    .background(.white.opacity(0.48), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1022,6 +1003,7 @@ private struct NotebookStyleSheet: View {
                 .buttonStyle(.plain)
             }
             .padding(20)
+            }
         }
     }
 
@@ -1066,6 +1048,62 @@ private struct NotebookStyleSheet: View {
         .buttonStyle(.plain)
     }
 
+    private func labelStyleButton(_ labelStyle: NotebookLabelStyle) -> some View {
+        Button {
+            Haptics.selection()
+            store.updateNotebookAppearance(id: notebook.id, labelStyle: labelStyle)
+        } label: {
+            Text(labelStyle.title)
+                .font(.system(.caption, design: .rounded, weight: .semibold))
+                .foregroundStyle(liveNotebook.coverLabelStyle == labelStyle ? .white : NotebookTheme.ink)
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .background(liveNotebook.coverLabelStyle == labelStyle ? NotebookTheme.ink : .white.opacity(0.58), in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func fontStyleButton(_ fontStyle: NotebookCoverFontStyle) -> some View {
+        Button {
+            Haptics.selection()
+            store.updateNotebookAppearance(id: notebook.id, fontStyle: fontStyle)
+        } label: {
+            Text(fontStyle.title)
+                .font(fontStyle.previewFont)
+                .foregroundStyle(liveNotebook.coverFontStyle == fontStyle ? .white : NotebookTheme.ink)
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .background(liveNotebook.coverFontStyle == fontStyle ? NotebookTheme.ink : .white.opacity(0.58), in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func loadCoverPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        Task {
+            guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+            await MainActor.run {
+                Haptics.success()
+                store.updateNotebookCoverImage(id: notebook.id, data: data)
+            }
+        }
+    }
+
+    private func cycleCoverLook() {
+        let styles = NotebookCoverStyle.allCases
+        let colors = ColorToken.allCases
+        let labels = NotebookLabelStyle.allCases
+        guard let styleIndex = styles.firstIndex(of: liveNotebook.coverStyle),
+              let colorIndex = colors.firstIndex(of: liveNotebook.coverColor),
+              let labelIndex = labels.firstIndex(of: liveNotebook.coverLabelStyle) else { return }
+        store.updateNotebookAppearance(
+            id: notebook.id,
+            style: styles[(styleIndex + 1) % styles.count],
+            color: colors[(colorIndex + 2) % colors.count],
+            labelStyle: labels[(labelIndex + 1) % labels.count]
+        )
+    }
+
     private func close() {
         Haptics.softTap()
         withAnimation(.spring(response: 0.3, dampingFraction: 0.72)) {
@@ -1095,7 +1133,7 @@ private struct CourseSuggestionBook: View {
                 CompositionCoverFace(
                     subject: subject,
                     cornerRadius: 16,
-                    spineWidth: 10,
+                    spineWidth: 14,
                     labelWidth: 58,
                     labelHeight: 46,
                     labelOffsetY: 16,
@@ -1157,6 +1195,21 @@ private struct CourseSuggestionBook: View {
             return "text.book.closed.fill"
         default:
             return "book.closed.fill"
+        }
+    }
+}
+
+private extension NotebookCoverFontStyle {
+    var previewFont: Font {
+        switch self {
+        case .serif:
+            return .system(.caption, design: .serif, weight: .semibold)
+        case .rounded:
+            return .system(.caption, design: .rounded, weight: .semibold)
+        case .mono:
+            return .system(.caption, design: .monospaced, weight: .semibold)
+        case .handwritten:
+            return .custom("MarkerFelt-Thin", size: 13)
         }
     }
 }

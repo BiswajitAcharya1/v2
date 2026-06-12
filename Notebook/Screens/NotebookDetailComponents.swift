@@ -1316,12 +1316,11 @@ struct PageCaptureDeck: View {
 
     private var engineLabel: String {
         let engine = page.content.sourceEngine.lowercased()
-        if engine.contains("surya") { return "surya ocr" }
-        if engine.contains("fused") { return "vision fused" }
-        if engine.contains("vision") { return "vision ocr" }
+        if engine.contains("mistral") || engine.contains("google") || engine.contains("azure") || engine.contains("document intelligence") || engine.contains("vision language") || engine.contains("chandra") { return "clean scan" }
+        if engine.contains("surya") || engine.contains("fused") || engine.contains("vision") { return "clean scan" }
         if engine.contains("typed") { return "written notes" }
-        if engine.contains("repaired") { return "layout repaired" }
-        return engine.isEmpty ? "local ocr" : engine
+        if engine.contains("repaired") { return "page cleaned" }
+        return engine.isEmpty ? "clean scan" : "saved page"
     }
 
     private var scanDetail: String {

@@ -22,6 +22,7 @@ protocol NoteUnderstandingServing {
     func makeFlashcards(from content: ExtractedContent) -> [Flashcard]
     func explain(_ term: String) -> String
     func answer(_ question: String, from content: ExtractedContent) -> String
+    func answerWithLocalModel(_ question: String, from content: ExtractedContent) async -> String?
 }
 
 @MainActor
@@ -625,6 +626,8 @@ private extension String {
 }
 
 struct LocalNoteUnderstandingService: NoteUnderstandingServing {
+    private let localLLM = GemmaStudyLLMService()
+
     func classify(_ content: ExtractedContent) async -> String {
         let text = (content.cleanedText + " " + content.keywords.joined(separator: " ")).lowercased()
         if ["equation", "function", "limit", "derivative", "integral", "algebra", "geometry", "formula"].contains(where: text.contains) {
@@ -727,6 +730,10 @@ struct LocalNoteUnderstandingService: NoteUnderstandingServing {
         return unique.prefix(4).joined(separator: "\n\n")
     }
 
+    func answerWithLocalModel(_ question: String, from content: ExtractedContent) async -> String? {
+        await localLLM.answer(question: question, content: content)
+    }
+
     private func bestSection(in content: ExtractedContent, matching words: Set<String>) -> StudySection? {
         guard !words.isEmpty else { return content.sections.first }
         return content.sections.max { first, second in
@@ -739,6 +746,114 @@ struct LocalNoteUnderstandingService: NoteUnderstandingServing {
         let wordScore = words.reduce(0) { total, word in total + (haystack.contains(word) ? 2 : 0) }
         let keywordScore = keywords.reduce(0) { total, keyword in total + (haystack.contains(keyword) ? 1 : 0) }
         return wordScore + keywordScore
+    }
+}
+
+struct GemmaStudyLLMService {
+    static var configuredEndpoint: URL? {
+        if let value = Bundle.main.object(forInfoDictionaryKey: "GemmaStudyEndpoint") as? String,
+           let url = URL(string: value), !value.isEmpty {
+            return url
+        }
+        if let value = ProcessInfo.processInfo.environment["GEMMA_STUDY_ENDPOINT"],
+           let url = URL(string: value), !value.isEmpty {
+            return url
+        }
+        if let value = ProcessInfo.processInfo.environment["LOCAL_GEMMA_ENDPOINT"],
+           let url = URL(string: value), !value.isEmpty {
+            return url
+        }
+        return URL(string: "http://127.0.0.1:8765/gemma/generate")
+    }
+
+    static var configuredModel: String {
+        if let value = Bundle.main.object(forInfoDictionaryKey: "GemmaStudyModel") as? String, !value.isEmpty {
+            return value
+        }
+        if let value = ProcessInfo.processInfo.environment["GEMMA_STUDY_MODEL"], !value.isEmpty {
+            return value
+        }
+        if let value = ProcessInfo.processInfo.environment["LOCAL_GEMMA_MODEL"], !value.isEmpty {
+            return value
+        }
+        return "gemma-4-e4b-it"
+    }
+
+    let endpoint: URL?
+    let model: String
+
+    init(endpoint: URL? = Self.configuredEndpoint, model: String = Self.configuredModel) {
+        self.endpoint = endpoint
+        self.model = model
+    }
+
+    func answer(question: String, content: ExtractedContent) async -> String? {
+        guard let endpoint else { return nil }
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 28
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let payload = GemmaStudyLLMRequest(
+            model: model,
+            prompt: prompt(question: trimmed, content: content),
+            maxTokens: 420,
+            temperature: 0.2
+        )
+        do {
+            request.httpBody = try JSONEncoder().encode(payload)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else { return nil }
+            return GemmaStudyLLMParser.parse(data)
+        } catch {
+            return nil
+        }
+    }
+
+    private func prompt(question: String, content: ExtractedContent) -> String {
+        """
+        you are marginalia's local gemma study tutor. answer only from the student's notes. keep it short, clear, and useful. if the answer is not in the notes, say what part of the notes is closest.
+
+        question:
+        \(question)
+
+        notes:
+        \(content.cleanedText.prefix(3500))
+        """
+    }
+}
+
+private struct GemmaStudyLLMRequest: Encodable {
+    var model: String
+    var prompt: String
+    var maxTokens: Int
+    var temperature: Double
+}
+
+private enum GemmaStudyLLMParser {
+    static func parse(_ data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let answer = json["answer"] as? String { return answer.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let response = json["response"] as? String { return response.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let text = json["text"] as? String { return text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let output = json["output"] as? String { return output.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if let candidates = json["candidates"] as? [[String: Any]],
+           let first = candidates.first,
+           let content = first["content"] as? String {
+            return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let choices = json["choices"] as? [[String: Any]],
+           let first = choices.first {
+            if let text = first["text"] as? String { return text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            if let message = first["message"] as? [String: Any],
+               let content = message["content"] as? String {
+                return content.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return nil
     }
 }
 

@@ -59,11 +59,8 @@ struct StudyFocusView: View {
             VStack(alignment: .leading, spacing: 22) {
                 header
                 quickActions
-                smartLanes
                 insightCard
-                recallStack
                 recallPrompts
-                tapToStudy
                 flashcards
                 voiceControls
             }
@@ -1724,6 +1721,8 @@ private struct PageAskSheet: View {
     @State private var question = ""
     @State private var answer = ""
     @State private var pulse = false
+    @State private var isThinking = false
+    @State private var answerTask: Task<Void, Never>?
 
     private var suggestions: [String] {
         var items: [String] = []
@@ -1752,6 +1751,9 @@ private struct PageAskSheet: View {
             withAnimation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true)) {
                 pulse = true
             }
+        }
+        .onDisappear {
+            answerTask?.cancel()
         }
     }
 
@@ -1819,7 +1821,8 @@ private struct PageAskSheet: View {
                     .frame(width: 52, height: 52)
             }
             .buttonStyle(FloatingCircleButtonStyle(tint: NotebookTheme.ink, foreground: .white))
-            .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isThinking)
+            .opacity(isThinking ? 0.58 : 1)
         }
     }
 
@@ -1862,22 +1865,44 @@ private struct PageAskSheet: View {
                 }
                 .foregroundStyle(NotebookTheme.ink)
 
-                Text(answer.isEmpty ? "ask about anything on this page." : answer)
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(NotebookTheme.ink)
-                    .lineSpacing(5)
-                    .contentTransition(.opacity)
+                if isThinking {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(NotebookTheme.ink)
+                        Text("reading your page")
+                            .font(.system(.body, design: .rounded, weight: .medium))
+                            .foregroundStyle(NotebookTheme.ink.opacity(0.72))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                } else {
+                    Text(answer)
+                        .font(.system(.body, design: .rounded))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .lineSpacing(5)
+                        .contentTransition(.opacity)
+                }
             }
         }
         .animation(.spring(response: 0.36, dampingFraction: 0.84), value: answer)
+        .animation(.spring(response: 0.36, dampingFraction: 0.84), value: isThinking)
     }
 
     private func answerQuestion() {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, !isThinking else { return }
         Haptics.success()
         withAnimation(.spring(response: 0.36, dampingFraction: 0.84)) {
-            answer = store.answer(trimmed, for: page)
+            isThinking = true
+        }
+        answerTask?.cancel()
+        answerTask = Task {
+            let response = await store.answerWithLocalModel(trimmed, for: page)
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.36, dampingFraction: 0.84)) {
+                answer = response
+                isThinking = false
+            }
         }
     }
 }
@@ -2431,7 +2456,7 @@ private enum PracticeDrillGenerator {
                 prompt: "which formula belongs here?",
                 answer: formula,
                 options: options(answer: formula, pool: pool),
-                reason: "folio found this formula in the scanned notes."
+                reason: "marginalia found this formula in the scanned notes."
             ))
         }
 

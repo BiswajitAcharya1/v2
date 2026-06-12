@@ -348,9 +348,9 @@ enum LegalDocument: String, Identifiable {
     var summary: String {
         switch self {
         case .terms:
-            "clear rules for using folio as a study notebook."
+            "clear rules for using marginalia as a study notebook."
         case .privacy:
-            "how folio handles notes, account data, scans, and voice setup."
+            "how marginalia handles notes, account data, scans, and voice setup."
         }
     }
 
@@ -359,15 +359,16 @@ enum LegalDocument: String, Identifiable {
         case .terms:
             [
                 ("your account", "use accurate sign up information, keep your password private, and only use accounts you are allowed to access."),
-                ("your notes", "you keep ownership of notes you scan or type. folio organizes them so you can study, search, listen, and review."),
-                ("ai study tools", "ai explanations, flashcards, and only what matters are study aids. check important answers against your class materials."),
+                ("your notebooks", "you keep ownership of notes you scan or type. marginalia organizes notebooks, pages, covers, and shared notebook bundles so studying stays portable."),
+                ("ai study tools", "gemma powered explanations, flashcards, and only what matters are study aids. check important answers against your class materials."),
                 ("acceptable use", "do not upload content you do not have the right to use, try to break the app, or use another person's account."),
                 ("changes", "features may improve over time. when terms change, the app should make the updated version easy to review.")
             ]
         case .privacy:
             [
-                ("data we save", "folio stores your account session, subjects, notebooks, scanned pages, written notes, study state, and optional voice samples on device."),
+                ("data we save", "marginalia stores your account session, subjects, notebooks, scanned pages, written notes, study state, and optional voice samples on device."),
                 ("scans and text", "scanned notes are processed to extract readable text, tables, diagrams, and subject labels so pages can be filed into notebooks."),
+                ("local study ai", "page questions are sent to a configured local gemma endpoint when available. if it is not available, marginalia answers from the structured notes on device."),
                 ("voice setup", "voice recording is optional. if you use it, the app stores short samples and transcripts so reading features can personalize playback."),
                 ("sign in", "email sign in is stored on device. apple and google connect once credentials are added."),
                 ("control", "you can skip voice setup, edit notes, add subjects, and review saved account information from account center.")
@@ -395,7 +396,7 @@ struct LegalDocumentView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 6)
                 }
-                .padding(20)
+                .padding(22)
             }
             .background(LivingPaperBackground().ignoresSafeArea())
             .navigationTitle(document.title)
@@ -424,54 +425,52 @@ struct LegalDocumentView: View {
     }
 
     private var header: some View {
-        GlassSurface(radius: 28, padding: 18, interactive: true) {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(NotebookTheme.ink)
-                    Image(systemName: document == .terms ? "doc.text.fill" : "hand.raised.fill")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 54, height: 54)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(document.title)
-                        .font(.system(.title3, design: .serif, weight: .semibold))
-                        .foregroundStyle(NotebookTheme.ink)
-                    Text(document.summary)
-                        .font(.system(.footnote, design: .rounded, weight: .medium))
-                        .foregroundStyle(NotebookTheme.muted)
-                        .lineSpacing(3)
-                }
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(NotebookTheme.ink)
+                Image(systemName: document == .terms ? "doc.text.fill" : "hand.raised.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(width: 54, height: 54)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(document.title)
+                    .font(.system(.title3, design: .serif, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+                Text(document.summary)
+                    .font(.system(.footnote, design: .rounded, weight: .medium))
+                    .foregroundStyle(NotebookTheme.muted)
+                    .lineSpacing(3)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(entered ? 1 : 0)
         .offset(y: entered ? 0 : 10)
     }
 
     private func legalSection(index: Int, title: String, body: String) -> some View {
-        GlassSurface(radius: 22, padding: 16, interactive: true) {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(spacing: 10) {
-                    Text("\(index)")
-                        .font(.system(.caption, design: .monospaced, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(NotebookTheme.ink, in: Circle())
-                    Text(title)
-                        .font(.system(.headline, design: .rounded, weight: .semibold))
-                        .foregroundStyle(NotebookTheme.ink)
-                }
-                Text(body)
-                    .font(.system(.body, design: .rounded))
-                    .foregroundStyle(NotebookTheme.muted)
-                    .lineSpacing(5)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Text("\(index)")
+                    .font(.system(.caption, design: .monospaced, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(NotebookTheme.ink, in: Circle())
+                Text(title)
+                    .font(.system(.headline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(body)
+                .font(.system(.body, design: .rounded))
+                .foregroundStyle(NotebookTheme.muted)
+                .lineSpacing(5)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider()
+                .overlay(NotebookTheme.ink.opacity(0.12))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .opacity(entered ? 1 : 0)
         .offset(y: entered ? 0 : 12)
         .animation(.spring(response: 0.58, dampingFraction: 0.86).delay(Double(index) * 0.035), value: entered)

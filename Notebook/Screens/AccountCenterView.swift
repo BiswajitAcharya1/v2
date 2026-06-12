@@ -15,6 +15,12 @@ struct AccountCenterView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    AccountDynamicIsland(
+                        avatar: store.user.avatar,
+                        name: store.user.name,
+                        pages: store.notebooks.reduce(0) { $0 + $1.pages.count },
+                        voiceReady: store.voiceProfile.isPersonalized
+                    )
                     accountHero
                     .scaleEffect(expanded ? 1 : 0.96)
                     .opacity(expanded ? 1 : 0)
@@ -381,6 +387,49 @@ private extension String {
         replacingOccurrences(of: ".fill", with: "")
             .replacingOccurrences(of: ".", with: " ")
             .lowercased()
+    }
+}
+
+private struct AccountDynamicIsland: View {
+    var avatar: AvatarProfile
+    var name: String
+    var pages: Int
+    var voiceReady: Bool
+    @State private var awake = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ProfileAvatarView(avatar: avatar, size: 38, animated: false)
+                .scaleEffect(awake ? 1.03 : 0.98)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name.lowercased())
+                    .font(.system(.subheadline, design: .serif, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text("\(pages) pages  \(voiceReady ? "voice ready" : "voice optional")")
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.68))
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "lock.shield.fill")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.white.opacity(0.88))
+                .frame(width: 34, height: 34)
+                .background(.white.opacity(0.12), in: Circle())
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 12)
+        .frame(height: 64)
+        .background(NotebookTheme.ink, in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.14), lineWidth: 0.8)
+        }
+        .shadow(color: .black.opacity(0.16), radius: 18, y: 10)
+        .scaleEffect(awake ? 1 : 0.97)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
+                awake = true
+            }
+        }
     }
 }
 

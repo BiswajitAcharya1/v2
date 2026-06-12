@@ -71,10 +71,10 @@ private struct SetupFlowView: View {
                     Spacer()
                 }
             }
+            ScrollView(showsIndicators: false) {
             VStack(spacing: 24) {
-                Spacer()
                 NotebookLogo()
-                    .frame(width: 132, height: 172)
+                    .frame(width: 112, height: 146)
                     .rotationEffect(.degrees(store.setupStep == .theme ? -4 : 3))
                     .animation(.spring(response: 0.55, dampingFraction: 0.75), value: store.setupStep)
 
@@ -86,6 +86,8 @@ private struct SetupFlowView: View {
                         subjectChoice
                     case .subjects:
                         subjectChoice
+                    case .avatar:
+                        avatarChoice
                     }
                 }
                 .transition(.asymmetric(
@@ -93,10 +95,11 @@ private struct SetupFlowView: View {
                     removal: .move(edge: .leading).combined(with: .opacity).combined(with: .scale(scale: 1.02))
                 ))
                 .animation(.spring(response: 0.62, dampingFraction: 0.84), value: store.setupStep)
-
-                Spacer()
             }
             .padding(22)
+            .padding(.top, 82)
+            .padding(.bottom, 34)
+            }
         }
     }
 
@@ -307,6 +310,91 @@ private struct SetupFlowView: View {
         SubjectCatalog.bestMatch(for: subjectDraft, excluding: Set(subjects))
     }
 
+    private var avatarChoice: some View {
+        SetupAvatarChoice {
+            store.finishOnboarding()
+        }
+    }
+
+}
+
+private struct SetupAvatarChoice: View {
+    @Environment(NotebookStore.self) private var store
+    @State private var draft = AvatarProfile.default
+    @State private var float = false
+
+    private let symbols = ["book.closed.fill", "sparkles", "brain.head.profile", "graduationcap.fill", "function", "atom"]
+
+    var body: some View {
+        GlassSurface(radius: 34, padding: 20, interactive: true) {
+            VStack(spacing: 18) {
+                Text("avatar")
+                    .font(.system(.title2, design: .serif, weight: .semibold))
+                    .foregroundStyle(NotebookTheme.ink)
+
+                ProfileAvatarView(avatar: draft, size: 128, animated: false)
+                    .rotation3DEffect(.degrees(float ? 5 : -5), axis: (x: 0.18, y: 1, z: 0), perspective: 0.8)
+                    .scaleEffect(float ? 1.03 : 0.98)
+
+                HStack(spacing: 10) {
+                    ForEach(ColorToken.allCases.prefix(6), id: \.self) { token in
+                        Button {
+                            Haptics.selection()
+                            withAnimation(.spring(response: 0.36, dampingFraction: 0.78)) {
+                                draft.base = token
+                                let index = ColorToken.allCases.firstIndex(of: token) ?? 0
+                                draft.accent = ColorToken.allCases[(index + 2) % ColorToken.allCases.count]
+                            }
+                        } label: {
+                            Circle()
+                                .fill(NotebookTheme.accent(token))
+                                .frame(width: draft.base == token ? 42 : 34, height: draft.base == token ? 42 : 34)
+                                .overlay { Circle().stroke(.white.opacity(0.76), lineWidth: 1) }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                    ForEach(symbols, id: \.self) { symbol in
+                        Button {
+                            Haptics.selection()
+                            withAnimation(.spring(response: 0.36, dampingFraction: 0.78)) {
+                                draft.symbol = symbol
+                            }
+                        } label: {
+                            Image(systemName: symbol)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(draft.symbol == symbol ? .white : NotebookTheme.ink)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 48)
+                                .background(draft.symbol == symbol ? NotebookTheme.ink : .white.opacity(0.56), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Button {
+                    Haptics.success()
+                    store.updateAvatar(draft)
+                    done()
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 18, weight: .bold))
+                        .frame(width: 58, height: 58)
+                }
+                .buttonStyle(CircleButtonStyle())
+            }
+        }
+        .onAppear {
+            draft = store.user.avatar
+            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+                float = true
+            }
+        }
+    }
+
+    var done: () -> Void
 }
 
 private struct VoiceProgress: View {

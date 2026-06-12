@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CompositionNotebookCard: View {
     let notebook: SubjectNotebook
@@ -10,6 +11,7 @@ struct CompositionNotebookCard: View {
     @State private var isPressed = false
     @State private var float = false
     @State private var didPressHaptic = false
+    @State private var didLongPress = false
 
     private var rotationX: Double { -Double(dragOffset.height / 7.4) + (float ? 1.35 : -1.15) }
     private var rotationY: Double { Double(dragOffset.width / 6.8) + (float ? -1.5 : 1.2) }
@@ -22,12 +24,15 @@ struct CompositionNotebookCard: View {
                 CompositionCoverFace(
                     subject: notebook.subject,
                     cornerRadius: 20,
-                    spineWidth: 12,
+                    spineWidth: 16,
                     labelWidth: 142,
                     labelHeight: 108,
                     labelOffsetY: 30,
                     coverStyle: notebook.coverStyle,
-                    coverColor: notebook.coverColor
+                    coverColor: notebook.coverColor,
+                    labelStyle: notebook.coverLabelStyle,
+                    fontStyle: notebook.coverFontStyle,
+                    customCoverImage: notebook.customCoverImage
                 )
                     .shadow(color: .black.opacity(isPressed ? 0.12 : 0.28), radius: isPressed ? 5 : 16, y: isPressed ? 4 : 16)
 
@@ -63,6 +68,10 @@ struct CompositionNotebookCard: View {
                         isPressed = false
                         didPressHaptic = false
                         dragOffset = .zero
+                        if didLongPress {
+                            didLongPress = false
+                            return
+                        }
                         if moved < 10 {
                             Haptics.open()
                             onOpen?()
@@ -72,6 +81,7 @@ struct CompositionNotebookCard: View {
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.42)
                     .onEnded { _ in
+                        didLongPress = true
                         Haptics.open()
                         onCustomize?()
                     }
@@ -151,13 +161,22 @@ struct CompositionCoverFace: View {
     var paperGrainDensity: Int = 90
     var coverStyle: NotebookCoverStyle = .marbled
     var coverColor: ColorToken = .graphite
+    var labelStyle: NotebookLabelStyle = .classic
+    var fontStyle: NotebookCoverFontStyle = .serif
+    var customCoverImage: UIImage?
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(coverFill)
 
-            if coverStyle == .marbled {
+            if let customCoverImage {
+                Image(uiImage: customCoverImage)
+                    .resizable()
+                    .scaledToFill()
+                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    .overlay(.black.opacity(0.08))
+            } else if coverStyle == .marbled {
                 SpeckledCompositionTexture()
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                     .opacity(0.98)
@@ -213,7 +232,7 @@ struct CompositionCoverFace: View {
             VStack {
                 HStack {
                     Spacer(minLength: spineWidth + 8)
-                    CompositionCoverLabel(subject: subject, isLarge: labelWidth > 124)
+                    CompositionCoverLabel(subject: subject, isLarge: labelWidth > 124, labelStyle: labelStyle, fontStyle: fontStyle)
                         .frame(width: labelWidth, height: labelHeight)
                     Spacer()
                 }
@@ -442,7 +461,7 @@ struct NotebookLogo: View {
         CompositionCoverFace(
             subject: nil,
             cornerRadius: 18,
-            spineWidth: 12,
+            spineWidth: 15,
             labelWidth: 102,
             labelHeight: 88,
             labelOffsetY: 30
@@ -453,11 +472,22 @@ struct NotebookLogo: View {
 private struct CompositionCoverLabel: View {
     var subject: String?
     var isLarge: Bool
+    var labelStyle: NotebookLabelStyle = .classic
+    var fontStyle: NotebookCoverFontStyle = .serif
 
+    @ViewBuilder
     var body: some View {
+        if labelStyle == .graffiti {
+            graffitiLabel
+        } else {
+            classicLabel
+        }
+    }
+
+    private var classicLabel: some View {
         VStack(spacing: isLarge ? 7 : 6) {
             HStack(alignment: .top, spacing: 6) {
-                Text("composition\nbook")
+                Text(labelTitle)
                     .font(.system(size: isLarge ? 12.2 : 9.2, weight: .semibold, design: .rounded))
                     .lineSpacing(-1)
                     .lineLimit(2)
@@ -472,25 +502,30 @@ private struct CompositionCoverLabel: View {
                     .frame(width: isLarge ? 42 : 32, height: isLarge ? 21 : 16)
                     .background(.black.opacity(0.84), in: RoundedRectangle(cornerRadius: isLarge ? 5 : 4, style: .continuous))
             }
-            HStack(spacing: isLarge ? 7 : 6) {
-                CompositionBadge(text: "80\nsheets", size: isLarge ? 30 : 25)
-                CompositionBadge(text: "college\nruled", size: isLarge ? 30 : 25)
-                Spacer()
-            }
-            VStack(spacing: isLarge ? 5 : 4) {
-                ForEach(0..<3, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: 1, style: .continuous)
-                        .fill(.black.opacity(0.22))
-                        .frame(height: 1)
+            if labelStyle != .minimal {
+                HStack(spacing: isLarge ? 7 : 6) {
+                    CompositionBadge(text: labelStyle == .lab ? "lab\nready" : "80\nsheets", size: isLarge ? 30 : 25)
+                    CompositionBadge(text: labelStyle == .ruled ? "wide\nruled" : "college\nruled", size: isLarge ? 30 : 25)
+                    Spacer()
                 }
             }
-            if let subject {
-                Text(subject)
-                    .font(.system(size: isLarge ? 13 : 10.5, weight: .semibold, design: .serif))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.68)
-                    .padding(.horizontal, 3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(spacing: isLarge ? 5 : 4) {
+                ForEach(0..<3, id: \.self) { index in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 1, style: .continuous)
+                            .fill(.black.opacity(0.22))
+                            .frame(height: 1)
+                        if index == 0, let subject {
+                            Text(subject)
+                                .font(subjectFont)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.62)
+                                .padding(.horizontal, 3)
+                                .background(.white.opacity(0.76))
+                                .offset(y: -5)
+                        }
+                    }
+                }
             }
         }
         .foregroundStyle(.black.opacity(0.78))
@@ -509,6 +544,102 @@ private struct CompositionCoverLabel: View {
                 .stroke(.black.opacity(0.18), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.16), radius: 1.5, y: 1)
+    }
+
+    private var graffitiLabel: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: isLarge ? 12 : 9, style: .continuous)
+                .fill(Color(red: 0.98, green: 0.98, blue: 0.92))
+                .overlay {
+                    RoundedRectangle(cornerRadius: isLarge ? 12 : 9, style: .continuous)
+                        .stroke(Color(red: 0.96, green: 0.22, blue: 0.34), lineWidth: isLarge ? 3 : 2)
+                }
+
+            VStack(spacing: isLarge ? 2 : 1) {
+                Text("hello")
+                    .font(.system(size: isLarge ? 10 : 7.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.95, green: 0.18, blue: 0.3))
+                Text("my name is")
+                    .font(.system(size: isLarge ? 6.8 : 5.4, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.95, green: 0.18, blue: 0.3).opacity(0.82))
+                Text(subject ?? "journal")
+                    .font(.custom("MarkerFelt-Wide", size: isLarge ? 17 : 12))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color(red: 0.11, green: 0.44, blue: 0.95), Color(red: 0.84, green: 0.14, blue: 0.68)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.48)
+                    .rotationEffect(.degrees(-4))
+                    .padding(.horizontal, 5)
+            }
+
+            GraffitiScribble()
+                .padding(5)
+                .opacity(0.58)
+        }
+        .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+    }
+
+    private var labelTitle: String {
+        switch labelStyle {
+        case .classic: "composition\nbook"
+        case .minimal: "notebook"
+        case .lab: "field\nnotes"
+        case .ruled: "class\njournal"
+        case .graffiti: "hello\nmy name is"
+        }
+    }
+
+    private var subjectFont: Font {
+        let size = isLarge ? 13.5 : 10.8
+        switch fontStyle {
+        case .serif:
+            return .system(size: size, weight: .semibold, design: .serif)
+        case .rounded:
+            return .system(size: size, weight: .semibold, design: .rounded)
+        case .mono:
+            return .system(size: size * 0.88, weight: .semibold, design: .monospaced)
+        case .handwritten:
+            return .custom("MarkerFelt-Thin", size: size + 1)
+        }
+    }
+}
+
+private struct GraffitiScribble: View {
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            let colors: [Color] = [
+                Color(red: 0.1, green: 0.45, blue: 0.96),
+                Color(red: 0.92, green: 0.15, blue: 0.52),
+                Color(red: 0.1, green: 0.72, blue: 0.67)
+            ]
+            for index in 0..<5 {
+                var path = Path()
+                let y = size.height * (0.18 + CGFloat(index) * 0.15)
+                path.move(to: CGPoint(x: size.width * 0.08, y: y))
+                path.addCurve(
+                    to: CGPoint(x: size.width * 0.94, y: y + CGFloat(index % 2 == 0 ? 8 : -6)),
+                    control1: CGPoint(x: size.width * 0.28, y: y + CGFloat(index % 2 == 0 ? -12 : 11)),
+                    control2: CGPoint(x: size.width * 0.62, y: y + CGFloat(index % 2 == 0 ? 12 : -10))
+                )
+                context.stroke(
+                    path,
+                    with: .color(colors[index % colors.count].opacity(0.62)),
+                    style: StrokeStyle(lineWidth: index == 2 ? 2.4 : 1.3, lineCap: .round, lineJoin: .round)
+                )
+            }
+        }
+    }
+}
+
+extension SubjectNotebook {
+    var customCoverImage: UIImage? {
+        guard let customCoverData else { return nil }
+        return UIImage(data: customCoverData)
     }
 }
 

@@ -25,6 +25,7 @@ struct NotebookDetailView: View {
     @State private var actionRailAwake = false
     @State private var selectedInkPage: NotebookPage?
     @State private var focusedTerm: PageTermFocus?
+    @State private var showingShareNotebook = false
 
     let notebook: SubjectNotebook
 
@@ -122,6 +123,11 @@ struct NotebookDetailView: View {
             }
             .ignoresSafeArea()
         }
+        .sheet(isPresented: $showingShareNotebook) {
+            NotebookShareSheet(notebook: liveNotebook)
+                .presentationDetents([.height(430), .medium])
+                .presentationDragIndicator(.visible)
+        }
         .onChange(of: currentPage?.id) {
             editedText = currentPage?.content.cleanedText ?? ""
             isEditing = false
@@ -190,16 +196,46 @@ struct NotebookDetailView: View {
                     .background(.white.opacity(0.5), in: Capsule())
                     .transition(.opacity.combined(with: .scale(scale: 0.92)))
                     .id(currentPage.id)
+
+                Button {
+                    Haptics.open()
+                    selectedPage = currentPage
+                } label: {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .frame(width: 34, height: 34)
+                        .background(.white.opacity(0.54), in: Circle())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    Haptics.selection()
+                    withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
+                        textScale = textScale >= 1.32 ? 0.92 : textScale + 0.14
+                    }
+                } label: {
+                    Image(systemName: "textformat.size")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(NotebookTheme.ink)
+                        .frame(width: 34, height: 34)
+                        .background(.white.opacity(0.54), in: Circle())
+                }
+                .buttonStyle(.plain)
             }
 
             if !liveNotebook.pages.isEmpty {
-                ShareLink(item: shareNotebookText) {
+                Button {
+                    Haptics.open()
+                    showingShareNotebook = true
+                } label: {
                     Image(systemName: "square.and.arrow.up")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(NotebookTheme.ink)
                         .frame(width: 38, height: 38)
                         .background(.white.opacity(0.62), in: Circle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityLabel("share notebook")
             }
         }
@@ -268,15 +304,6 @@ struct NotebookDetailView: View {
         return "page \(left)"
     }
 
-    private var shareNotebookText: String {
-        let body = liveNotebook.pages
-            .map { page in
-                "\(page.title.lowercased())\n\(page.content.cleanedText)"
-            }
-            .joined(separator: "\n\n")
-        return "\(liveNotebook.subject.lowercased()) notebook\n\n\(body)"
-    }
-
     private var pageReader: some View {
         ZStack {
             if currentPage != nil {
@@ -342,23 +369,6 @@ struct NotebookDetailView: View {
                 .lineSpacing(5)
                 .frame(minHeight: 460, maxHeight: .infinity)
 
-            HStack(spacing: 10) {
-                pageAction(symbol: "speaker.wave.2.fill", label: "read") {
-                    Haptics.open()
-                    selectedPage = page
-                }
-                pageAction(symbol: "sparkles", label: "study") {
-                    Haptics.open()
-                    selectedPage = page
-                }
-                pageAction(symbol: "textformat.size", label: "size") {
-                    Haptics.selection()
-                    withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
-                        textScale = textScale >= 1.32 ? 0.92 : textScale + 0.14
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -678,6 +688,113 @@ struct NotebookDetailView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
             Haptics.open()
             showingCamera = true
+        }
+    }
+}
+
+private struct NotebookShareSheet: View {
+    let notebook: SubjectNotebook
+    @State private var opened = false
+    @State private var shimmer = false
+    @State private var shareURL: URL?
+
+    var body: some View {
+        ZStack {
+            LivingPaperBackground().ignoresSafeArea()
+            VStack(spacing: 22) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                        .fill(.white.opacity(0.74))
+                        .frame(width: 236, height: 300)
+                        .rotationEffect(.degrees(opened ? 7 : -2))
+                        .offset(x: opened ? 24 : 0, y: opened ? 8 : 0)
+                        .overlay {
+                            PaperRules()
+                                .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                                .opacity(opened ? 0.8 : 0.2)
+                        }
+
+                    CompositionCoverFace(
+                        subject: notebook.subject,
+                        cornerRadius: 24,
+                        spineWidth: 14,
+                        labelWidth: 136,
+                        labelHeight: 104,
+                        labelOffsetY: 34,
+                        coverStyle: notebook.coverStyle,
+                        coverColor: notebook.coverColor,
+                        labelStyle: notebook.coverLabelStyle,
+                        fontStyle: notebook.coverFontStyle,
+                        customCoverImage: notebook.customCoverImage
+                    )
+                    .frame(width: 220, height: 292)
+                    .rotation3DEffect(.degrees(opened ? -42 : -4), axis: (x: 0.08, y: 1, z: 0), anchor: .leading, perspective: 0.72)
+                    .offset(x: opened ? -26 : 0, y: opened ? 4 : 0)
+                    .overlay {
+                        DirectionAwareTouchHighlight(
+                            offset: CGSize(width: shimmer ? 24 : -20, height: shimmer ? -12 : 12),
+                            isActive: shimmer,
+                            cornerRadius: 24
+                        )
+                        .blendMode(.screen)
+                        .opacity(0.28)
+                    }
+                    .shadow(color: .black.opacity(0.2), radius: 18, y: 12)
+                }
+                .frame(height: 318)
+
+                if let shareURL {
+                    ShareLink(item: shareURL) {
+                        Label("share journal", systemImage: "paperplane.fill")
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(NotebookTheme.ink, in: Capsule())
+                    }
+                    .simultaneousGesture(TapGesture().onEnded { Haptics.success() })
+                } else {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(NotebookTheme.ink)
+                        Text("wrapping journal")
+                            .font(.system(.headline, design: .rounded, weight: .semibold))
+                            .foregroundStyle(NotebookTheme.ink)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(.white.opacity(0.64), in: Capsule())
+                }
+            }
+            .padding(22)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.86, dampingFraction: 0.78).delay(0.12)) {
+                opened = true
+            }
+            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+                shimmer = true
+            }
+            shareURL = makeShareBundle()
+        }
+    }
+
+    private func makeShareBundle() -> URL? {
+        let safeSubject = notebook.subject
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: "-", options: .regularExpression)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        let filename = "\(safeSubject.isEmpty ? "journal" : safeSubject).marginalia-notebook"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        do {
+            let data = try encoder.encode(notebook)
+            try data.write(to: url, options: [.atomic])
+            return url
+        } catch {
+            return nil
         }
     }
 }
